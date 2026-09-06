@@ -10,7 +10,8 @@ struct CatalogItemRow: View {
             ItemThumbnail(
                 kind: item.kind,
                 platformSymbol: item.platform?.iconSystemName,
-                imageName: item.imageName
+                imageName: item.imageName,
+                imageURL: item.imageURL
             )
 
             VStack(alignment: .leading, spacing: 3) {

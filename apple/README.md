@@ -80,6 +80,35 @@ xcodebuild -project apple/VideoGameTracker.xcodeproj -scheme VideoGameTracker \
   app / its store to re-seed. Every view has a `#Preview` on
   `SampleData.previewContainer()` (in-memory).
 
+### Project settings to set by hand
+
+Left for you per `CLAUDE.md`'s "no direct project-file edits":
+
+1. **macOS network access.** Console photos load from Wikimedia Commons, but the
+   macOS target has App Sandbox on with no outgoing-network permission, so images
+   fall back to placeholders until you enable:
+   > Target **VideoGameTracker** → **Signing & Capabilities** → **App Sandbox** →
+   > **Network: Outgoing Connections (Client)** ✅
+
+   (iOS/iPadOS get network access by default — nothing to do.)
+
+2. **Swift 6 language mode.** The template created the target with
+   `SWIFT_VERSION = 5.0`. `CLAUDE.md` calls for Swift 6, and the whole codebase
+   already type-checks clean in Swift 6 language mode (verified against the
+   macOS 26 and iOS 26 SDKs). Bump **Build Settings → Swift Language Version → 6**
+   when you're ready.
+
+### Images
+
+`CatalogItem` carries `imageURLString` / `imageCredit` / `imageLicense`.
+`SampleData.attachConsolePhotos` fills these for each platform's primary console
+model from Wikimedia Commons (`Special:FilePath` stable redirect; mostly Evan
+Amos public-domain shots, Dreamcast is CC BY-SA 3.0 and shows attribution).
+`ItemThumbnail` resolves bundled asset → remote `AsyncImage` (shared `URLCache`
+bumped to 256 MB disk in `configureImageCache()`) → SF Symbol placeholder.
+Variants, games, and accessories still use the placeholder — a real image service
+is on the backlog in [`../api/README.md`](../api/README.md#image-hosting-backlog).
+
 **Verified:** `xcodebuild … -destination 'platform=macOS' build` → `BUILD SUCCEEDED`.
 Full source also type-checks under Swift 6 against the macOS 26 and iOS 26 SDKs.
 

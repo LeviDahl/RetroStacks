@@ -7,8 +7,14 @@ struct SidebarView: View {
     @Query private var collectionItems: [CollectionItem]
     @Query(sort: \Platform.generation) private var platforms: [Platform]
 
+    /// `List` on iOS only offers the optional-selection initializer; bridge the
+    /// non-optional binding through so the sidebar compiles on every platform.
+    private var listSelection: Binding<AppSection?> {
+        Binding(get: { selection }, set: { selection = $0 ?? selection })
+    }
+
     var body: some View {
-        List(selection: $selection) {
+        List(selection: listSelection) {
             Section {
                 row(.dashboard)
                 row(.collection, badge: ownedCount)

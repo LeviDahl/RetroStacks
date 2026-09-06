@@ -400,7 +400,41 @@ enum SampleData {
             summary: "Bottom-mount adapter that plays GB/GBC/GBA carts. Needs its boot disc.",
             estimatedValueLoose: 40, estimatedValueComplete: 100, estimatedValueSealed: 500))
 
+        attachConsolePhotos(to: items)
         return items
+    }
+
+    /// Real hardware photos for each platform's primary console model, pulled from
+    /// Wikimedia Commons via the stable `Special:FilePath` redirect endpoint.
+    /// Nearly all are Evan Amos's public-domain studio shots (clean white
+    /// background); the Dreamcast shot is CC BY-SA 3.0, hence the per-item license.
+    /// Variants and games/accessories still fall back to the placeholder — see the
+    /// image-hosting backlog item in `api/README.md`.
+    @MainActor
+    private static func attachConsolePhotos(to items: [CatalogItem]) {
+        var bySlug: [String: CatalogItem] = [:]
+        for item in items { bySlug[item.slug] = item }
+
+        func set(_ slug: String, file: String,
+                 credit: String = "Evan-Amos / Wikimedia Commons",
+                 license: String = "Public domain") {
+            guard let item = bySlug[slug] else { return }
+            let encoded = file.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? file
+            item.imageURLString = "https://commons.wikimedia.org/wiki/Special:FilePath/\(encoded)?width=800"
+            item.imageCredit = credit
+            item.imageLicense = license
+        }
+
+        set("2600-4switch", file: "Atari-2600-Wood-4Sw-Set.png")
+        set("nes-001", file: "NES-Console-Set.png")
+        set("sns-001", file: "SNES-Mod1-Console-Set.jpg")
+        set("gen-model-1", file: "Sega-Genesis-Mod1-Set.jpg")
+        set("gb-dmg-01", file: "Game-Boy-FL.png")
+        set("nus-001", file: "Nintendo-64-wController-L.jpg")
+        set("scph-1001", file: "PSX-Console-wController.jpg")
+        set("hkt-3020", file: "Dreamcast-Console-Set.jpg", license: "CC BY-SA 3.0")
+        set("scph-30001", file: "PS2-Fat-Console-Set.jpg")
+        set("dol-001", file: "GameCube-Console-Set.png")
     }
 
     // MARK: - Collection

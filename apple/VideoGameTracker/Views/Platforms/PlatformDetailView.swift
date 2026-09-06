@@ -34,13 +34,28 @@ struct PlatformDetailView: View {
         #endif
     }
 
+    /// The platform's primary console model, preferring one that has a photo.
+    private var heroConsole: CatalogItem? {
+        platform.consoles.first { $0.imageURL != nil } ?? platform.consoles.first
+    }
+
     private var header: some View {
         HStack(alignment: .top, spacing: 20) {
-            Image(systemName: platform.iconSystemName)
-                .font(.system(size: 44))
-                .foregroundStyle(.tint)
-                .frame(width: 96, height: 96)
-                .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            if let heroConsole, heroConsole.imageURL != nil {
+                ItemThumbnail(
+                    kind: .console,
+                    platformSymbol: platform.iconSystemName,
+                    imageURL: heroConsole.imageURL,
+                    size: 96, cornerRadius: 18,
+                    contentMode: .fit
+                )
+            } else {
+                Image(systemName: platform.iconSystemName)
+                    .font(.system(size: 44))
+                    .foregroundStyle(.tint)
+                    .frame(width: 96, height: 96)
+                    .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(platform.name).font(.title2.weight(.bold))

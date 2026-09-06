@@ -119,13 +119,22 @@ struct PlatformRow: View {
 struct PlatformCard: View {
     var platform: Platform
 
+    private var heroImageURL: URL? {
+        (platform.consoles.first { $0.imageURL != nil } ?? platform.consoles.first)?.imageURL
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Image(systemName: platform.iconSystemName)
-                    .font(.title2)
-                    .frame(width: 44, height: 44)
-                    .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                if let heroImageURL {
+                    ItemThumbnail(kind: .console, platformSymbol: platform.iconSystemName,
+                                  imageURL: heroImageURL, size: 44, cornerRadius: 10, contentMode: .fit)
+                } else {
+                    Image(systemName: platform.iconSystemName)
+                        .font(.title2)
+                        .frame(width: 44, height: 44)
+                        .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                }
                 Spacer()
                 Text(platform.eraLabel)
                     .font(.caption2.weight(.medium))

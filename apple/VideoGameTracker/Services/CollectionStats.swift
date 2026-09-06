@@ -34,8 +34,6 @@ struct CollectionStats {
         return NSDecimalNumber(decimal: netGain).doubleValue
             / NSDecimalNumber(decimal: totalInvested).doubleValue
     }
-
-    static let empty = CollectionStats()
 }
 
 enum CollectionStatsBuilder {

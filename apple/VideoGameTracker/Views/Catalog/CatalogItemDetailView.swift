@@ -59,12 +59,23 @@ struct CatalogItemDetailView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 20) {
-            ItemThumbnail(
-                kind: item.kind,
-                platformSymbol: item.platform?.iconSystemName,
-                imageName: item.imageName,
-                size: 132, cornerRadius: 16
-            )
+            VStack(spacing: 6) {
+                ItemThumbnail(
+                    kind: item.kind,
+                    platformSymbol: item.platform?.iconSystemName,
+                    imageName: item.imageName,
+                    imageURL: item.imageURL,
+                    size: 132, cornerRadius: 16,
+                    contentMode: .fit
+                )
+                if let attribution = item.imageAttribution {
+                    Text(attribution)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 132)
+                        .multilineTextAlignment(.center)
+                }
+            }
             VStack(alignment: .leading, spacing: 8) {
                 Text(item.displayTitle).font(.title2.weight(.bold))
                 HStack(spacing: 8) {

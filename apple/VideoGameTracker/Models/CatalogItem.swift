@@ -26,8 +26,17 @@ final class CatalogItem {
     var upc: String?
     var summary: String
 
-    /// Asset-catalog image name if art is later added; nil falls back to a symbol.
+    /// Asset-catalog image name if art is later bundled; takes priority over `imageURLString`.
     var imageName: String?
+
+    /// Remote hardware/box photo. Currently a Wikimedia Commons `Special:FilePath`
+    /// URL (stable redirect endpoint). Replace with our own CDN later — see the
+    /// image-hosting item in `api/README.md`.
+    var imageURLString: String?
+    /// Attribution shown wherever the image appears, e.g. "Evan-Amos / Wikimedia Commons".
+    var imageCredit: String?
+    /// e.g. "Public domain", "CC BY-SA 3.0".
+    var imageLicense: String?
 
     // Rough US market reference prices (mock values for now).
     var estimatedValueLoose: Decimal?
@@ -56,6 +65,9 @@ final class CatalogItem {
         upc: String? = nil,
         summary: String = "",
         imageName: String? = nil,
+        imageURLString: String? = nil,
+        imageCredit: String? = nil,
+        imageLicense: String? = nil,
         estimatedValueLoose: Decimal? = nil,
         estimatedValueComplete: Decimal? = nil,
         estimatedValueSealed: Decimal? = nil
@@ -71,6 +83,9 @@ final class CatalogItem {
         self.upc = upc
         self.summary = summary
         self.imageName = imageName
+        self.imageURLString = imageURLString
+        self.imageCredit = imageCredit
+        self.imageLicense = imageLicense
         self.estimatedValueLoose = estimatedValueLoose
         self.estimatedValueComplete = estimatedValueComplete
         self.estimatedValueSealed = estimatedValueSealed
@@ -78,6 +93,17 @@ final class CatalogItem {
 }
 
 extension CatalogItem {
+    var imageURL: URL? {
+        imageURLString.flatMap { URL(string: $0) }
+    }
+
+    /// One-line "Photo: … · License" string, or nil when there's no remote image.
+    var imageAttribution: String? {
+        guard imageURL != nil, let credit = imageCredit else { return nil }
+        if let license = imageLicense { return "Photo: \(credit) · \(license)" }
+        return "Photo: \(credit)"
+    }
+
     var displayTitle: String {
         guard let variant, !variant.isEmpty else { return name }
         return "\(name) (\(variant))"

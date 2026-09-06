@@ -15,6 +15,7 @@ struct CollectionTable: View {
                         kind: item.kind,
                         platformSymbol: item.catalogItem?.platform?.iconSystemName,
                         imageName: item.catalogItem?.imageName,
+                        imageURL: item.catalogItem?.imageURL,
                         size: 34, cornerRadius: 7
                     )
                     VStack(alignment: .leading, spacing: 1) {

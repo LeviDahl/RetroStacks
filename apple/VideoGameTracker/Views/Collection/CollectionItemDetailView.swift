@@ -67,12 +67,23 @@ struct CollectionItemDetailView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 20) {
-            ItemThumbnail(
-                kind: item.kind,
-                platformSymbol: item.catalogItem?.platform?.iconSystemName,
-                imageName: item.catalogItem?.imageName,
-                size: 120, cornerRadius: 16
-            )
+            VStack(spacing: 6) {
+                ItemThumbnail(
+                    kind: item.kind,
+                    platformSymbol: item.catalogItem?.platform?.iconSystemName,
+                    imageName: item.catalogItem?.imageName,
+                    imageURL: item.catalogItem?.imageURL,
+                    size: 120, cornerRadius: 16,
+                    contentMode: .fit
+                )
+                if let attribution = item.catalogItem?.imageAttribution {
+                    Text(attribution)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 120)
+                        .multilineTextAlignment(.center)
+                }
+            }
             VStack(alignment: .leading, spacing: 8) {
                 Text(item.title).font(.title2.weight(.bold))
                 HStack(spacing: 8) {

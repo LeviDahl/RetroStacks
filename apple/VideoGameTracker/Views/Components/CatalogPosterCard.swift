@@ -12,8 +12,10 @@ struct CatalogPosterCard: View {
                 kind: item.kind,
                 platformSymbol: item.platform?.iconSystemName,
                 imageName: item.imageName,
+                imageURL: item.imageURL,
                 size: 128,
-                cornerRadius: 12
+                cornerRadius: 12,
+                contentMode: .fit
             )
             .frame(maxWidth: .infinity)
             .overlay(alignment: .topTrailing) {
