@@ -46,6 +46,7 @@ apple/
 │   ├── Models/                   SwiftData @Model types + Enums
 │   ├── ViewModels/               @Observable filter/sort state (CollectionList, CatalogBrowse)
 │   ├── Services/                 SampleData (mock seed + preview container), CollectionStats
+│   │   └── Pricing/              canonical price schema + provider adapters + PricingService
 │   └── Views/
 │       ├── Dashboard/
 │       ├── Collection/           section split, Table, detail, edit form, add-from-catalog sheet
@@ -108,6 +109,35 @@ Amos public-domain shots, Dreamcast is CC BY-SA 3.0 and shows attribution).
 bumped to 256 MB disk in `configureImageCache()`) → SF Symbol placeholder.
 Variants, games, and accessories still use the placeholder — a real image service
 is on the backlog in [`../api/README.md`](../api/README.md#image-hosting-backlog).
+
+### Pricing
+
+`Services/Pricing/` holds a **provider-agnostic pricing schema** (shape adapted
+from the PriceCharting API — see [`../api/README.md`](../api/README.md#pricing-adapter-layer--schema-already-lives-in-the-app))
+and a set of **lite adapters** behind one protocol:
+
+```
+PriceQuery ──▶ [ PricingProvider ] ──▶ ProviderPriceReport
+                    │
+   PriceChartingProvider · EbayBrowseProvider · GGDealsProvider · SampleGuideProvider
+                    │
+            PricingService.merge(…) ──▶ PriceGuide   (one value per condition|kind)
+```
+
+- **`PricingService`** (`@MainActor`, `.shared`) runs providers in priority
+  order, first-with-a-value wins, failures are skipped (redundancy), 6 h cache.
+  `refresh(_:in:)` writes the result back onto `CatalogItem`'s cached
+  `estimatedValue*` / `salesVolumeYearly` / `priceGuide*` fields so lists, stats
+  and offline use stay synchronous.
+- **`SampleGuideProvider`** is the live default: it echoes the seeded values, so
+  the "Market Value" card on the catalog detail renders and the *Refresh* button
+  works with zero configuration.
+- **`PriceChartingProvider`** is mapping-complete; set `PRICECHARTING_TOKEN` in
+  the Run scheme's environment (or inject a token) and it activates. Prices come
+  as integer pennies; 1 req/sec.
+- **`EbayBrowseProvider` / `GGDealsProvider`** are stubs showing the seam.
+- The schema files import only `Foundation` (types are `nonisolated` so models
+  and future background contexts can use them) — ready to lift into a package.
 
 **Verified:** `xcodebuild … -destination 'platform=macOS' build` → `BUILD SUCCEEDED`.
 Full source also type-checks under Swift 6 against the macOS 26 and iOS 26 SDKs.

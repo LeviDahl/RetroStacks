@@ -22,6 +22,53 @@ accessories for major US systems) and the REST API the app will sync from.
 - [ ] `GET /catalog`, `GET /platforms`, valuation endpoints
 - [ ] Client `CatalogRepository` implementation replacing the mock
 
+## Pricing (adapter layer — schema already lives in the app)
+
+The **canonical pricing schema** is defined client-side in
+`apple/VideoGameTracker/Services/Pricing/PricingModels.swift` and is written to
+be provider-neutral and dependency-free so it can be lifted into a shared package
+**or re-implemented here as the API contract**. Core types:
+
+| Type | Role |
+| --- | --- |
+| `MarketCondition` | price tier: `loose` / `cib` / `new` (sealed) / `graded` / `box_only` / `manual_only` |
+| `PriceKind` | `marketValue`, `retailBuy`, `retailSell`, `listingLow`, `soldMedian`, `gamestopPreowned` |
+| `PricePoint` | one `{condition, kind, amount (Decimal USD), observedAt, sampleSize, sourceURL}` |
+| `ProviderPriceReport` | raw output of one adapter for one item |
+| `PriceGuide` | merged, consumer-facing result (one `PricePoint` per `condition|kind`, + `salesVolumeYearly`, `asOf`, `primaryProvider`, `contributingProviders`, `externalProductIDs`) |
+| `PricingProvider` | adapter protocol: `priceReport(for: PriceQuery) async throws -> ProviderPriceReport` |
+
+The shape is **adapted from the PriceCharting Prices API** so their data maps in
+with almost no translation, but nothing is PriceCharting-specific.
+
+### Adapters (lite; one per service)
+
+Order = priority. First provider with a value for a given `condition|kind` wins;
+lower-priority providers backfill. Any provider failing is skipped (redundancy).
+
+| Adapter | Status | Notes |
+| --- | --- | --- |
+| `PriceChartingProvider` | mapping complete, **needs a token** | `/api/product` by `id` / `upc` / `q`; prices are integer **pennies**; dates `YYYY-MM-DD`; **1 req/sec**; paid plan. Token via `PRICECHARTING_TOKEN` env for dev. |
+| `EbayBrowseProvider` | stub | Browse API `item_summary/search`; cheapest listing → `listingLow`, sold median → `soldMedian` (needs Marketplace Insights). OAuth. |
+| `GGDealsProvider` | stub | digital storefront prices → `listingLow` on `new`; modern/PC titles only. |
+| `SampleGuideProvider` | live default | echoes the app's own seed/cache so pricing renders offline. |
+
+### Where the adapters should eventually run
+
+Client-side adapters are fine for a solo start, but the plan is to move them
+**here**: the API aggregates providers, applies the merge policy, caches history,
+and serves the app a normalized `PriceGuide`. The app would then keep only
+`PricingModels` + a thin `RemotePricingProvider` hitting our endpoint. Until
+then, the client's `PricingService` does the aggregation.
+
+- [ ] `GET /price-guide?slug=…` → `PriceGuide` JSON (same shape as the client type)
+- [ ] Server-side adapter implementations + API keys in a secrets manager
+- [ ] `price_point` history table (append-only) for trend charts
+- [ ] Nightly PriceCharting CSV ingest (Legendary tier; 1 file, thousands of rows)
+      instead of per-item calls
+- [ ] Fuzzy match our catalog `slug` ⇄ each provider's product id; cache in
+      `PriceGuide.externalProductIDs`
+
 ## Image hosting (backlog)
 
 The app now shows real **console** photos by hot-linking Wikimedia Commons

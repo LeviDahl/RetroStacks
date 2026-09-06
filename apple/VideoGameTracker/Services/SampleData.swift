@@ -401,7 +401,37 @@ enum SampleData {
             estimatedValueLoose: 40, estimatedValueComplete: 100, estimatedValueSealed: 500))
 
         attachConsolePhotos(to: items)
+        attachSamplePriceMeta(to: items)
         return items
+    }
+
+    /// Tags every seeded item as coming from the built-in guide, and adds a
+    /// graded value + yearly sales volume to a few marquee entries so the
+    /// "Market Value" card has something to show before a live provider is wired.
+    @MainActor
+    private static func attachSamplePriceMeta(to items: [CatalogItem]) {
+        let asOf = Calendar.current.date(byAdding: .day, value: -2, to: .now) ?? .now
+        var bySlug: [String: CatalogItem] = [:]
+        for item in items {
+            item.priceGuideProviderID = PricingProviderID.sampleGuide.rawValue
+            item.priceGuideUpdatedAt = asOf
+            bySlug[item.slug] = item
+        }
+
+        func extra(_ slug: String, graded: Decimal? = nil, salesPerYear: Int? = nil) {
+            guard let item = bySlug[slug] else { return }
+            if let graded { item.estimatedValueGraded = graded }
+            if let salesPerYear { item.salesVolumeYearly = salesPerYear }
+        }
+
+        extra("snes-chrono-trigger", graded: 22000, salesPerYear: 140)
+        extra("snes-super-metroid", graded: 12000, salesPerYear: 260)
+        extra("nes-zelda", graded: 26000, salesPerYear: 90)
+        extra("nes-smb3", graded: 9000, salesPerYear: 410)
+        extra("n64-oot", graded: 6800, salesPerYear: 520)
+        extra("gb-pokemon-red", graded: 8500, salesPerYear: 900)
+        extra("ps1-ff7", graded: 3200, salesPerYear: 640)
+        extra("gen-psiv", graded: 9000, salesPerYear: 45)
     }
 
     /// Real hardware photos for each platform's primary console model, pulled from

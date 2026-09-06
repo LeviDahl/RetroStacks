@@ -38,10 +38,19 @@ final class CatalogItem {
     /// e.g. "Public domain", "CC BY-SA 3.0".
     var imageLicense: String?
 
-    // Rough US market reference prices (mock values for now).
+    /// Cached market values per condition — the last resolved `PriceGuide`,
+    /// flattened onto the model so lists / stats / offline use stay synchronous.
+    /// Written by `PricingService.apply(_:to:)`; seeded by `SampleData`.
     var estimatedValueLoose: Decimal?
     var estimatedValueComplete: Decimal?
     var estimatedValueSealed: Decimal?
+    var estimatedValueGraded: Decimal?
+
+    /// Yearly units sold, per the pricing source (PriceCharting `sales-volume`).
+    var salesVolumeYearly: Int?
+    /// `PricingProviderID.rawValue` of whichever source produced the cached values.
+    var priceGuideProviderID: String?
+    var priceGuideUpdatedAt: Date?
 
     var platform: Platform?
 
@@ -70,7 +79,11 @@ final class CatalogItem {
         imageLicense: String? = nil,
         estimatedValueLoose: Decimal? = nil,
         estimatedValueComplete: Decimal? = nil,
-        estimatedValueSealed: Decimal? = nil
+        estimatedValueSealed: Decimal? = nil,
+        estimatedValueGraded: Decimal? = nil,
+        salesVolumeYearly: Int? = nil,
+        priceGuideProviderID: String? = nil,
+        priceGuideUpdatedAt: Date? = nil
     ) {
         self.slug = slug
         self.kindRaw = kind.rawValue
@@ -89,6 +102,10 @@ final class CatalogItem {
         self.estimatedValueLoose = estimatedValueLoose
         self.estimatedValueComplete = estimatedValueComplete
         self.estimatedValueSealed = estimatedValueSealed
+        self.estimatedValueGraded = estimatedValueGraded
+        self.salesVolumeYearly = salesVolumeYearly
+        self.priceGuideProviderID = priceGuideProviderID
+        self.priceGuideUpdatedAt = priceGuideUpdatedAt
     }
 }
 
@@ -126,10 +143,16 @@ extension CatalogItem {
 
     func referenceValue(for completeness: Completeness?) -> Decimal? {
         switch completeness {
-        case .sealed, .graded: estimatedValueSealed ?? estimatedValueComplete
+        case .graded: estimatedValueGraded ?? estimatedValueSealed ?? estimatedValueComplete
+        case .sealed: estimatedValueSealed ?? estimatedValueComplete
         case .completeInBox, .boxedNoManual: estimatedValueComplete ?? estimatedValueLoose
         case .loose: estimatedValueLoose
         case .none: headlineValue
         }
+    }
+
+    /// Human label for the source of the cached prices, e.g. "PriceCharting".
+    var priceGuideSourceName: String? {
+        priceGuideProviderID.map { PricingProviderID($0).displayName }
     }
 }

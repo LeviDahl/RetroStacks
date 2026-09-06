@@ -143,11 +143,14 @@ struct CollectionItemDetailView: View {
             }
             if let catalogItem = item.catalogItem {
                 Divider().padding(.vertical, 2)
-                Text("Catalog reference (US)")
+                Text("Market value · \(catalogItem.priceGuideSourceName ?? "Built-in Guide")")
                     .font(.caption).foregroundStyle(.tertiary)
                 KeyValueRow("Loose", Money.string(catalogItem.estimatedValueLoose))
                 KeyValueRow("Complete", Money.string(catalogItem.estimatedValueComplete))
                 KeyValueRow("Sealed", Money.string(catalogItem.estimatedValueSealed))
+                if let graded = catalogItem.estimatedValueGraded {
+                    KeyValueRow("Graded", Money.string(graded))
+                }
             }
         }
     }

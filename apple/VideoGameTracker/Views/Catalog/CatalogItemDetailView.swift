@@ -7,6 +7,11 @@ struct CatalogItemDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var justAdded: CollectionStatus?
 
+    /// Swap for an injected instance in tests; the shared one carries the cache.
+    private let pricing = PricingService.shared
+    @State private var guide: PriceGuide?
+    @State private var isRefreshingPrices = false
+
     private var ownedEntries: [CollectionItem] {
         item.collectionEntries.sorted { $0.dateAdded > $1.dateAdded }
     }
@@ -41,6 +46,9 @@ struct CatalogItemDetailView: View {
             }
             .padding(LayoutMetrics.screenEdgePadding)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task(id: item.slug) {
+            guide = await pricing.priceGuide(for: item)
         }
         .navigationTitle(item.name)
         #if os(iOS)
@@ -142,13 +150,13 @@ struct CatalogItemDetailView: View {
         }()
 
         return LazyVGrid(columns: columns, alignment: .leading, spacing: LayoutMetrics.cardSpacing) {
-            DetailCard(title: "US Reference Prices", systemImage: "dollarsign.circle") {
-                KeyValueRow("Loose", Money.string(item.estimatedValueLoose))
-                KeyValueRow("Complete in Box", Money.string(item.estimatedValueComplete))
-                KeyValueRow("Sealed", Money.string(item.estimatedValueSealed))
-                Text("Placeholder values — live pricing arrives with the API.")
-                    .font(.caption2).foregroundStyle(.tertiary)
-            }
+            MarketValueCard(
+                item: item,
+                guide: guide,
+                isRefreshing: isRefreshingPrices,
+                hasLiveProvider: pricing.hasLiveProvider,
+                onRefresh: refreshPrices
+            )
             DetailCard(title: "Identifiers", systemImage: "barcode") {
                 KeyValueRow("Catalog slug", item.slug)
                 KeyValueRow("UPC", item.upc ?? "—")
@@ -156,6 +164,15 @@ struct CatalogItemDetailView: View {
                     KeyValueRow("Variant", variant)
                 }
             }
+        }
+    }
+
+    private func refreshPrices() {
+        guard !isRefreshingPrices else { return }
+        isRefreshingPrices = true
+        Task {
+            guide = await pricing.refresh(item, in: modelContext)
+            isRefreshingPrices = false
         }
     }
 
@@ -173,6 +190,89 @@ struct CatalogItemDetailView: View {
         Task {
             try? await Task.sleep(for: .seconds(2))
             withAnimation { justAdded = nil }
+        }
+    }
+}
+
+// MARK: - Market value card
+
+private struct MarketValueCard: View {
+    var item: CatalogItem
+    var guide: PriceGuide?
+    var isRefreshing: Bool
+    var hasLiveProvider: Bool
+    var onRefresh: () -> Void
+
+    /// Prefer the freshly resolved guide; fall back to the model's cached fields.
+    private func value(_ condition: MarketCondition) -> Decimal? {
+        if let v = guide?.value(for: condition) { return v }
+        switch condition {
+        case .loose: return item.estimatedValueLoose
+        case .completeInBox: return item.estimatedValueComplete
+        case .new: return item.estimatedValueSealed
+        case .graded: return item.estimatedValueGraded
+        default: return nil
+        }
+    }
+
+    private var sourceName: String {
+        guide?.primaryProvider.displayName ?? item.priceGuideSourceName ?? "Built-in Guide"
+    }
+
+    private var asOf: Date? { guide?.asOf ?? item.priceGuideUpdatedAt }
+    private var salesVolume: Int? { guide?.salesVolumeYearly ?? item.salesVolumeYearly }
+
+    var body: some View {
+        DetailCard(title: "Market Value", systemImage: "dollarsign.circle") {
+            ForEach(MarketCondition.primary) { condition in
+                if let v = value(condition) {
+                    KeyValueRow(condition.displayName, Money.string(v))
+                }
+            }
+
+            if value(.loose) == nil && value(.completeInBox) == nil
+                && value(.new) == nil && value(.graded) == nil {
+                Text("No pricing yet for this item.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
+            Divider().padding(.vertical, 2)
+
+            HStack(spacing: 6) {
+                Text("Source: \(sourceName)")
+                if let asOf {
+                    Text("· as of \(asOf.mediumDateString)")
+                }
+                Spacer()
+                if let salesVolume {
+                    Label("\(salesVolume)/yr sold", systemImage: "chart.bar")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+
+            if let contributors = guide?.contributingProviders, contributors.count > 1 {
+                Text("Also: " + contributors.dropFirst().map(\.displayName).joined(separator: ", "))
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
+
+            Button {
+                onRefresh()
+            } label: {
+                HStack(spacing: 6) {
+                    if isRefreshing { ProgressView().controlSize(.small) }
+                    Text(isRefreshing ? "Refreshing…" : "Refresh prices")
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isRefreshing)
+            .padding(.top, 4)
+
+            if !hasLiveProvider {
+                Text("No live pricing provider configured — showing seed values. Add a PriceCharting token (or another adapter) to pull current prices.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
         }
     }
 }
