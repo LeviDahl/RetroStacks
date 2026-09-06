@@ -10,16 +10,17 @@ struct DashboardView: View {
         CollectionStatsBuilder.build(from: collectionItems)
     }
 
+    private var systemSummaries: [CollectionStats.SystemSummary] {
+        CollectionStatsBuilder.systemSummaries(from: collectionItems, status: .owned)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 statGrid
 
-                if !stats.valueByPlatform.isEmpty {
-                    DashboardSection(title: "Value by Platform", systemImage: "chart.bar.fill") {
-                        ValueByPlatformView(entries: stats.valueByPlatform,
-                                            total: stats.estimatedValue)
-                    }
+                if !systemSummaries.isEmpty {
+                    PlatformBreakdownCard(summaries: systemSummaries)
                 }
 
                 twoColumnLists
@@ -112,51 +113,132 @@ private struct DashboardSection<Content: View>: View {
     }
 }
 
-// MARK: - Value by platform bars
+// MARK: - Platform breakdown (collapsible, metric-switchable bars)
 
-private struct ValueByPlatformView: View {
-    var entries: [CollectionStats.PlatformValue]
-    var total: Decimal
-
-    private var maxValue: Decimal {
-        entries.map(\.value).max() ?? 1
+private enum BreakdownMetric: String, CaseIterable, Identifiable {
+    case value, games, completion
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .value: "Value"
+        case .games: "Games"
+        case .completion: "Completion"
+        }
     }
+}
 
-    var body: some View {
-        VStack(spacing: 10) {
-            ForEach(entries) { entry in
-                HStack(spacing: 12) {
-                    Text(entry.platformShortName)
-                        .font(.callout.weight(.medium))
-                        .frame(width: 52, alignment: .leading)
+private struct PlatformBreakdownCard: View {
+    var summaries: [CollectionStats.SystemSummary]
 
-                    GeometryReader { proxy in
-                        let ratio = fraction(entry.value)
-                        Capsule()
-                            .fill(.tint)
-                            .frame(width: max(4, proxy.size.width * ratio))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(height: 14)
+    @AppStorage("dashboard.breakdownMetric") private var metricRaw = BreakdownMetric.value.rawValue
+    @AppStorage("dashboard.breakdownExpanded") private var expanded = true
 
-                    Text(Money.string(entry.value))
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 80, alignment: .trailing)
+    private var metric: BreakdownMetric { BreakdownMetric(rawValue: metricRaw) ?? .value }
 
-                    Text("\(entry.itemCount)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 28, alignment: .trailing)
-                }
-            }
+    /// (summary, bar fraction 0…1, trailing label), sorted by the active metric.
+    private var rows: [(summary: CollectionStats.SystemSummary, fraction: Double, label: String)] {
+        switch metric {
+        case .value:
+            let amounts = summaries.map { NSDecimalNumber(decimal: $0.value).doubleValue }
+            let maxV = max(amounts.max() ?? 1, 0.01)
+            return zip(summaries, amounts)
+                .map { ($0, $1 / maxV, Money.string($0.value)) }
+                .sorted { $0.1 > $1.1 }
+                .map { (summary: $0.0, fraction: $0.1, label: $0.2) }
+        case .games:
+            let maxC = Double(summaries.map(\.ownedItemCount).max() ?? 1)
+            return summaries
+                .map { ($0, Double($0.ownedItemCount) / max(maxC, 1), "\($0.ownedItemCount)") }
+                .sorted { $0.1 > $1.1 }
+                .map { (summary: $0.0, fraction: $0.1, label: $0.2) }
+        case .completion:
+            return summaries
+                .map { ($0, $0.completionRatio, "\($0.completionPercent)%") }
+                .sorted { $0.1 > $1.1 }
+                .map { (summary: $0.0, fraction: $0.1, label: $0.2) }
         }
     }
 
-    private func fraction(_ value: Decimal) -> Double {
-        let v = NSDecimalNumber(decimal: value).doubleValue
-        let m = NSDecimalNumber(decimal: maxValue).doubleValue
-        return m > 0 ? v / m : 0
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Breakdown by Platform", systemImage: "chart.bar.xaxis")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { expanded.toggle() }
+                } label: {
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(expanded ? "Hide breakdown" : "Show breakdown")
+            }
+
+            if expanded {
+                Picker("Metric", selection: $metricRaw) {
+                    ForEach(BreakdownMetric.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                VStack(spacing: 8) {
+                    ForEach(rows, id: \.summary.id) { row in
+                        BreakdownBar(
+                            shortName: row.summary.platformShortName,
+                            fraction: row.fraction,
+                            valueText: row.label,
+                            subText: metric == .value ? "\(row.summary.ownedItemCount)" : nil
+                        )
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: LayoutMetrics.cardCornerRadius, style: .continuous)
+                .fill(.quaternary.opacity(0.4))
+        )
+    }
+}
+
+private struct BreakdownBar: View {
+    var shortName: String
+    var fraction: Double
+    var valueText: String
+    var subText: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(shortName)
+                .font(.callout.weight(.medium))
+                .frame(width: 54, alignment: .leading)
+                .lineLimit(1)
+
+            GeometryReader { proxy in
+                Capsule()
+                    .fill(.tint.opacity(0.85))
+                    .frame(width: max(4, proxy.size.width * max(0, min(1, fraction))))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: 14)
+
+            Text(valueText)
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 78, alignment: .trailing)
+
+            if let subText {
+                Text(subText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 30, alignment: .trailing)
+            }
+        }
     }
 }
 

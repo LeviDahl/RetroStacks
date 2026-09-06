@@ -13,19 +13,8 @@ struct CollectionStats {
     var totalInvested: Decimal = 0
     var estimatedValue: Decimal = 0
 
-    /// Per-platform estimated value of owned items, richest first.
-    var valueByPlatform: [PlatformValue] = []
-
     var recentlyAdded: [CollectionItem] = []
     var mostValuable: [CollectionItem] = []
-
-    struct PlatformValue: Identifiable, Equatable, Sendable {
-        var id: String { platformSlug }
-        var platformSlug: String
-        var platformShortName: String
-        var itemCount: Int
-        var value: Decimal
-    }
 
     /// One row of the system-first Collection view: how much of a platform you
     /// have, how complete it is, and what it's worth.
@@ -71,21 +60,6 @@ enum CollectionStatsBuilder {
 
         stats.totalInvested = owned.compactMap(\.pricePaid).reduce(0, +)
         stats.estimatedValue = owned.compactMap(\.estimatedValue).reduce(0, +)
-
-        var buckets: [String: CollectionStats.PlatformValue] = [:]
-        for item in owned {
-            guard let platform = item.catalogItem?.platform else { continue }
-            var bucket = buckets[platform.slug] ?? .init(
-                platformSlug: platform.slug,
-                platformShortName: platform.shortName,
-                itemCount: 0,
-                value: 0
-            )
-            bucket.itemCount += 1
-            bucket.value += item.estimatedValue ?? 0
-            buckets[platform.slug] = bucket
-        }
-        stats.valueByPlatform = buckets.values.sorted { $0.value > $1.value }
 
         stats.recentlyAdded = items
             .sorted { $0.dateAdded > $1.dateAdded }
