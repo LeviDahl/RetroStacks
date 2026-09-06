@@ -26,7 +26,7 @@ struct SidebarView: View {
                 row(.platforms, badge: platforms.count)
             }
         }
-        .navigationTitle("Game Tracker")
+        .navigationTitle("RetroStacks")
         #if os(macOS)
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
         #endif

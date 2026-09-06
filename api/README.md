@@ -1,9 +1,11 @@
 # api
 
-Backend for Video Game Tracker: the reference catalog database (consoles, games,
-accessories for major US systems) and the REST API the app will sync from.
+Backend for **RetroStacks**: the reference catalog database (consoles, games,
+accessories for major US systems), the pricing aggregation, and the REST API the
+app syncs from.
 
-**Not started.** Blocked on registering a domain for the API + DB.
+**Not started.** Blocked on registering the domain (`retrostacks.com`, GoDaddy)
+for the API + DB.
 
 ## Intended shape
 

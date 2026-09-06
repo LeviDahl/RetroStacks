@@ -1,14 +1,15 @@
-# Video Game Tracker — Apple app
+# RetroStacks — Apple app
 
 Native SwiftUI app for **macOS / iPadOS / iOS**: a personal collection manager
 for retro video game **systems, games, and accessories**, backed by a
 comprehensive reference catalog.
 
-This directory currently contains **UI wiring + mock data only**. No network
-layer yet; a real API/DB (see [`../api/`](../api/)) will replace `SampleData`.
-
 Everything below is relative to this `apple/` directory. Sources live in
-`VideoGameTracker/`; the `.xcodeproj` is not committed (see setup below).
+`VideoGameTracker/`; the `.xcodeproj` is committed at `apple/`.
+
+> **Rename status:** the product name is **RetroStacks** (shown in-app). The
+> Xcode target, scheme, bundle id, source folder, and the Git repo are still
+> `VideoGameTracker` — see *Renaming to RetroStacks* at the bottom.
 
 ## Status
 
@@ -139,7 +140,29 @@ Full source also type-checks under Swift 6 against the macOS 26 and iOS 26 SDKs.
 
 - Replace `SampleData` with a `CatalogRepository` protocol + REST implementation
   once the domain/API is registered; the mock stays as the preview/offline path.
+- Add a `RemotePricingProvider` (hits our `/price-guide` endpoint) and drop it in
+  ahead of `SampleGuideProvider` in `PricingService.makeDefault()`.
 - Add `PhotosPicker` binding to `CollectionItem.photoData`.
 - Real box-art assets keyed by `CatalogItem.imageName`.
 - Region switching for EU / JP (`Region` enum + `Platform.regionsAvailable` already model it).
 - Valuation history + charts (Swift Charts) on the collection detail.
+
+## Renaming to RetroStacks
+
+Done code-side (the in-app title). The rest is mechanical but touches the project
+file and GitHub, so it's a deliberate step:
+
+1. **Xcode** → select the project → rename the **`VideoGameTracker` target** to
+   `RetroStacks` (Xcode offers to rename the scheme and the synchronized group
+   folder too — accept). Set **Bundle Identifier** to `com.<you>.retrostacks` and
+   **Display Name** to `RetroStacks`.
+2. `VideoGameTrackerApp.swift` → `struct RetroStacksApp: App` (and its file name).
+   `VideoGameTrackerTests` / `UITests` targets rename similarly if you keep them.
+3. **Repo**: `gh repo rename RetroStacks` then
+   `git remote set-url origin git@github.com:LeviDahl/RetroStacks.git`.
+   Optionally rename the local folders `videogametracker/` → `retrostacks/` and
+   `apple/VideoGameTracker/` → `apple/RetroStacks/`.
+4. Grep the tree for `VideoGameTracker` and fix the stragglers (mostly comments
+   and these READMEs).
+
+No hurry — everything builds and runs under the current names.
