@@ -36,15 +36,26 @@ enum SampleData {
         }
     }
 
-    /// Rewrites `imageURLString` / credit / license on existing catalog rows to
-    /// match the current `attach*` tables. Idempotent (skips rows already set to
-    /// the same URL).
+    /// Re-applies the derived-but-mutable sample fields (image URLs, platform
+    /// icons) to rows that already exist, so an install seeded before a content
+    /// change picks it up without a wipe. Idempotent — only writes when a value
+    /// actually differs.
     @MainActor
     static func refreshSampleMedia(in context: ModelContext) {
-        guard let items = try? context.fetch(FetchDescriptor<CatalogItem>()),
-              !items.isEmpty else { return }
-        attachConsolePhotos(to: items)
-        attachGameBoxArt(to: items)
+        if let items = try? context.fetch(FetchDescriptor<CatalogItem>()), !items.isEmpty {
+            attachConsolePhotos(to: items)
+            attachGameBoxArt(to: items)
+        }
+        if let platforms = try? context.fetch(FetchDescriptor<Platform>()), !platforms.isEmpty {
+            let canonicalIcon = Dictionary(
+                uniqueKeysWithValues: makePlatforms().map { ($0.slug, $0.iconSystemName) }
+            )
+            for platform in platforms {
+                if let icon = canonicalIcon[platform.slug], platform.iconSystemName != icon {
+                    platform.iconSystemName = icon
+                }
+            }
+        }
         if context.hasChanges { try? context.save() }
     }
 
@@ -72,7 +83,7 @@ enum SampleData {
                      manufacturer: "Atari", generation: 2, releaseYearNA: 1977,
                      discontinuedYearNA: 1992,
                      summary: "The cartridge-based console that defined the second generation and the 1977–1983 home boom.",
-                     iconSystemName: "joystick"),
+                     iconSystemName: "arcade.stick"),
             Platform(slug: "nes", name: "Nintendo Entertainment System", shortName: "NES",
                      manufacturer: "Nintendo", generation: 3, releaseYearNA: 1985,
                      discontinuedYearNA: 1995,
