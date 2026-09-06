@@ -114,11 +114,11 @@ extension CatalogItem {
         imageURLString.flatMap { URL(string: $0) }
     }
 
-    /// One-line "Photo: … · License" string, or nil when there's no remote image.
+    /// One-line "credit · license" string, or nil when there's no remote image.
     var imageAttribution: String? {
         guard imageURL != nil, let credit = imageCredit else { return nil }
-        if let license = imageLicense { return "Photo: \(credit) · \(license)" }
-        return "Photo: \(credit)"
+        if let license = imageLicense, !license.isEmpty { return "\(credit) · \(license)" }
+        return credit
     }
 
     var displayTitle: String {

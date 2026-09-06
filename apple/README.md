@@ -91,14 +91,20 @@ Toggled in Xcode by hand (per `CLAUDE.md`'s "no direct project-file edits"):
 
 ### Images
 
-`CatalogItem` carries `imageURLString` / `imageCredit` / `imageLicense`.
-`SampleData.attachConsolePhotos` fills these for each platform's primary console
-model from Wikimedia Commons (`Special:FilePath` stable redirect; mostly Evan
-Amos public-domain shots, Dreamcast is CC BY-SA 3.0 and shows attribution).
+`CatalogItem` carries `imageURLString` / `imageCredit` / `imageLicense`, filled
+in `SampleData` with hot-linked URLs (no backend, no keys):
+- **Consoles** — `attachConsolePhotos`: Wikimedia Commons `Special:FilePath`
+  stable redirect. Mostly Evan Amos public-domain shots; Dreamcast is CC BY-SA 3.0.
+- **Games** — `attachGameBoxArt`: the Libretro thumbnails CDN
+  (`thumbnails.libretro.com/<system>/Named_Boxarts/<No-Intro name>.png`). Each of
+  the 31 sample titles was verified to resolve; a miss just shows the placeholder.
+  This is publisher artwork — our own image layer is the long-term plan.
+
 `ItemThumbnail` resolves bundled asset → remote `AsyncImage` (shared `URLCache`
 bumped to 256 MB disk in `configureImageCache()`) → SF Symbol placeholder.
-Variants, games, and accessories still use the placeholder — a real image service
-is on the backlog in [`../api/README.md`](../api/README.md#image-hosting-backlog).
+Console *variants* and accessories still use the placeholder — a self-hosted
+image service is on the backlog in
+[`../api/README.md`](../api/README.md#image-hosting-backlog).
 
 ### Pricing
 

@@ -401,8 +401,78 @@ enum SampleData {
             estimatedValueLoose: 40, estimatedValueComplete: 100, estimatedValueSealed: 500))
 
         attachConsolePhotos(to: items)
+        attachGameBoxArt(to: items)
         attachSamplePriceMeta(to: items)
         return items
+    }
+
+    /// Front box art for the sample games, hot-linked from the **Libretro
+    /// thumbnails** CDN (`thumbnails.libretro.com/<system>/Named_Boxarts/<No-Intro
+    /// name>.png`) — the same "URLs only, no backend" approach as the console
+    /// photos. Titles below were each verified to return an image. A miss would
+    /// just fall back to the placeholder (`ItemThumbnail` handles `.failure`).
+    /// This is publisher artwork; our own image layer is the long-term plan
+    /// (see `api/README.md`).
+    @MainActor
+    private static func attachGameBoxArt(to items: [CatalogItem]) {
+        var bySlug: [String: CatalogItem] = [:]
+        for item in items { bySlug[item.slug] = item }
+
+        func set(_ slug: String, _ system: String, _ title: String) {
+            guard let item = bySlug[slug] else { return }
+            var comps = URLComponents()
+            comps.scheme = "https"
+            comps.host = "thumbnails.libretro.com"
+            comps.path = "/\(system)/Named_Boxarts/\(title).png"
+            guard let url = comps.url?.absoluteString else { return }
+            item.imageURLString = url
+            item.imageCredit = "Box art via Libretro thumbnails"
+            item.imageLicense = "Publisher artwork"
+        }
+
+        let a2600 = "Atari - 2600"
+        let nes = "Nintendo - Nintendo Entertainment System"
+        let snes = "Nintendo - Super Nintendo Entertainment System"
+        let gen = "Sega - Mega Drive - Genesis"
+        let gb = "Nintendo - Game Boy"
+        let n64 = "Nintendo - Nintendo 64"
+        let ps1 = "Sony - PlayStation"
+        let dc = "Sega - Dreamcast"
+        let ps2 = "Sony - PlayStation 2"
+        let gcn = "Nintendo - GameCube"
+
+        set("2600-pitfall", a2600, "Pitfall! - Pitfall Harry's Jungle Adventure (USA)")
+        set("2600-adventure", a2600, "Adventure (USA)")
+        set("nes-smb3", nes, "Super Mario Bros. 3 (USA)")
+        set("nes-zelda", nes, "Legend of Zelda, The (USA)")
+        set("nes-metroid", nes, "Metroid (USA)")
+        set("snes-mario-world", snes, "Super Mario World (USA)")
+        set("snes-chrono-trigger", snes, "Chrono Trigger (USA)")
+        set("snes-link-past", snes, "Legend of Zelda, The - A Link to the Past (USA)")
+        set("snes-super-metroid", snes, "Super Metroid (Japan, USA) (En,Ja)")
+        set("gen-sonic-2", gen, "Sonic The Hedgehog 2 (World)")
+        set("gen-streets-2", gen, "Streets of Rage 2 (USA)")
+        set("gen-psiv", gen, "Phantasy Star IV (USA)")
+        set("gb-tetris", gb, "Tetris (World) (Rev 1)")
+        set("gb-pokemon-red", gb, "Pokemon - Red Version (USA, Europe) (SGB Enhanced)")
+        set("gb-links-awakening", gb, "Legend of Zelda, The - Link's Awakening (USA, Europe)")
+        set("n64-mario64", n64, "Super Mario 64 (USA)")
+        set("n64-oot", n64, "Legend of Zelda, The - Ocarina of Time (USA)")
+        set("n64-goldeneye", n64, "GoldenEye 007 (USA)")
+        set("n64-mariokart64", n64, "Mario Kart 64 (USA)")
+        set("ps1-ff7", ps1, "Final Fantasy VII (USA) (Disc 1)")
+        set("ps1-mgs", ps1, "Metal Gear Solid (USA) (Disc 1)")
+        set("ps1-sotn", ps1, "Castlevania - Symphony of the Night (USA)")
+        set("dc-sonic-adventure", dc, "Sonic Adventure (USA)")
+        set("dc-shenmue", dc, "Shenmue (USA) (Disc 1)")
+        set("dc-jet-grind-radio", dc, "Jet Grind Radio (USA)")
+        set("ps2-sotc", ps2, "Shadow of the Colossus (USA)")
+        set("ps2-gow", ps2, "God of War (USA)")
+        set("ps2-gta-sa", ps2, "Grand Theft Auto - San Andreas (USA) (v3.00)")
+        set("gcn-smash-melee", gcn, "Super Smash Bros. Melee (USA)")
+        set("gcn-metroid-prime", gcn, "Metroid Prime (USA)")
+        set("gcn-wind-waker", gcn, "Legend of Zelda, The - The Wind Waker (USA)")
+        set("gcn-re4", gcn, "Resident Evil 4 (USA) (Disc 1)")
     }
 
     /// Tags every seeded item as coming from the built-in guide, and adds a
