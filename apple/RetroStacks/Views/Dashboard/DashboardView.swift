@@ -5,6 +5,7 @@ struct DashboardView: View {
     var onSelectSection: (AppSection) -> Void = { _ in }
 
     @Query private var collectionItems: [CollectionItem]
+    @AppStorage("dashboard.showBreakdown") private var showBreakdown = true
 
     private var stats: CollectionStats {
         CollectionStatsBuilder.build(from: collectionItems)
@@ -19,7 +20,7 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 statGrid
 
-                if !systemSummaries.isEmpty {
+                if showBreakdown && !systemSummaries.isEmpty {
                     PlatformBreakdownCard(summaries: systemSummaries)
                 }
 
@@ -32,6 +33,13 @@ struct DashboardView: View {
         .gameTrackerDestinations()
         .navigationTitle("Dashboard")
         .toolbar {
+            ToolbarItem {
+                Menu {
+                    Toggle("Platform Breakdown", isOn: $showBreakdown)
+                } label: {
+                    Label("View Options", systemImage: "slider.horizontal.3")
+                }
+            }
             ToolbarItem {
                 Button {
                     onSelectSection(.catalog)
@@ -131,7 +139,6 @@ private struct PlatformBreakdownCard: View {
     var summaries: [CollectionStats.SystemSummary]
 
     @AppStorage("dashboard.breakdownMetric") private var metricRaw = BreakdownMetric.value.rawValue
-    @AppStorage("dashboard.breakdownExpanded") private var expanded = true
 
     private var metric: BreakdownMetric { BreakdownMetric(rawValue: metricRaw) ?? .value }
 
@@ -161,41 +168,27 @@ private struct PlatformBreakdownCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Breakdown by Platform", systemImage: "chart.bar.xaxis")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    withAnimation(.snappy(duration: 0.2)) { expanded.toggle() }
-                } label: {
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(expanded ? "Hide breakdown" : "Show breakdown")
-            }
+            Label("Breakdown by Platform", systemImage: "chart.bar.xaxis")
+                .font(.headline)
 
-            if expanded {
-                Picker("Metric", selection: $metricRaw) {
-                    ForEach(BreakdownMetric.allCases) { Text($0.label).tag($0.rawValue) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-
-                VStack(spacing: 8) {
-                    ForEach(rows, id: \.summary.id) { row in
-                        BreakdownBar(
-                            shortName: row.summary.platformShortName,
-                            fraction: row.fraction,
-                            valueText: row.label,
-                            subText: metric == .value ? "\(row.summary.ownedItemCount)" : nil
-                        )
-                    }
-                }
-                .transition(.opacity)
+            Picker("Metric", selection: $metricRaw) {
+                ForEach(BreakdownMetric.allCases) { Text($0.label).tag($0.rawValue) }
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            VStack(spacing: 8) {
+                ForEach(rows, id: \.summary.id) { row in
+                    BreakdownBar(
+                        shortName: row.summary.platformShortName,
+                        fraction: row.fraction,
+                        color: PlatformPalette.color(for: row.summary.platformSlug),
+                        valueText: row.label,
+                        subText: metric == .value ? "\(row.summary.ownedItemCount)" : nil
+                    )
+                }
+            }
+            .animation(.snappy(duration: 0.25), value: metricRaw)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
@@ -209,6 +202,7 @@ private struct PlatformBreakdownCard: View {
 private struct BreakdownBar: View {
     var shortName: String
     var fraction: Double
+    var color: Color
     var valueText: String
     var subText: String?
 
@@ -220,12 +214,20 @@ private struct BreakdownBar: View {
                 .lineLimit(1)
 
             GeometryReader { proxy in
-                Capsule()
-                    .fill(.tint.opacity(0.85))
-                    .frame(width: max(4, proxy.size.width * max(0, min(1, fraction))))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                let clamped = max(0, min(1, fraction))
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.quaternary.opacity(0.5))
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [color, color.opacity(0.65)],
+                                startPoint: .leading, endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(6, proxy.size.width * clamped))
+                }
             }
-            .frame(height: 14)
+            .frame(height: 15)
 
             Text(valueText)
                 .font(.callout.monospacedDigit())
