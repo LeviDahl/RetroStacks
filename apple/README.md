@@ -5,11 +5,7 @@ for retro video game **systems, games, and accessories**, backed by a
 comprehensive reference catalog.
 
 Everything below is relative to this `apple/` directory. Sources live in
-`VideoGameTracker/`; the `.xcodeproj` is committed at `apple/`.
-
-> **Rename status:** the product name is **RetroStacks** (shown in-app). The
-> Xcode target, scheme, bundle id, source folder, and the Git repo are still
-> `VideoGameTracker` — see *Renaming to RetroStacks* at the bottom.
+`RetroStacks/`; `RetroStacks.xcodeproj` is committed alongside it.
 
 ## Status
 
@@ -40,8 +36,8 @@ iPhone (compact width) falls back to a `TabView`. iPad uses the split layout.
 
 ```
 apple/
-├── VideoGameTracker.xcodeproj     Multiplatform App target (macOS / iPadOS / iOS)
-├── VideoGameTracker/              File System Synchronized group — all files below are in the target
+├── RetroStacks.xcodeproj          Multiplatform App target (macOS / iPadOS / iOS)
+├── RetroStacks/                   File System Synchronized group — all files below are in the target
 │   ├── Assets.xcassets           AppIcon + AccentColor (from the template)
 │   ├── App/                      App entry, RootView shell, sidebar, layout metrics, nav destinations
 │   ├── Models/                   SwiftData @Model types + Enums
@@ -54,26 +50,26 @@ apple/
 │       ├── Catalog/              section split, item detail
 │       ├── Platforms/            section split, platform detail
 │       └── Components/           thumbnails, badges, rows, cards, stat tiles, formatting
-├── VideoGameTrackerTests/         (template stub)
-└── VideoGameTrackerUITests/       (template stub)
+├── RetroStacksTests/              (template stub)
+└── RetroStacksUITests/            (template stub)
 ```
 
 ## Building
 
 ```
-open apple/VideoGameTracker.xcodeproj
+open apple/RetroStacks.xcodeproj
 ```
 
 or from the command line:
 
 ```
-xcodebuild -project apple/VideoGameTracker.xcodeproj -scheme VideoGameTracker \
+xcodebuild -project apple/RetroStacks.xcodeproj -scheme RetroStacks \
   -destination 'platform=macOS' build
 ```
 
 - Multiplatform **App** target, Storage: None — the app creates its own
-  `ModelContainer` in `App/VideoGameTrackerApp.swift`.
-- `VideoGameTracker/` is a **File System Synchronized group**: drop a `.swift`
+  `ModelContainer` in `App/RetroStacksApp.swift`.
+- `RetroStacks/` is a **File System Synchronized group**: drop a `.swift`
   file anywhere under it and it's in the target automatically, no `.pbxproj` edit.
 - Deployment targets default to **macOS 26 / iOS 26** (Xcode 26). The iOS
   Simulator runtime must be installed (Xcode → Settings → Components) to build
@@ -147,22 +143,13 @@ Full source also type-checks under Swift 6 against the macOS 26 and iOS 26 SDKs.
 - Region switching for EU / JP (`Region` enum + `Platform.regionsAvailable` already model it).
 - Valuation history + charts (Swift Charts) on the collection detail.
 
-## Renaming to RetroStacks
+## Rename history
 
-Done code-side (the in-app title). The rest is mechanical but touches the project
-file and GitHub, so it's a deliberate step:
-
-1. **Xcode** → select the project → rename the **`VideoGameTracker` target** to
-   `RetroStacks` (Xcode offers to rename the scheme and the synchronized group
-   folder too — accept). Set **Bundle Identifier** to `com.<you>.retrostacks` and
-   **Display Name** to `RetroStacks`.
-2. `VideoGameTrackerApp.swift` → `struct RetroStacksApp: App` (and its file name).
-   `VideoGameTrackerTests` / `UITests` targets rename similarly if you keep them.
-3. **Repo**: `gh repo rename RetroStacks` then
-   `git remote set-url origin git@github.com:LeviDahl/RetroStacks.git`.
-   Optionally rename the local folders `videogametracker/` → `retrostacks/` and
-   `apple/VideoGameTracker/` → `apple/RetroStacks/`.
-4. Grep the tree for `VideoGameTracker` and fix the stragglers (mostly comments
-   and these READMEs).
-
-No hurry — everything builds and runs under the current names.
+Renamed from `VideoGameTracker` → `RetroStacks` (target, scheme, bundle id
+`com.levidahlstrom.RetroStacks`, source folders, and the GitHub repo
+`LeviDahl/RetroStacks`). During the move the renamed `project.pbxproj` was lost;
+it was reconstructed from the last committed copy with a mechanical
+`VideoGameTracker → RetroStacks` substitution (target / products / group paths /
+bundle ids — the same result Xcode's rename had produced). Build settings
+(`ENABLE_OUTGOING_NETWORK_CONNECTIONS`, `SWIFT_VERSION = 6.0`,
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`) carried over intact.

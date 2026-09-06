@@ -1,13 +1,13 @@
 //
-//  VideoGameTrackerTests.swift
-//  VideoGameTrackerTests
+//  RetroStacksTests.swift
+//  RetroStacksTests
 //
 //  Created by Levi Dahlstrom on 9/5/26.
 //
 
 import Testing
 
-struct VideoGameTrackerTests {
+struct RetroStacksTests {
 
     @Test func example() async throws {
         // Write your test here and use APIs like `#expect(...)` to check expected conditions.

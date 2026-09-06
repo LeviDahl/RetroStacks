@@ -27,7 +27,7 @@ for the API + DB.
 ## Pricing (adapter layer — schema already lives in the app)
 
 The **canonical pricing schema** is defined client-side in
-`apple/VideoGameTracker/Services/Pricing/PricingModels.swift` and is written to
+`apple/RetroStacks/Services/Pricing/PricingModels.swift` and is written to
 be provider-neutral and dependency-free so it can be lifted into a shared package
 **or re-implemented here as the API contract**. Core types:
 

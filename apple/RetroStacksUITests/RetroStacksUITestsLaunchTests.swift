@@ -1,13 +1,13 @@
 //
-//  VideoGameTrackerUITestsLaunchTests.swift
-//  VideoGameTrackerUITests
+//  RetroStacksUITestsLaunchTests.swift
+//  RetroStacksUITests
 //
 //  Created by Levi Dahlstrom on 9/5/26.
 //
 
 import XCTest
 
-final class VideoGameTrackerUITestsLaunchTests: XCTestCase {
+final class RetroStacksUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

@@ -232,7 +232,7 @@ nonisolated struct PriceQuery: Sendable {
     }
 }
 
-// MARK: - App bridge (the only VideoGameTracker-coupled part)
+// MARK: - App bridge (the only RetroStacks-coupled part)
 
 nonisolated extension Completeness {
     /// Map the collection-item completeness axis onto a pricing tier.

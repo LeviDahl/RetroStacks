@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 @main
-struct VideoGameTrackerApp: App {
+struct RetroStacksApp: App {
     /// One container for the whole app. Seeded with mock data on first launch;
     /// swap `SampleData.seedIfNeeded` for a network sync later.
     let container: ModelContainer

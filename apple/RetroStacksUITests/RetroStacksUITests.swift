@@ -1,13 +1,13 @@
 //
-//  VideoGameTrackerUITests.swift
-//  VideoGameTrackerUITests
+//  RetroStacksUITests.swift
+//  RetroStacksUITests
 //
 //  Created by Levi Dahlstrom on 9/5/26.
 //
 
 import XCTest
 
-final class VideoGameTrackerUITests: XCTestCase {
+final class RetroStacksUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

@@ -43,6 +43,18 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
+# Secrets — never commit tokens / keys / provisioning
+.env
+.env.*
+*.xcconfig
+Secrets.swift
+Secrets.plist
+*.p12
+*.pem
+*.key
+*.mobileprovision
+*.cer
+
 # Injection / misc
 *.orig
 *~

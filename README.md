@@ -4,9 +4,9 @@ Track retro **video game systems, games, and accessories** — a personal
 collection manager backed by a comprehensive reference catalog. US market first,
 EU/JP later.
 
-> **Naming:** the product is **RetroStacks**. The Xcode target / bundle id and
-> this Git repo are still `VideoGameTracker` — rename is a separate step (see
-> `apple/README.md`). Domain `retrostacks.com` to be registered (GoDaddy).
+> **Naming:** everything is now **RetroStacks** (app, Xcode target, bundle id
+> `com.levidahlstrom.RetroStacks`, this repo). Domain `retrostacks.com` to be
+> registered (GoDaddy).
 
 ## Layout
 
