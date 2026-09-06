@@ -38,44 +38,50 @@ iPhone (compact width) falls back to a `TabView`. iPad uses the split layout.
 ## Project structure
 
 ```
-VideoGameTracker/
-├── App/            App entry, RootView shell, sidebar, layout metrics, nav destinations
-├── Models/         SwiftData @Model types + Enums
-├── ViewModels/     @Observable filter/sort state (CollectionList, CatalogBrowse)
-├── Services/       SampleData (mock seed + preview container), CollectionStats
-└── Views/
-    ├── Dashboard/
-    ├── Collection/ section split, Table, detail, edit form, add-from-catalog sheet
-    ├── Catalog/    section split, item detail
-    ├── Platforms/  section split, platform detail
-    └── Components/  thumbnails, badges, rows, cards, stat tiles, formatting
+apple/
+├── VideoGameTracker.xcodeproj     Multiplatform App target (macOS / iPadOS / iOS)
+├── VideoGameTracker/              File System Synchronized group — all files below are in the target
+│   ├── Assets.xcassets           AppIcon + AccentColor (from the template)
+│   ├── App/                      App entry, RootView shell, sidebar, layout metrics, nav destinations
+│   ├── Models/                   SwiftData @Model types + Enums
+│   ├── ViewModels/               @Observable filter/sort state (CollectionList, CatalogBrowse)
+│   ├── Services/                 SampleData (mock seed + preview container), CollectionStats
+│   └── Views/
+│       ├── Dashboard/
+│       ├── Collection/           section split, Table, detail, edit form, add-from-catalog sheet
+│       ├── Catalog/              section split, item detail
+│       ├── Platforms/            section split, platform detail
+│       └── Components/           thumbnails, badges, rows, cards, stat tiles, formatting
+├── VideoGameTrackerTests/         (template stub)
+└── VideoGameTrackerUITests/       (template stub)
 ```
 
-## Wiring it into Xcode (one-time)
+## Building
 
-Per `CLAUDE.md`, no `.xcodeproj` / `.pbxproj` is committed. Xcode's new-project
-wizard won't merge into an existing source folder, so the setup parks the
-sources aside, creates the project, then merges them back:
+```
+open apple/VideoGameTracker.xcodeproj
+```
 
-1. **Xcode → File → New → Project → Multiplatform → App.**
-   - Product Name: `VideoGameTracker`
-   - Storage: **None** (we bring our own `ModelContainer`)
-   - Location: the `apple/` directory. Uncheck **Create Git repository**.
-   - This produces `apple/VideoGameTracker.xcodeproj` and a fresh
-     `apple/VideoGameTracker/` folder with a few stub files.
-2. Our sources get merged into that `VideoGameTracker/` folder; Xcode's stub
-   `ContentView.swift` / `Item.swift` are deleted, our `App/VideoGameTrackerApp.swift`
-   replaces Xcode's stub, and Xcode's `Assets.xcassets` + `Preview Content` are kept.
-3. The multiplatform template already makes `VideoGameTracker/` a **File System
-   Synchronized group**, so every `.swift` file under it is in the target
-   automatically — nothing to add by hand.
-4. Deployment targets default to **iOS 26.0 / macOS 26.0** under Xcode 26; keep
-   them there (or adjust `LayoutMetrics` / availability for an earlier SDK).
-5. Build & run. First launch seeds the mock data via
-   `SampleData.seedIfNeeded(_:)`; delete the app / its store to re-seed.
+or from the command line:
 
-Every view has a `#Preview` backed by `SampleData.previewContainer()` (in-memory),
-so previews work immediately.
+```
+xcodebuild -project apple/VideoGameTracker.xcodeproj -scheme VideoGameTracker \
+  -destination 'platform=macOS' build
+```
+
+- Multiplatform **App** target, Storage: None — the app creates its own
+  `ModelContainer` in `App/VideoGameTrackerApp.swift`.
+- `VideoGameTracker/` is a **File System Synchronized group**: drop a `.swift`
+  file anywhere under it and it's in the target automatically, no `.pbxproj` edit.
+- Deployment targets default to **macOS 26 / iOS 26** (Xcode 26). The iOS
+  Simulator runtime must be installed (Xcode → Settings → Components) to build
+  the iOS slice; the macOS build works out of the box.
+- First launch seeds the mock data via `SampleData.seedIfNeeded(_:)`; delete the
+  app / its store to re-seed. Every view has a `#Preview` on
+  `SampleData.previewContainer()` (in-memory).
+
+**Verified:** `xcodebuild … -destination 'platform=macOS' build` → `BUILD SUCCEEDED`.
+Full source also type-checks under Swift 6 against the macOS 26 and iOS 26 SDKs.
 
 ## Next steps (suggested)
 
