@@ -1,10 +1,12 @@
 import SwiftUI
 import SwiftData
 
-/// List/table ↔ detail split for the user's collection. `mode` swaps between the
-/// full collection and the wishlist-only view.
+/// The user's collection (or wishlist). Defaults to a **system-first** view —
+/// a list of consoles you drill into — with an **All Games** toggle for a flat
+/// view across every platform. Single `NavigationStack`: the list is the focus
+/// and nothing about it collapses; item detail is a push.
 struct CollectionSection: View {
-    enum Mode {
+    enum Mode: Hashable {
         case collection, wishlist
 
         var title: String {
@@ -28,108 +30,160 @@ struct CollectionSection: View {
     @Query(sort: \Platform.generation) private var platforms: [Platform]
 
     @State private var viewModel = CollectionListViewModel()
-    @State private var selectedItemID: PersistentIdentifier?
+    @State private var path = NavigationPath()
     @State private var showingCatalogPicker = false
 
-    private var items: [CollectionItem] {
+    /// Persisted per install. Default: drill into each system.
+    @AppStorage("collection.groupBySystem") private var groupBySystem = true
+
+    private var flatItems: [CollectionItem] {
         viewModel.apply(to: allItems)
     }
 
-    private var selectedItem: CollectionItem? {
-        guard let selectedItemID else { return nil }
-        return allItems.first { $0.persistentModelID == selectedItemID }
+    private var summaries: [CollectionStats.SystemSummary] {
+        var list = CollectionStatsBuilder.systemSummaries(from: allItems, status: mode.status)
+        let q = viewModel.searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        if !q.isEmpty {
+            list = list.filter {
+                $0.platformName.lowercased().contains(q)
+                    || $0.platformShortName.lowercased().contains(q)
+            }
+        }
+        return list
     }
 
     var body: some View {
-        NavigationSplitView {
-            listColumn
-                .navigationSplitViewColumnWidth(min: 320, ideal: 460, max: 720)
-        } detail: {
-            Group {
-                if let selectedItem {
-                    CollectionItemDetailView(item: selectedItem)
-                } else {
-                    EmptyStateView(
-                        title: "Select an Item",
-                        message: "Pick something on the left to see its condition, value history, and notes.",
-                        systemImage: mode.status.symbol
-                    )
-                }
+        NavigationStack(path: $path) {
+            VStack(spacing: 0) {
+                header
+                Divider()
+                content
             }
-            .gameTrackerDestinations()
+            .navigationTitle(mode.title)
+            .navigationDestination(for: Platform.self) { platform in
+                SystemGamesList(platform: platform, mode: mode, searchText: viewModel.searchText)
+            }
+            .navigationDestination(for: CollectionItem.self) { CollectionItemDetailView(item: $0) }
+            .navigationDestination(for: CatalogItem.self) { CatalogItemDetailView(item: $0) }
+            .toolbar { toolbarContent }
+            .searchable(text: $viewModel.searchText,
+                        prompt: groupBySystem ? "Search systems" : "Search \(mode.title.lowercased())")
+            .sheet(isPresented: $showingCatalogPicker) {
+                AddToCollectionFlow(defaultStatus: mode.status)
+            }
         }
-        .navigationTitle(mode.title)
         .onAppear { viewModel.statusFilter = mode.status }
-        .searchable(text: $viewModel.searchText, prompt: "Search \(mode.title.lowercased())")
-        .toolbar { toolbarContent }
-        .sheet(isPresented: $showingCatalogPicker) {
-            AddToCollectionFlow(defaultStatus: mode.status)
-        }
     }
 
-    // MARK: Columns
+    // MARK: Header (grouping toggle + collection totals)
+
+    private var header: some View {
+        VStack(spacing: 10) {
+            Picker("Grouping", selection: $groupBySystem) {
+                Text("By System").tag(true)
+                Text("All Games").tag(false)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            HStack(spacing: 6) {
+                let systemCount = summaries.count
+                let itemCount = summaries.reduce(0) { $0 + $1.ownedItemCount }
+                let value = summaries.reduce(Decimal(0)) { $0 + $1.value }
+                Text("\(systemCount) system\(systemCount == 1 ? "" : "s")")
+                Text("·")
+                Text("\(itemCount) \(mode == .wishlist ? "wanted" : "item\(itemCount == 1 ? "" : "s")")")
+                if mode == .collection {
+                    Text("·")
+                    Text(Money.string(value))
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+    }
+
+    // MARK: Content
 
     @ViewBuilder
-    private var listColumn: some View {
-        Group {
-            if items.isEmpty {
-                emptyState
-            } else if LayoutMetrics.usesTableForLists {
-                CollectionTable(items: items, selection: $selectedItemID)
-            } else {
-                List(selection: $selectedItemID) {
-                    ForEach(items) { item in
-                        CollectionItemRow(item: item)
-                            .tag(item.persistentModelID)
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) { delete(item) } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
+    private var content: some View {
+        if allItems.filter({ $0.status == mode.status }).isEmpty {
+            emptyState
+        } else if groupBySystem {
+            systemsList
+        } else {
+            allGamesList
+        }
+    }
+
+    private var systemsList: some View {
+        List {
+            ForEach(summaries) { summary in
+                if let platform = platforms.first(where: { $0.slug == summary.platformSlug }) {
+                    NavigationLink(value: platform) {
+                        SystemCollectionRow(summary: summary)
                     }
                 }
-                .listStyle(.plain)
             }
         }
-        .overlay(alignment: .bottom) { filterSummaryBar }
+        .listStyle(.inset)
+        .overlay {
+            if summaries.isEmpty {
+                ContentUnavailableView.search
+            }
+        }
     }
+
+    @ViewBuilder
+    private var allGamesList: some View {
+        if LayoutMetrics.usesTableForLists {
+            CollectionTable(items: flatItems) { path.append($0) }
+                .overlay(alignment: .bottom) { filterSummaryBar }
+        } else {
+            List {
+                ForEach(flatItems) { item in
+                    NavigationLink(value: item) {
+                        CollectionItemRow(item: item)
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) { delete(item) } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .overlay(alignment: .bottom) { filterSummaryBar }
+        }
+    }
+
+    // MARK: Empty / filter chrome
 
     @ViewBuilder
     private var emptyState: some View {
-        if viewModel.hasActiveFilters {
-            EmptyStateView(
-                title: "No Matches",
-                message: "No items match the current search and filters.",
-                systemImage: "line.3.horizontal.decrease.circle",
-                actionTitle: "Clear Filters",
-                action: { viewModel.clearFilters() }
-            )
-        } else {
-            EmptyStateView(
-                title: mode == .wishlist ? "Wishlist Is Empty" : "No Items Yet",
-                message: mode == .wishlist
-                    ? "Add catalog items you're hunting for and track them here."
-                    : "Add a console, game, or accessory from the catalog to start your collection.",
-                systemImage: mode.status.symbol,
-                actionTitle: "Add from Catalog",
-                action: { showingCatalogPicker = true }
-            )
-        }
+        EmptyStateView(
+            title: mode == .wishlist ? "Wishlist Is Empty" : "No Items Yet",
+            message: mode == .wishlist
+                ? "Add catalog items you're hunting for and track them here."
+                : "Add a console, game, or accessory from the catalog to start your collection.",
+            systemImage: mode.status.symbol,
+            actionTitle: "Add from Catalog",
+            action: { showingCatalogPicker = true }
+        )
     }
 
     @ViewBuilder
     private var filterSummaryBar: some View {
-        if viewModel.kindFilter != nil || viewModel.platformSlugFilter != nil {
+        if viewModel.kindFilter != nil {
             HStack(spacing: 8) {
                 if let kind = viewModel.kindFilter {
                     FilterChip(text: kind.pluralName) { viewModel.kindFilter = nil }
                 }
-                if let slug = viewModel.platformSlugFilter,
-                   let platform = platforms.first(where: { $0.slug == slug }) {
-                    FilterChip(text: platform.shortName) { viewModel.platformSlugFilter = nil }
-                }
                 Spacer()
-                Text("\(items.count) shown")
+                Text("\(flatItems.count) shown")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -143,25 +197,23 @@ struct CollectionSection: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem {
-            Menu {
-                Picker("Kind", selection: $viewModel.kindFilter) {
-                    Text("All Kinds").tag(ItemKind?.none)
-                    ForEach(ItemKind.allCases) { Text($0.pluralName).tag(ItemKind?.some($0)) }
-                }
-                Picker("Platform", selection: $viewModel.platformSlugFilter) {
-                    Text("All Platforms").tag(String?.none)
-                    ForEach(platforms) { Text($0.shortName).tag(String?.some($0.slug)) }
-                }
-                Divider()
-                Picker("Sort By", selection: $viewModel.sortField) {
-                    ForEach(CollectionListViewModel.SortField.allCases) {
-                        Text($0.label).tag($0)
+        if !groupBySystem {
+            ToolbarItem {
+                Menu {
+                    Picker("Kind", selection: $viewModel.kindFilter) {
+                        Text("All Kinds").tag(ItemKind?.none)
+                        ForEach(ItemKind.allCases) { Text($0.pluralName).tag(ItemKind?.some($0)) }
                     }
+                    Divider()
+                    Picker("Sort By", selection: $viewModel.sortField) {
+                        ForEach(CollectionListViewModel.SortField.allCases) {
+                            Text($0.label).tag($0)
+                        }
+                    }
+                    Toggle("Ascending", isOn: $viewModel.sortAscending)
+                } label: {
+                    Label("Filter & Sort", systemImage: "line.3.horizontal.decrease.circle")
                 }
-                Toggle("Ascending", isOn: $viewModel.sortAscending)
-            } label: {
-                Label("Filter & Sort", systemImage: "line.3.horizontal.decrease.circle")
             }
         }
         ToolbarItem {
@@ -176,7 +228,6 @@ struct CollectionSection: View {
     // MARK: Actions
 
     private func delete(_ item: CollectionItem) {
-        if selectedItemID == item.persistentModelID { selectedItemID = nil }
         modelContext.delete(item)
         try? modelContext.save()
     }
@@ -201,15 +252,11 @@ private struct FilterChip: View {
 }
 
 #Preview("Collection") {
-    NavigationStack {
-        CollectionSection(mode: .collection)
-    }
-    .modelContainer(SampleData.previewContainer())
+    CollectionSection(mode: .collection)
+        .modelContainer(SampleData.previewContainer())
 }
 
 #Preview("Wishlist") {
-    NavigationStack {
-        CollectionSection(mode: .wishlist)
-    }
-    .modelContainer(SampleData.previewContainer())
+    CollectionSection(mode: .wishlist)
+        .modelContainer(SampleData.previewContainer())
 }

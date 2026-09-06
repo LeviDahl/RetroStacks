@@ -1,11 +1,14 @@
 import SwiftUI
 import SwiftData
 
-/// Dense, desktop-style table for the collection. Only used where
-/// `LayoutMetrics.usesTableForLists` is true (macOS today).
+/// Dense, desktop-style table for the collection's **All Games** mode. Only used
+/// where `LayoutMetrics.usesTableForLists` is true (macOS today). Selecting a
+/// row opens that item via `onOpen` (the enclosing `NavigationStack` pushes it).
 struct CollectionTable: View {
     var items: [CollectionItem]
-    @Binding var selection: PersistentIdentifier?
+    var onOpen: (CollectionItem) -> Void
+
+    @State private var selection: PersistentIdentifier?
 
     var body: some View {
         Table(items, selection: $selection) {
@@ -66,6 +69,11 @@ struct CollectionTable: View {
                     .foregroundStyle(.secondary)
             }
             .width(min: 90, ideal: 120)
+        }
+        .onChange(of: selection) { _, id in
+            guard let id, let item = items.first(where: { $0.persistentModelID == id }) else { return }
+            onOpen(item)
+            selection = nil
         }
     }
 }
