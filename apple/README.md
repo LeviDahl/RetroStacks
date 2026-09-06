@@ -81,23 +81,16 @@ xcodebuild -project apple/VideoGameTracker.xcodeproj -scheme VideoGameTracker \
   app / its store to re-seed. Every view has a `#Preview` on
   `SampleData.previewContainer()` (in-memory).
 
-### Project settings to set by hand
+### Project settings (done — for reference)
 
-Left for you per `CLAUDE.md`'s "no direct project-file edits":
+Toggled in Xcode by hand (per `CLAUDE.md`'s "no direct project-file edits"):
 
-1. **macOS network access.** Console photos load from Wikimedia Commons, but the
-   macOS target has App Sandbox on with no outgoing-network permission, so images
-   fall back to placeholders until you enable:
-   > Target **VideoGameTracker** → **Signing & Capabilities** → **App Sandbox** →
-   > **Network: Outgoing Connections (Client)** ✅
-
-   (iOS/iPadOS get network access by default — nothing to do.)
-
-2. **Swift 6 language mode.** The template created the target with
-   `SWIFT_VERSION = 5.0`. `CLAUDE.md` calls for Swift 6, and the whole codebase
-   already type-checks clean in Swift 6 language mode (verified against the
-   macOS 26 and iOS 26 SDKs). Bump **Build Settings → Swift Language Version → 6**
-   when you're ready.
+1. **macOS network access** — App Sandbox → *Outgoing Connections (Client)* = YES
+   (`ENABLE_OUTGOING_NETWORK_CONNECTIONS`). Without it, Wikimedia photos and any
+   pricing fetch fall back silently on macOS. iOS/iPadOS need nothing.
+2. **Swift 6 language mode** — `SWIFT_VERSION = 6.0`. Combined with the template's
+   `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so the pricing schema types are
+   explicitly `nonisolated` to stay usable off the main actor.
 
 ### Images
 
