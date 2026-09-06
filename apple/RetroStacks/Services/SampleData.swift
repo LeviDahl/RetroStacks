@@ -21,13 +21,31 @@ enum SampleData {
         return container
     }
 
-    /// Seeds an existing context if it has no `Platform` rows yet. Safe to call
-    /// on every launch.
+    /// On first launch, seeds the full mock data set. On later launches (store
+    /// already populated) it just re-applies the hot-linked image URLs, so an
+    /// install that predates a batch of new art picks it up without a wipe —
+    /// the mock data evolves faster than the store reseeds while there's no
+    /// server. Safe to call on every launch.
     @MainActor
     static func seedIfNeeded(_ context: ModelContext) {
         let count = (try? context.fetchCount(FetchDescriptor<Platform>())) ?? 0
-        guard count == 0 else { return }
-        seed(into: context)
+        if count == 0 {
+            seed(into: context)
+        } else {
+            refreshSampleMedia(in: context)
+        }
+    }
+
+    /// Rewrites `imageURLString` / credit / license on existing catalog rows to
+    /// match the current `attach*` tables. Idempotent (skips rows already set to
+    /// the same URL).
+    @MainActor
+    static func refreshSampleMedia(in context: ModelContext) {
+        guard let items = try? context.fetch(FetchDescriptor<CatalogItem>()),
+              !items.isEmpty else { return }
+        attachConsolePhotos(to: items)
+        attachGameBoxArt(to: items)
+        if context.hasChanges { try? context.save() }
     }
 
     // MARK: - Seeding
@@ -424,7 +442,7 @@ enum SampleData {
             comps.scheme = "https"
             comps.host = "thumbnails.libretro.com"
             comps.path = "/\(system)/Named_Boxarts/\(title).png"
-            guard let url = comps.url?.absoluteString else { return }
+            guard let url = comps.url?.absoluteString, item.imageURLString != url else { return }
             item.imageURLString = url
             item.imageCredit = "Box art via Libretro thumbnails"
             item.imageLicense = "Publisher artwork"
@@ -520,7 +538,9 @@ enum SampleData {
                  license: String = "Public domain") {
             guard let item = bySlug[slug] else { return }
             let encoded = file.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? file
-            item.imageURLString = "https://commons.wikimedia.org/wiki/Special:FilePath/\(encoded)?width=800"
+            let url = "https://commons.wikimedia.org/wiki/Special:FilePath/\(encoded)?width=800"
+            guard item.imageURLString != url else { return }
+            item.imageURLString = url
             item.imageCredit = credit
             item.imageLicense = license
         }
