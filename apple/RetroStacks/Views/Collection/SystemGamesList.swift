@@ -1,25 +1,35 @@
 import SwiftUI
 import SwiftData
 
-/// Drill-down for one platform. Shows the platform's whole catalog, scoped by
-/// ownership (Owned / Missing / All) so you can add what you don't have without
-/// leaving the page. A kind filter (Games by default) narrows it further.
+/// The one screen for a single platform. A collapsible "about" header (the
+/// mini-wiki) sits on top of the platform's whole catalog, scoped **Owned /
+/// Wanted / Missing / All** so you can manage the collection and the wishlist
+/// without leaving the page. A kind filter (Games by default) narrows it further.
 struct SystemGamesList: View {
     var platform: Platform
+    /// Only sets the initial scope (My Collection → Owned, Wishlist → Wanted).
     var mode: CollectionSection.Mode
-    var searchText: String = ""
+    var searchText: String
+
+    init(platform: Platform, mode: CollectionSection.Mode = .collection, searchText: String = "") {
+        self.platform = platform
+        self.mode = mode
+        self.searchText = searchText
+        _scope = State(initialValue: mode == .wishlist ? .wanted : .owned)
+    }
 
     @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<CollectionItem> { $0.deletedAt == nil })
     private var liveEntries: [CollectionItem]
 
-    @State private var scope: Scope = .all
+    @State private var scope: Scope
     @State private var quickAddTarget: CatalogItem?
     @State private var selecting = false
     @State private var picked: Set<String> = []
     @State private var bulkCompleteness: Completeness = .loose
     @AppStorage("system.kindFilter") private var kindRaw = KindFilter.games.rawValue
     @AppStorage("system.sortField") private var sortRaw = SortField.title.rawValue
+    @AppStorage("system.showAbout") private var showAbout = true
 
     enum SortField: String, CaseIterable, Identifiable {
         case title, releaseYear, publisher, value
@@ -36,15 +46,18 @@ struct SystemGamesList: View {
     private var sortField: SortField { SortField(rawValue: sortRaw) ?? .title }
 
     enum Scope: String, CaseIterable, Identifiable {
-        case inList, missing, all
+        case owned, wanted, missing, all
         var id: String { rawValue }
-        func label(_ mode: CollectionSection.Mode) -> String {
+        var label: String {
             switch self {
-            case .inList:  mode == .wishlist ? "Wanted" : "Owned"
-            case .missing: mode == .wishlist ? "Not Wanted" : "Missing"
-            case .all:     "All"
+            case .owned: "Owned"
+            case .wanted: "Wanted"
+            case .missing: "Missing"
+            case .all: "All"
             }
         }
+        /// Where a one-tap add from this scope lands.
+        var addStatus: CollectionStatus { self == .wanted ? .wishlist : .owned }
     }
 
     enum KindFilter: String, CaseIterable, Identifiable {
@@ -92,8 +105,8 @@ struct SystemGamesList: View {
                 return (a.manufacturerOrPublisher ?? "~", a.name.lowercased())
                     < (b.manufacturerOrPublisher ?? "~", b.name.lowercased())
             case .value:
-                let av = a.entry(for: mode.status)?.estimatedValue ?? a.headlineValue ?? 0
-                let bv = b.entry(for: mode.status)?.estimatedValue ?? b.headlineValue ?? 0
+                let av = a.ownedEntry?.estimatedValue ?? a.headlineValue ?? 0
+                let bv = b.ownedEntry?.estimatedValue ?? b.headlineValue ?? 0
                 return av == bv
                     ? a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
                     : av > bv
@@ -101,24 +114,24 @@ struct SystemGamesList: View {
         }
     }
 
-    private func inList(_ c: CatalogItem) -> Bool { c.entry(for: mode.status) != nil }
-
-    private var shown: [CatalogItem] {
+    private func matches(_ c: CatalogItem, _ scope: Scope) -> Bool {
         switch scope {
-        case .inList:  catalog.filter(inList)
-        case .missing: catalog.filter { !inList($0) }
-        case .all:     catalog
+        case .owned:   c.entry(for: .owned) != nil
+        case .wanted:  c.entry(for: .wishlist) != nil
+        case .missing: c.entry(for: .owned) == nil
+        case .all:     true
         }
     }
 
-    private var counts: (inList: Int, missing: Int, all: Int) {
-        let all = catalog.count
-        let owned = catalog.filter(inList).count
-        return (owned, all - owned, all)
-    }
+    /// True when the item is already in whatever list the current scope adds to.
+    private func inList(_ c: CatalogItem) -> Bool { c.entry(for: scope.addStatus) != nil }
+
+    private var shown: [CatalogItem] { catalog.filter { matches($0, scope) } }
+
+    private func count(_ scope: Scope) -> Int { catalog.filter { matches($0, scope) }.count }
 
     private var summary: CollectionStats.SystemSummary? {
-        CollectionStatsBuilder.systemSummaries(from: liveEntries, status: mode.status)
+        CollectionStatsBuilder.systemSummaries(from: liveEntries, status: .owned)
             .first { $0.platformSlug == platform.slug }
     }
 
@@ -145,11 +158,30 @@ struct SystemGamesList: View {
     private var listBody: some View {
         List {
             Section {
+                if showAbout {
+                    AboutSystemCard(platform: platform, summary: summary)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 10, trailing: 12))
+                        .listRowBackground(Color.clear)
+                }
+            } header: {
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { showAbout.toggle() }
+                } label: {
+                    HStack {
+                        Text("About \(platform.shortName)")
+                        Spacer()
+                        Image(systemName: showAbout ? "chevron.down" : "chevron.right")
+                            .font(.caption2)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            Section {
                 HStack(spacing: 10) {
                     Picker("Scope", selection: $scope) {
-                        Text("\(Scope.inList.label(mode)) · \(counts.inList)").tag(Scope.inList)
-                        Text("\(Scope.missing.label(mode)) · \(counts.missing)").tag(Scope.missing)
-                        Text("All · \(counts.all)").tag(Scope.all)
+                        ForEach(Scope.allCases) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -175,7 +207,7 @@ struct SystemGamesList: View {
                 .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 8, trailing: 12))
                 .listRowBackground(Color.clear)
 
-                if mode == .collection, let summary {
+                if let summary {
                     SystemSummaryStrip(summary: summary)
                         .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 10, trailing: 12))
                         .listRowBackground(Color.clear)
@@ -214,7 +246,7 @@ struct SystemGamesList: View {
         .overlay {
             if shown.isEmpty {
                 ContentUnavailableView {
-                    Label(emptyTitle, systemImage: scope == .missing ? "checkmark.circle" : mode.status.symbol)
+                    Label(emptyTitle, systemImage: emptySymbol)
                 } description: {
                     Text(emptyMessage)
                 }
@@ -235,22 +267,35 @@ struct SystemGamesList: View {
         }
     }
 
+    private var emptySymbol: String {
+        switch scope {
+        case .owned: "tray"
+        case .wanted: "star"
+        case .missing: "checkmark.circle"
+        case .all: "square.grid.2x2"
+        }
+    }
+
     private var emptyTitle: String {
         switch scope {
+        case .owned: "Nothing owned here"
+        case .wanted: "Nothing on the wishlist"
         case .missing: "Nothing missing"
-        case .inList: mode == .wishlist ? "Nothing wanted here" : "Nothing owned here"
         case .all: "No \(kindFilter.label.lowercased()) catalogued"
         }
     }
 
     private var emptyMessage: String {
+        let kind = kindFilter.label.lowercased()
         switch scope {
+        case .owned:
+            return "Switch to Missing to add \(kind) from \(platform.shortName)."
+        case .wanted:
+            return "Star \(kind) from Missing or All to track them here."
         case .missing:
-            "You have every \(kindFilter.label.lowercased().dropLast()) catalogued for \(platform.shortName)."
-        case .inList:
-            "Switch to Missing to add \(kindFilter.label.lowercased()) from \(platform.shortName)."
+            return "You have every \(kind.dropLast()) catalogued for \(platform.shortName)."
         case .all:
-            "The catalog has no \(kindFilter.label.lowercased()) for \(platform.shortName) yet."
+            return "The catalog has no \(kind) for \(platform.shortName) yet."
         }
     }
 
@@ -266,26 +311,27 @@ struct SystemGamesList: View {
                 toggle: { togglePick(catalogItem) }
             )
         } else {
+            let addStatus = scope.addStatus
             PlatformCatalogRow(
                 catalogItem: catalogItem,
-                listStatus: mode.status,
+                listStatus: addStatus,
                 onAdd: {
                     // Owned copies get the quick-add modal (completeness +
                     // condition); a wishlist add has nothing to configure.
-                    if mode.status == .owned {
+                    if addStatus == .owned {
                         quickAddTarget = catalogItem
                     } else {
                         withAnimation {
-                            _ = CollectionActions.add(catalogItem, status: mode.status, in: modelContext)
+                            _ = CollectionActions.add(catalogItem, status: addStatus, in: modelContext)
                         }
                     }
                 },
-                onToggleWishlist: mode.status == .owned ? { toggleWishlist(catalogItem) } : nil
+                onToggleWishlist: addStatus == .owned ? { toggleWishlist(catalogItem) } : nil
             )
             .swipeActions(edge: .trailing) {
-                if let owned = catalogItem.entry(for: mode.status) {
+                if let entry = catalogItem.entry(for: addStatus) {
                     Button(role: .destructive) {
-                        withAnimation { CollectionActions.remove(owned, in: modelContext) }
+                        withAnimation { CollectionActions.remove(entry, in: modelContext) }
                     } label: {
                         Label("Remove", systemImage: "trash")
                     }
@@ -320,7 +366,7 @@ struct SystemGamesList: View {
 
     /// Only worth offering when the current view has rows you don't already have.
     private var canBulkAdd: Bool {
-        scope != .inList && shown.contains { !inList($0) }
+        (scope == .missing || scope == .all) && shown.contains { !inList($0) }
     }
 
     private func togglePick(_ item: CatalogItem) {
@@ -338,16 +384,19 @@ struct SystemGamesList: View {
         }
     }
 
+    /// Bulk add from Missing/All targets the collection (owned); from Wanted it
+    /// would be redundant. `.all` may include already-owned rows — those are
+    /// locked in the picker, so this only ever adds new ones.
+    private var bulkStatus: CollectionStatus { .owned }
+
     private func commitBulkAdd() {
         let bySlug = Dictionary(catalog.map { ($0.slug, $0) }, uniquingKeysWith: { a, _ in a })
-        let condition: ConditionGrade? = mode.status == .owned ? .good : nil
-        let completeness: Completeness? = mode.status == .owned ? bulkCompleteness : nil
         withAnimation {
             for slug in picked {
                 guard let item = bySlug[slug] else { continue }
                 _ = CollectionActions.add(
-                    item, status: mode.status,
-                    completeness: completeness, condition: condition,
+                    item, status: bulkStatus,
+                    completeness: bulkCompleteness, condition: .good,
                     in: modelContext
                 )
             }
@@ -359,16 +408,15 @@ struct SystemGamesList: View {
     @ViewBuilder
     private var bulkAddBar: some View {
         VStack(spacing: 8) {
-            if mode.status == .owned {
-                Picker("Completeness", selection: $bulkCompleteness) {
-                    Text("Loose").tag(Completeness.loose)
-                    Text("Boxed").tag(Completeness.boxedNoManual)
-                    Text("CIB").tag(Completeness.completeInBox)
-                    Text("Sealed").tag(Completeness.sealed)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+            Picker("Completeness", selection: $bulkCompleteness) {
+                Text("Loose").tag(Completeness.loose)
+                Text("Boxed").tag(Completeness.boxedNoManual)
+                Text("CIB").tag(Completeness.completeInBox)
+                Text("Sealed").tag(Completeness.sealed)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
             HStack {
                 Button("Cancel") {
                     withAnimation { picked.removeAll(); selecting = false }
@@ -377,9 +425,7 @@ struct SystemGamesList: View {
                 Button {
                     commitBulkAdd()
                 } label: {
-                    Text(picked.isEmpty
-                         ? "Select items to add"
-                         : "Add \(picked.count) to \(mode == .wishlist ? "wishlist" : "collection")")
+                    Text(picked.isEmpty ? "Select items to add" : "Add \(picked.count) to collection")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)

@@ -6,7 +6,6 @@ struct SidebarView: View {
 
     @Query(filter: #Predicate<CollectionItem> { $0.deletedAt == nil })
     private var collectionItems: [CollectionItem]
-    @Query(sort: \Platform.generation) private var platforms: [Platform]
 
     /// `List` on iOS only offers the optional-selection initializer; bridge the
     /// non-optional binding through so the sidebar compiles on every platform.
@@ -24,7 +23,6 @@ struct SidebarView: View {
 
             Section("Discover") {
                 row(.catalog)
-                row(.platforms, badge: platforms.count)
             }
         }
         .navigationTitle("RetroStacks")

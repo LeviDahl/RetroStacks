@@ -64,8 +64,6 @@ struct RootView: View {
             CollectionSection(mode: .wishlist)
         case .catalog:
             CatalogSection()
-        case .platforms:
-            PlatformsSection()
         }
     }
 }

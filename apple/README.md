@@ -12,13 +12,12 @@ Everything below is relative to this `apple/` directory. Sources live in
 | Area | State |
 | --- | --- |
 | Data model (SwiftData) | ✅ `Platform`, `CatalogItem`, `CollectionItem` |
-| Mock catalog | ✅ 10 US platforms · ~30 consoles · ~40 games · ~25 accessories (`Services/SampleData.swift`) |
+| Seed catalog | ✅ 10 US platforms · ~66 curated entries — authored in `api/data/curated.json`, decoded from `Resources/CatalogSeed.json` by `CatalogSeedStore` |
 | Dashboard | ✅ stats, value-by-platform, recent / most valuable |
 | My Collection | ✅ list (iOS) / sortable `Table` (macOS), filters, detail, edit form |
 | Wishlist | ✅ same surface, `.wishlist` status |
 | Catalog browser | ✅ poster grid (macOS) / list (iOS), filters, detail, "Add to Collection" |
-| Platforms | ✅ per-system browsing with console/game/accessory tabs |
-| System drill-down | ✅ Owned/Missing/All scope, kind + sort, quick-add modal, bulk add, wishlist toggle, A–Z scrubber |
+| System screen | ✅ `SystemGamesList` — one screen per platform: collapsible "About" mini-wiki, Owned/Wanted/Missing/All scope, kind + sort, quick-add modal, bulk add, wishlist toggle, A–Z scrubber |
 | Photos | ✅ `PhotosPicker` in the edit form (downscaled JPEG in `photoData`) |
 | Backup | ✅ JSON archive (round-trip) + CSV export |
 | Barcode scan, valuation API, EU/JP regions | ⛔️ stubbed in the model, no UI |
@@ -28,7 +27,7 @@ Everything below is relative to this `apple/` directory. Sources live in
 macOS is **not** a stretched iPhone screen:
 
 - Three real columns (`sidebar → list → detail`) via nested `NavigationSplitView`.
-- Collection uses a dense, multi-column `Table`; catalog & platforms use
+- Collection uses a dense, multi-column `Table`; the catalog browser uses
   adaptive **poster/card grids** that add columns as the window widens.
 - Generous margins/spacing (`LayoutMetrics`, 28pt edges vs 16pt on iOS).
 - Detail panes are always visible; iOS pushes them and uses sheets.
@@ -45,15 +44,15 @@ apple/
 │   ├── App/                      App entry, RootView shell, sidebar, layout metrics, nav destinations
 │   ├── Models/                   SwiftData @Model types + Enums
 │   ├── ViewModels/               @Observable filter/sort state (CollectionList, CatalogBrowse)
-│   ├── Services/                 SampleData (mock seed + preview container), CollectionStats
+│   ├── Resources/                CatalogSeed.json (synced from api/data/curated.json) + SampleCollection.json
+│   ├── Services/                 CatalogSeedStore + SampleData (seed/preview), CollectionStats
 │   │   └── Pricing/              canonical price schema + provider adapters + PricingService
 │   └── Views/
 │       ├── Dashboard/
-│       ├── Collection/           section split, Table, detail, edit form, add-from-catalog sheet
+│       ├── Collection/           section split, Table, detail, edit form, the per-system screen
 │       ├── Catalog/              section split, item detail
-│       ├── Platforms/            section split, platform detail
 │       └── Components/           thumbnails, badges, rows, cards, stat tiles, formatting
-├── RetroStacksTests/              (template stub)
+├── RetroStacksTests/              CatalogSeedTests (+ Fixtures/) — the seed decode/insert path
 └── RetroStacksUITests/            (template stub)
 ```
 
@@ -77,8 +76,10 @@ xcodebuild -project apple/RetroStacks.xcodeproj -scheme RetroStacks \
 - Deployment targets default to **macOS 26 / iOS 26** (Xcode 26). The iOS
   Simulator runtime must be installed (Xcode → Settings → Components) to build
   the iOS slice; the macOS build works out of the box.
-- First launch seeds the mock data via `SampleData.seedIfNeeded(_:)`; delete the
-  app / its store to re-seed. Every view has a `#Preview` on
+- First launch seeds from `Resources/CatalogSeed.json` via
+  `SampleData.seedIfNeeded(_:)` → `CatalogSeedStore`; delete the app / its store
+  to re-seed. Run `node api/build/sync-seed.mjs` after editing
+  `api/data/curated.json`. Every view has a `#Preview` on
   `SampleData.previewContainer()` (in-memory).
 
 ### Project settings (done — for reference)

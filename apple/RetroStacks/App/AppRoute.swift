@@ -6,7 +6,6 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case collection
     case wishlist
     case catalog
-    case platforms
 
     var id: String { rawValue }
 
@@ -16,7 +15,6 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .collection: "My Collection"
         case .wishlist: "Wishlist"
         case .catalog: "Browse Catalog"
-        case .platforms: "Platforms"
         }
     }
 
@@ -27,7 +25,6 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .collection: "Collection"
         case .wishlist: "Wishlist"
         case .catalog: "Catalog"
-        case .platforms: "Systems"
         }
     }
 
@@ -37,7 +34,6 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .collection: "square.grid.2x2"
         case .wishlist: "star"
         case .catalog: "books.vertical"
-        case .platforms: "gamecontroller"
         }
     }
 }

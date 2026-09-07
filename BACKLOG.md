@@ -17,10 +17,13 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
   edge when title-sorted with 40+ rows. macOS keeps its scrollbar.
 - ~~**Hover actions on macOS rows**~~ — done: wishlist star appears on row hover
   (macOS); leading swipe on iOS.
-- **Wishlist as a first-class scope** — Owned / Wanted / Missing / All in one
-  view. (Per-row quick wishlist toggle is done; the unified 4-way scope isn't.)
-- **Merge `SystemGamesList` + `PlatformDetailView`** — they overlap; one
-  "platform screen" with scope + kind + summary + the console/game/accessory split.
+- ~~**Wishlist as a first-class scope**~~ — done: the drill-down scope is now
+  **Owned / Wanted / Missing / All** (absolute filters); `mode` only picks the
+  default. Wishlist stays a top-level section for the flat cross-platform view.
+- ~~**Merge `SystemGamesList` + `PlatformDetailView`**~~ — done: `SystemGamesList`
+  is the one platform screen (collapsible "About this system" mini-wiki +
+  scope/kind/sort + the catalog list). `PlatformDetailView` and the top-level
+  Platforms section are gone — the app is collection-first.
 
 ## Collection & items
 

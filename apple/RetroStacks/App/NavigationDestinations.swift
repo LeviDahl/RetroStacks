@@ -11,6 +11,6 @@ extension View {
         self
             .navigationDestination(for: CatalogItem.self) { CatalogItemDetailView(item: $0) }
             .navigationDestination(for: CollectionItem.self) { CollectionItemDetailView(item: $0) }
-            .navigationDestination(for: Platform.self) { PlatformDetailView(platform: $0) }
+            .navigationDestination(for: Platform.self) { SystemGamesList(platform: $0) }
     }
 }
