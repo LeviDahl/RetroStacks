@@ -1,28 +1,60 @@
-# api
+# api — RetroStacks data feed
 
-Backend for **RetroStacks**: the reference catalog database (consoles, games,
-accessories for major US systems), the pricing aggregation, and the REST API the
-app syncs from.
+Reference data for the app: the catalog (consoles / games / accessories for major
+US systems) and pricing. **No server, no database** — a nightly job turns a
+canonical JSON file into static files served from a CDN. That's plenty for a solo
+user and scales to millions of reads for ~$0; it graduates to a real API later
+with **no client changes** (same URLs, same JSON shapes).
 
-**Not started.** Blocked on registering the domain (`retrostacks.com`, GoDaddy)
-for the API + DB.
+Personal `CollectionItem` data never touches this — it stays on device (SwiftData)
+and syncs via iCloud/CloudKit.
 
-## Intended shape
+## How it works
 
-- The app's `Services/SampleData.swift` mock is authored to mirror what this API
-  will return, so the client swap is mostly a decoding layer:
-  `Platform` → `CatalogItem` (`console` / `game` / `accessory`) → pricing.
-- Personal `CollectionItem` data stays on-device (SwiftData); the API is
-  read-mostly reference data + valuation.
-- US market first; `region` is already a field on the client model for EU/JP.
+```
+api/data/catalog.json        canonical source of truth (platforms + items + seed prices)
+        │
+        ▼  node api/build/build.mjs
+api/dist/                     (gitignored — built by CI)
+├── index.html
+└── v1/
+    ├── catalog.json          { version, generatedAt, platforms[], items[] }   (no prices)
+    ├── price-guide.json      { version, generatedAt, guides: { <slug>: PriceGuide } }
+    └── meta.json             version + counts + generatedAt
+```
+
+- **`api/build/build.mjs`** — zero-dependency Node. Splits the catalog into
+  `catalog.json` (metadata) and `price-guide.json` (a `PriceGuide` per item,
+  derived from the seed price fields). If `PRICECHARTING_TOKEN` is set it *will*
+  do a live refresh — not implemented yet, currently passes seed prices through.
+- **`api/build/export-catalog.swift`** — regenerates `api/data/catalog.json` from
+  the app's `SampleData` (current source of truth). Run when `SampleData` changes;
+  see the header comment. *Follow-up: invert this so `catalog.json` is primary and
+  `SampleData` decodes the bundled copy.*
+- **`.github/workflows/publish-data.yml`** — builds `api/dist` and publishes it to
+  **GitHub Pages** nightly + on push to `api/data`/`api/build`.
+  One-time: repo **Settings → Pages → Source: "GitHub Actions"**.
+  Served at `https://<owner>.github.io/RetroStacks/` → later `data.retrostacks.com`
+  via a `CNAME` (GoDaddy DNS) + repo Pages custom-domain setting.
+
+## Client
+
+`apple/RetroStacks/Services/Catalog/` — `CatalogRepository` (`Remote` fetches the
+feed with `URLCache`/ETag; `Bundled` reads a shipped copy), `CatalogSyncService`
+upserts platforms + items into SwiftData by `slug`, and
+`Services/Pricing/RemotePricingProvider` reads `price-guide.json`. `SampleData`
+stays as the first-launch seed + offline fallback + previews.
+
+`BackendConfig.baseURL` holds the feed URL — swap it for the custom domain once
+DNS is set.
 
 ## TODO
 
-- [ ] Pick stack + hosting
-- [ ] Schema for platforms / catalog items / price history
-- [ ] Seed from public retro databases
-- [ ] `GET /catalog`, `GET /platforms`, valuation endpoints
-- [ ] Client `CatalogRepository` implementation replacing the mock
+- [ ] Enable GitHub Pages (Settings → Pages → GitHub Actions) and run the workflow once
+- [ ] Point `data.retrostacks.com` at it (GoDaddy `CNAME` → `<owner>.github.io`) and set `BackendConfig.baseURL`
+- [ ] Invert the source of truth: bundle `catalog.json`, have `SampleData` decode it
+- [ ] Grow the real catalog beyond the ~50 sample items
+- [ ] CloudKit for `CollectionItem` (needs the iCloud capability in Xcode + dropping `@Attribute(.unique)`)
 
 ## Pricing (adapter layer — schema already lives in the app)
 

@@ -6,6 +6,7 @@ Icon?
 
 # Xcode
 build/
+!api/build/
 DerivedData/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
@@ -58,3 +59,6 @@ Secrets.plist
 # Injection / misc
 *.orig
 *~
+
+# api build output (published by CI)
+api/dist/

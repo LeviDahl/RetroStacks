@@ -1,0 +1,59 @@
+name: Publish data feed
+
+# Builds api/dist from api/data + api/build and publishes it to GitHub Pages.
+# Served at https://<owner>.github.io/RetroStacks/  (v1/catalog.json, v1/price-guide.json, v1/meta.json)
+#
+# One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+
+on:
+  schedule:
+    - cron: "17 7 * * *" # nightly, 07:17 UTC
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "api/data/**"
+      - "api/build/**"
+      - ".github/workflows/publish-data.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build feed
+        # PRICECHARTING_TOKEN, when added as a repo secret, will enable a live
+        # price refresh (not implemented yet — build.mjs passes seed prices through).
+        env:
+          PRICECHARTING_TOKEN: ${{ secrets.PRICECHARTING_TOKEN }}
+        run: node api/build/build.mjs
+
+      - name: Sanity-check output
+        run: |
+          test -s api/dist/v1/catalog.json
+          test -s api/dist/v1/price-guide.json
+          node -e "const m=require('./api/dist/v1/meta.json');if(!m.itemCount)process.exit(1);console.log(m)"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: api/dist
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
