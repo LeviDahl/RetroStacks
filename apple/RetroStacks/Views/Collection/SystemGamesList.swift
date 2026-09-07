@@ -125,6 +125,24 @@ struct SystemGamesList: View {
     // MARK: Body
 
     var body: some View {
+        ScrollViewReader { proxy in
+            listBody
+                #if os(iOS)
+                .overlay(alignment: .trailing) {
+                    if showScrubber {
+                        AZScrubber(letters: letterIndex.map(\.letter)) { letter in
+                            if let slug = letterIndex.first(where: { $0.letter == letter })?.slug {
+                                proxy.scrollTo(slug, anchor: .top)
+                            }
+                        }
+                        .padding(.trailing, 2)
+                    }
+                }
+                #endif
+        }
+    }
+
+    private var listBody: some View {
         List {
             Section {
                 HStack(spacing: 10) {
@@ -166,40 +184,8 @@ struct SystemGamesList: View {
 
             Section {
                 ForEach(shown) { catalogItem in
-                    if selecting {
-                        SelectableCatalogRow(
-                            catalogItem: catalogItem,
-                            alreadyIn: inList(catalogItem),
-                            picked: picked.contains(catalogItem.slug),
-                            toggle: { togglePick(catalogItem) }
-                        )
-                    } else {
-                        PlatformCatalogRow(
-                            catalogItem: catalogItem,
-                            listStatus: mode.status,
-                            onAdd: {
-                                // Owned copies get the quick-add modal (completeness +
-                                // condition); a wishlist add has nothing to configure.
-                                if mode.status == .owned {
-                                    quickAddTarget = catalogItem
-                                } else {
-                                    withAnimation {
-                                        _ = CollectionActions.add(catalogItem, status: mode.status, in: modelContext)
-                                    }
-                                }
-                            },
-                            onToggleWishlist: mode.status == .owned ? { toggleWishlist(catalogItem) } : nil
-                        )
-                        .swipeActions(edge: .trailing) {
-                            if let owned = catalogItem.entry(for: mode.status) {
-                                Button(role: .destructive) {
-                                    withAnimation { CollectionActions.remove(owned, in: modelContext) }
-                                } label: {
-                                    Label("Remove", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
+                    rowContent(for: catalogItem)
+                        .id(catalogItem.slug)
                 }
             } header: {
                 Text("\(shown.count) \(shown.count == 1 ? "title" : "titles")")
@@ -266,6 +252,68 @@ struct SystemGamesList: View {
         case .all:
             "The catalog has no \(kindFilter.label.lowercased()) for \(platform.shortName) yet."
         }
+    }
+
+    // MARK: Rows
+
+    @ViewBuilder
+    private func rowContent(for catalogItem: CatalogItem) -> some View {
+        if selecting {
+            SelectableCatalogRow(
+                catalogItem: catalogItem,
+                alreadyIn: inList(catalogItem),
+                picked: picked.contains(catalogItem.slug),
+                toggle: { togglePick(catalogItem) }
+            )
+        } else {
+            PlatformCatalogRow(
+                catalogItem: catalogItem,
+                listStatus: mode.status,
+                onAdd: {
+                    // Owned copies get the quick-add modal (completeness +
+                    // condition); a wishlist add has nothing to configure.
+                    if mode.status == .owned {
+                        quickAddTarget = catalogItem
+                    } else {
+                        withAnimation {
+                            _ = CollectionActions.add(catalogItem, status: mode.status, in: modelContext)
+                        }
+                    }
+                },
+                onToggleWishlist: mode.status == .owned ? { toggleWishlist(catalogItem) } : nil
+            )
+            .swipeActions(edge: .trailing) {
+                if let owned = catalogItem.entry(for: mode.status) {
+                    Button(role: .destructive) {
+                        withAnimation { CollectionActions.remove(owned, in: modelContext) }
+                    } label: {
+                        Label("Remove", systemImage: "trash")
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: A–Z jump index
+
+    /// First row (by slug) for each leading letter of the shown titles, in order.
+    private var letterIndex: [(letter: String, slug: String)] {
+        var seen = Set<String>()
+        var out: [(String, String)] = []
+        for item in shown {
+            let letter = Self.indexLetter(for: item.displayTitle)
+            if seen.insert(letter).inserted { out.append((letter, item.slug)) }
+        }
+        return out.map { (letter: $0.0, slug: $0.1) }
+    }
+
+    private var showScrubber: Bool {
+        sortField == .title && !selecting && letterIndex.count > 3 && shown.count > 40
+    }
+
+    static func indexLetter(for title: String) -> String {
+        guard let first = title.uppercased().unicodeScalars.first else { return "#" }
+        return CharacterSet.uppercaseLetters.contains(first) ? String(first) : "#"
     }
 
     // MARK: Bulk add
@@ -484,6 +532,53 @@ struct SelectableCatalogRow: View {
         }
         .buttonStyle(.plain)
         .disabled(alreadyIn)
+    }
+}
+
+// MARK: - A–Z scrubber
+
+/// Trailing-edge letter index for long, title-sorted catalogs. Tap or drag a
+/// letter to jump. iOS only — macOS has a real scrollbar and more room.
+struct AZScrubber: View {
+    var letters: [String]
+    var onSelect: (String) -> Void
+
+    @State private var active: String?
+
+    var body: some View {
+        VStack(spacing: 1) {
+            ForEach(letters, id: \.self) { letter in
+                Text(letter)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(active == letter ? Color.white : Color.accentColor)
+                    .frame(width: 16, height: 15)
+                    .background {
+                        if active == letter {
+                            Circle().fill(Color.accentColor)
+                        }
+                    }
+            }
+        }
+        .padding(.vertical, 6)
+        .background(.thinMaterial, in: Capsule())
+        .contentShape(Capsule())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    let count = letters.count
+                    guard count > 0 else { return }
+                    let rowH: CGFloat = 16
+                    let idx = min(max(Int(value.location.y / rowH), 0), count - 1)
+                    let letter = letters[idx]
+                    if letter != active {
+                        active = letter
+                        onSelect(letter)
+                    }
+                }
+                .onEnded { _ in active = nil }
+        )
+        .sensoryFeedback(.selection, trigger: active)
+        .accessibilityLabel("Section index")
     }
 }
 
