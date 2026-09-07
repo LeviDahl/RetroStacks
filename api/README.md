@@ -65,9 +65,10 @@ doesn't change.
 3. Wait for GitHub's DNS check + cert (minutes–hours), tick *Enforce HTTPS*.
 4. Flip `BackendConfig.feedBaseURL` to `https://data.retrostacks.com`.
 
-## TODO
+**Done** — `https://data.retrostacks.com/v1/*.json` is live (HTTPS). Tick *Enforce
+HTTPS* in Settings → Pages once GitHub enables it.
 
-- [ ] Custom domain (steps above)
+## TODO
 - [ ] Invert the source of truth: bundle `catalog.json`, have `SampleData` decode it
 - [ ] Grow the real catalog beyond the sample set
 - [ ] Implement a DB source (`sources/mysql.mjs` or `sources/supabase.mjs`) when the

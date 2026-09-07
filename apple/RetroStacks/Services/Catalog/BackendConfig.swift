@@ -7,12 +7,11 @@ import Foundation
 /// GitHub Pages, a PHP/MySQL app, or Supabase's PostgREST. Switching origins is
 /// just changing `feedBaseURL`; the app is otherwise unaware.
 ///
-/// TODO: once `data.retrostacks.com` resolves (GoDaddy `CNAME data → levidahl.github.io`
-/// + the domain set in repo Settings → Pages, or the `FEED_CNAME` repo variable),
-/// change `feedBaseURL` to `https://data.retrostacks.com`. Until then it points at
-/// the raw Pages URL, which already works.
+/// `data.retrostacks.com` is a GitHub Pages custom domain (`CNAME` at GoDaddy →
+/// `levidahl.github.io`); the raw `https://levidahl.github.io/RetroStacks` still
+/// works and 301s here.
 nonisolated enum BackendConfig {
-    static let feedBaseURL = URL(string: "https://levidahl.github.io/RetroStacks")!
+    static let feedBaseURL = URL(string: "https://data.retrostacks.com")!
 
     static var catalogURL: URL { feedBaseURL.appending(path: "v1/catalog.json") }
     static var priceGuideURL: URL { feedBaseURL.appending(path: "v1/price-guide.json") }
