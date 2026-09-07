@@ -94,9 +94,9 @@ struct SystemGamesList: View {
             Section {
                 HStack(spacing: 10) {
                     Picker("Scope", selection: $scope) {
-                        Text("\(Scope.inList.label(mode)) \(counts.inList)").tag(Scope.inList)
-                        Text("\(Scope.missing.label(mode)) \(counts.missing)").tag(Scope.missing)
-                        Text("All \(counts.all)").tag(Scope.all)
+                        Text("\(Scope.inList.label(mode)) · \(counts.inList)").tag(Scope.inList)
+                        Text("\(Scope.missing.label(mode)) · \(counts.missing)").tag(Scope.missing)
+                        Text("All · \(counts.all)").tag(Scope.all)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
