@@ -15,6 +15,9 @@ struct SystemGamesList: View {
 
     @State private var scope: Scope = .all
     @State private var quickAddTarget: CatalogItem?
+    @State private var selecting = false
+    @State private var picked: Set<String> = []
+    @State private var bulkCompleteness: Completeness = .loose
     @AppStorage("system.kindFilter") private var kindRaw = KindFilter.games.rawValue
     @AppStorage("system.sortField") private var sortRaw = SortField.title.rawValue
 
@@ -163,27 +166,37 @@ struct SystemGamesList: View {
 
             Section {
                 ForEach(shown) { catalogItem in
-                    PlatformCatalogRow(
-                        catalogItem: catalogItem,
-                        listStatus: mode.status,
-                        onAdd: {
-                            // Owned copies get the quick-add modal (completeness +
-                            // condition); a wishlist add has nothing to configure.
-                            if mode.status == .owned {
-                                quickAddTarget = catalogItem
-                            } else {
-                                withAnimation {
-                                    _ = CollectionActions.add(catalogItem, status: mode.status, in: modelContext)
+                    if selecting {
+                        SelectableCatalogRow(
+                            catalogItem: catalogItem,
+                            alreadyIn: inList(catalogItem),
+                            picked: picked.contains(catalogItem.slug),
+                            toggle: { togglePick(catalogItem) }
+                        )
+                    } else {
+                        PlatformCatalogRow(
+                            catalogItem: catalogItem,
+                            listStatus: mode.status,
+                            onAdd: {
+                                // Owned copies get the quick-add modal (completeness +
+                                // condition); a wishlist add has nothing to configure.
+                                if mode.status == .owned {
+                                    quickAddTarget = catalogItem
+                                } else {
+                                    withAnimation {
+                                        _ = CollectionActions.add(catalogItem, status: mode.status, in: modelContext)
+                                    }
                                 }
-                            }
-                        }
-                    )
-                    .swipeActions(edge: .trailing) {
-                        if let owned = catalogItem.entry(for: mode.status) {
-                            Button(role: .destructive) {
-                                withAnimation { CollectionActions.remove(owned, in: modelContext) }
-                            } label: {
-                                Label("Remove", systemImage: "trash")
+                            },
+                            onToggleWishlist: mode.status == .owned ? { toggleWishlist(catalogItem) } : nil
+                        )
+                        .swipeActions(edge: .trailing) {
+                            if let owned = catalogItem.entry(for: mode.status) {
+                                Button(role: .destructive) {
+                                    withAnimation { CollectionActions.remove(owned, in: modelContext) }
+                                } label: {
+                                    Label("Remove", systemImage: "trash")
+                                }
                             }
                         }
                     }
@@ -196,6 +209,22 @@ struct SystemGamesList: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            if canBulkAdd {
+                ToolbarItem {
+                    Button(selecting ? "Done" : "Select") {
+                        withAnimation {
+                            selecting.toggle()
+                            if !selecting { picked.removeAll() }
+                        }
+                    }
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if selecting { bulkAddBar }
+        }
+        .onChange(of: scope) { _, _ in if selecting { picked.removeAll() } }
         .overlay {
             if shown.isEmpty {
                 ContentUnavailableView {
@@ -238,35 +267,90 @@ struct SystemGamesList: View {
             "The catalog has no \(kindFilter.label.lowercased()) for \(platform.shortName) yet."
         }
     }
+
+    // MARK: Bulk add
+
+    /// Only worth offering when the current view has rows you don't already have.
+    private var canBulkAdd: Bool {
+        scope != .inList && shown.contains { !inList($0) }
+    }
+
+    private func togglePick(_ item: CatalogItem) {
+        guard !inList(item) else { return }
+        if picked.contains(item.slug) { picked.remove(item.slug) } else { picked.insert(item.slug) }
+    }
+
+    private func toggleWishlist(_ item: CatalogItem) {
+        withAnimation {
+            if let existing = item.entry(for: .wishlist) {
+                CollectionActions.remove(existing, in: modelContext)
+            } else {
+                _ = CollectionActions.add(item, status: .wishlist, in: modelContext)
+            }
+        }
+    }
+
+    private func commitBulkAdd() {
+        let bySlug = Dictionary(catalog.map { ($0.slug, $0) }, uniquingKeysWith: { a, _ in a })
+        let condition: ConditionGrade? = mode.status == .owned ? .good : nil
+        let completeness: Completeness? = mode.status == .owned ? bulkCompleteness : nil
+        withAnimation {
+            for slug in picked {
+                guard let item = bySlug[slug] else { continue }
+                _ = CollectionActions.add(
+                    item, status: mode.status,
+                    completeness: completeness, condition: condition,
+                    in: modelContext
+                )
+            }
+            picked.removeAll()
+            selecting = false
+        }
+    }
+
+    @ViewBuilder
+    private var bulkAddBar: some View {
+        VStack(spacing: 8) {
+            if mode.status == .owned {
+                Picker("Completeness", selection: $bulkCompleteness) {
+                    Text("Loose").tag(Completeness.loose)
+                    Text("Boxed").tag(Completeness.boxedNoManual)
+                    Text("CIB").tag(Completeness.completeInBox)
+                    Text("Sealed").tag(Completeness.sealed)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            HStack {
+                Button("Cancel") {
+                    withAnimation { picked.removeAll(); selecting = false }
+                }
+                Spacer()
+                Button {
+                    commitBulkAdd()
+                } label: {
+                    Text(picked.isEmpty
+                         ? "Select items to add"
+                         : "Add \(picked.count) to \(mode == .wishlist ? "wishlist" : "collection")")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(picked.isEmpty)
+            }
+        }
+        .padding(12)
+        .background(.bar)
+    }
 }
 
 // MARK: - Row
 
-/// A catalog row inside a platform drill-down: title + meta on the left,
-/// ownership state or a one-tap Add on the right.
-struct PlatformCatalogRow: View {
+/// Thumbnail + title + meta line — the shared visual for every catalog row in
+/// the drill-down (plain, selectable, hover).
+struct CatalogRowContent: View {
     var catalogItem: CatalogItem
-    var listStatus: CollectionStatus
-    var onAdd: () -> Void
-
-    private var entry: CollectionItem? { catalogItem.entry(for: listStatus) }
 
     var body: some View {
-        HStack(spacing: 12) {
-            if let entry {
-                NavigationLink(value: entry) { rowBody }.buttonStyle(.plain)
-            } else {
-                NavigationLink(value: catalogItem) { rowBody }.buttonStyle(.plain)
-            }
-
-            Spacer(minLength: 8)
-
-            trailing
-        }
-        .padding(.vertical, 3)
-    }
-
-    private var rowBody: some View {
         HStack(spacing: 12) {
             ItemThumbnail(
                 kind: catalogItem.kind,
@@ -287,6 +371,62 @@ struct PlatformCatalogRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            }
+        }
+    }
+}
+
+/// A catalog row inside a platform drill-down: title + meta on the left,
+/// ownership state or a one-tap Add on the right. On macOS a wishlist toggle
+/// appears on hover.
+struct PlatformCatalogRow: View {
+    var catalogItem: CatalogItem
+    var listStatus: CollectionStatus
+    var onAdd: () -> Void
+    var onToggleWishlist: (() -> Void)? = nil
+
+    @State private var hovering = false
+
+    private var entry: CollectionItem? { catalogItem.entry(for: listStatus) }
+    private var wishlisted: Bool { catalogItem.entry(for: .wishlist) != nil }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let entry {
+                NavigationLink(value: entry) { CatalogRowContent(catalogItem: catalogItem) }
+                    .buttonStyle(.plain)
+            } else {
+                NavigationLink(value: catalogItem) { CatalogRowContent(catalogItem: catalogItem) }
+                    .buttonStyle(.plain)
+            }
+
+            Spacer(minLength: 8)
+
+            if let onToggleWishlist, hovering || wishlisted {
+                Button(action: onToggleWishlist) {
+                    Image(systemName: wishlisted ? "star.fill" : "star")
+                        .foregroundStyle(wishlisted ? .yellow : .secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(wishlisted ? "Remove from wishlist" : "Add to wishlist")
+                .transition(.opacity)
+            }
+
+            trailing
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        #if os(macOS)
+        .onHover { hovering = $0 }
+        .animation(.easeInOut(duration: 0.12), value: hovering)
+        #endif
+        .swipeActions(edge: .leading) {
+            if let onToggleWishlist {
+                Button(action: onToggleWishlist) {
+                    Label(wishlisted ? "Unwish" : "Wishlist",
+                          systemImage: wishlisted ? "star.slash" : "star")
+                }
+                .tint(.yellow)
             }
         }
     }
@@ -315,6 +455,35 @@ struct PlatformCatalogRow: View {
             .foregroundStyle(.tint)
             .help(listStatus == .wishlist ? "Add to wishlist" : "Add to collection")
         }
+    }
+}
+
+/// Row shown while the list is in multi-select ("Select") mode: a checkbox in
+/// place of the disclosure / add button. Rows already in the list are locked.
+struct SelectableCatalogRow: View {
+    var catalogItem: CatalogItem
+    var alreadyIn: Bool
+    var picked: Bool
+    var toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 12) {
+                Image(systemName: alreadyIn ? "checkmark.circle.fill"
+                      : picked ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(alreadyIn ? .green : picked ? Color.accentColor : .secondary)
+                CatalogRowContent(catalogItem: catalogItem)
+                Spacer(minLength: 8)
+                if alreadyIn {
+                    Text("In list").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(alreadyIn)
     }
 }
 
