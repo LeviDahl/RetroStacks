@@ -1,59 +1,77 @@
 # api — RetroStacks data feed
 
 Reference data for the app: the catalog (consoles / games / accessories for major
-US systems) and pricing. **No server, no database** — a nightly job turns a
-canonical JSON file into static files served from a CDN. That's plenty for a solo
-user and scales to millions of reads for ~$0; it graduates to a real API later
-with **no client changes** (same URLs, same JSON shapes).
+US systems) and pricing.
 
-Personal `CollectionItem` data never touches this — it stays on device (SwiftData)
-and syncs via iCloud/CloudKit.
+**The `/v1/*.json` contract is the whole interface.** Right now those files are
+static, built by CI and served free from GitHub Pages — plenty for a solo user,
+scales to millions of reads for ~$0. When it needs to become dynamic (a MySQL DB
+at GoDaddy, a Postgres DB at Supabase, whatever), only the *source* of the build
+changes; the emitted JSON, the URLs, and the entire app stay the same.
+
+Personal `CollectionItem` data never touches this — see *Collection data* below.
 
 ## How it works
 
 ```
-api/data/catalog.json        canonical source of truth (platforms + items + seed prices)
-        │
-        ▼  node api/build/build.mjs
-api/dist/                     (gitignored — built by CI)
-├── index.html
-└── v1/
-    ├── catalog.json          { version, generatedAt, platforms[], items[] }   (no prices)
-    ├── price-guide.json      { version, generatedAt, guides: { <slug>: PriceGuide } }
-    └── meta.json             version + counts + generatedAt
+data source  ──▶  build.mjs  ──▶  api/dist/            (gitignored; published by CI)
+                     ▲             ├── index.html
+             pricing enricher      ├── CNAME           (if FEED_CNAME set)
+                                   └── v1/
+                                       ├── catalog.json      { version, generatedAt, platforms[], items[] }
+                                       ├── price-guide.json  { version, generatedAt, guides: { <slug>: PriceGuide } }
+                                       └── meta.json         version + counts + source + generatedAt
 ```
 
-- **`api/build/build.mjs`** — zero-dependency Node. Splits the catalog into
-  `catalog.json` (metadata) and `price-guide.json` (a `PriceGuide` per item,
-  derived from the seed price fields). If `PRICECHARTING_TOKEN` is set it *will*
-  do a live refresh — not implemented yet, currently passes seed prices through.
-- **`api/build/export-catalog.swift`** — regenerates `api/data/catalog.json` from
-  the app's `SampleData` (current source of truth). Run when `SampleData` changes;
-  see the header comment. *Follow-up: invert this so `catalog.json` is primary and
-  `SampleData` decodes the bundled copy.*
-- **`.github/workflows/publish-data.yml`** — builds `api/dist` and publishes it to
-  **GitHub Pages** nightly + on push to `api/data`/`api/build`.
-  One-time: repo **Settings → Pages → Source: "GitHub Actions"**.
-  Served at `https://<owner>.github.io/RetroStacks/` → later `data.retrostacks.com`
-  via a `CNAME` (GoDaddy DNS) + repo Pages custom-domain setting.
+- **`api/build/build.mjs`** — zero-dep orchestrator. Loads from
+  `sources/${SOURCE}.mjs` (default `local-file`), optionally runs a pricing
+  enricher, emits the `v1/*.json` files. `SOURCE`, `FEED_CNAME`,
+  `PRICECHARTING_TOKEN` are env vars (wired to repo variables/secrets in the
+  workflow).
+- **`api/build/sources/`** — the swap point. `local-file.mjs` reads
+  `api/data/catalog.json` (the current source of truth). `mysql.mjs` /
+  `supabase.mjs` are **skeletons**: implement `loadCatalog()` to return the shape
+  `local-file.mjs` documents and the rest of the pipeline is unchanged.
+- **`api/build/pricing/pricecharting.mjs`** — skeleton enricher. `refreshPrices(items)`
+  returns per-slug price patches (pennies → dollars, 1 req/sec cap).
+- **`api/data/catalog.json`** — canonical catalog for the `local-file` source.
+  Regenerate from the app's `SampleData` with **`api/build/export-catalog.swift`**
+  when SampleData changes (see its header). *Follow-up: invert this so
+  `catalog.json` is primary and `SampleData` decodes the bundled copy.*
+- **`.github/workflows/publish-data.yml`** — builds + deploys to GitHub Pages,
+  nightly + on push to `api/**`. Live at `https://levidahl.github.io/RetroStacks/`.
 
 ## Client
 
-`apple/RetroStacks/Services/Catalog/` — `CatalogRepository` (`Remote` fetches the
-feed with `URLCache`/ETag; `Bundled` reads a shipped copy), `CatalogSyncService`
-upserts platforms + items into SwiftData by `slug`, and
-`Services/Pricing/RemotePricingProvider` reads `price-guide.json`. `SampleData`
-stays as the first-launch seed + offline fallback + previews.
+`apple/RetroStacks/Services/Catalog/` — `CatalogRepository` /
+`RemoteCatalogRepository` (fetch + `URLCache`/ETag), `CatalogSyncService`
+(`@MainActor @Observable`, upserts platforms + items into SwiftData by `slug`,
+additive, never throws out), and `Services/Pricing/RemotePricingProvider`
+(actor, reads `price-guide.json`, top of the provider chain). `SampleData` is the
+first-launch seed + offline fallback + previews. Kicked off from
+`RetroStacksApp` `.task`; "Sync catalog now" is in the Dashboard's View Options.
 
-`BackendConfig.baseURL` holds the feed URL — swap it for the custom domain once
-DNS is set.
+`BackendConfig.feedBaseURL` is the single knob. A dynamic backend just needs to
+serve the same `/v1/*.json` at its own base URL — the repository/provider code
+doesn't change.
+
+## Custom domain: data.retrostacks.com
+
+1. **GoDaddy DNS** → add `CNAME` record: host `data`, points to
+   `levidahl.github.io` (no trailing path).
+2. **Set the domain on Pages** — either repo *Settings → Pages → Custom domain* =
+   `data.retrostacks.com`, **or** set repo variable `FEED_CNAME=data.retrostacks.com`
+   and re-run the workflow (build.mjs writes `dist/CNAME`).
+3. Wait for GitHub's DNS check + cert (minutes–hours), tick *Enforce HTTPS*.
+4. Flip `BackendConfig.feedBaseURL` to `https://data.retrostacks.com`.
 
 ## TODO
 
-- [ ] Enable GitHub Pages (Settings → Pages → GitHub Actions) and run the workflow once
-- [ ] Point `data.retrostacks.com` at it (GoDaddy `CNAME` → `<owner>.github.io`) and set `BackendConfig.baseURL`
+- [ ] Custom domain (steps above)
 - [ ] Invert the source of truth: bundle `catalog.json`, have `SampleData` decode it
-- [ ] Grow the real catalog beyond the ~50 sample items
+- [ ] Grow the real catalog beyond the sample set
+- [ ] Implement a DB source (`sources/mysql.mjs` or `sources/supabase.mjs`) when the
+      catalog outgrows a hand-maintained file
 
 ## Collection data (no iCloud)
 

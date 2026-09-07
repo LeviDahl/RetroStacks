@@ -1,9 +1,16 @@
 import Foundation
 
-/// Where the app reads reference data from. Today this is a static JSON feed
-/// published to GitHub Pages by `.github/workflows/publish-data.yml`. Swap
-/// `feedBaseURL` for `https://data.retrostacks.com` once DNS is pointed at it —
-/// nothing else changes.
+/// Where the app reads reference data from.
+///
+/// The `/v1/*.json` contract (see `CatalogFeed.swift` + `PricingModels.swift`) is
+/// the only interface — it doesn't matter whether the origin is static files on
+/// GitHub Pages, a PHP/MySQL app, or Supabase's PostgREST. Switching origins is
+/// just changing `feedBaseURL`; the app is otherwise unaware.
+///
+/// TODO: once `data.retrostacks.com` resolves (GoDaddy `CNAME data → levidahl.github.io`
+/// + the domain set in repo Settings → Pages, or the `FEED_CNAME` repo variable),
+/// change `feedBaseURL` to `https://data.retrostacks.com`. Until then it points at
+/// the raw Pages URL, which already works.
 nonisolated enum BackendConfig {
     static let feedBaseURL = URL(string: "https://levidahl.github.io/RetroStacks")!
 

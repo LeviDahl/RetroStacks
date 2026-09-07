@@ -39,9 +39,14 @@ jobs:
           node-version: "22"
 
       - name: Build feed
-        # PRICECHARTING_TOKEN, when added as a repo secret, will enable a live
-        # price refresh (not implemented yet — build.mjs passes seed prices through).
+        # SOURCE          repo variable — "local-file" (default) / "mysql" / "supabase"
+        # FEED_CNAME      repo variable — set to "data.retrostacks.com" to emit a
+        #                 dist/CNAME so Pages serves the custom domain
+        # PRICECHARTING_TOKEN  repo secret — enables the live price refresh
+        #                 (enricher not implemented yet; seed prices pass through)
         env:
+          SOURCE: ${{ vars.SOURCE }}
+          FEED_CNAME: ${{ vars.FEED_CNAME }}
           PRICECHARTING_TOKEN: ${{ secrets.PRICECHARTING_TOKEN }}
         run: node api/build/build.mjs
 
