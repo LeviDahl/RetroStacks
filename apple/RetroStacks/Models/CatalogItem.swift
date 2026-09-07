@@ -128,13 +128,18 @@ extension CatalogItem {
 
     var platformShortName: String { platform?.shortName ?? "—" }
 
-    var isOwned: Bool {
-        collectionEntries.contains { $0.status == .owned }
+    /// Live (non-tombstoned) collection entries for this catalog item.
+    var liveEntries: [CollectionItem] {
+        collectionEntries.filter { $0.deletedAt == nil }
     }
 
-    var isWishlisted: Bool {
-        collectionEntries.contains { $0.status == .wishlist }
+    func entry(for status: CollectionStatus) -> CollectionItem? {
+        liveEntries.first { $0.status == status }
     }
+
+    var ownedEntry: CollectionItem? { entry(for: .owned) }
+    var isOwned: Bool { ownedEntry != nil }
+    var isWishlisted: Bool { entry(for: .wishlist) != nil }
 
     /// Best available reference price for quick display (complete > loose > sealed).
     var headlineValue: Decimal? {

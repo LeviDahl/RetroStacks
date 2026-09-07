@@ -29,3 +29,8 @@ Utilize the following `XcodeBuildMCP` compatible tools. Do not guess `xcodebuild
 ## 🚀 Common Workflows for Claude
 - **Plan Mode**: Run `claude` and initialize in plan mode (`/init` or explicit instructions) before attempting complex state logic changes.
 - **Error Remediation**: If a compilation error breaks the pipeline, check for missing target imports or Swift concurrency isolation issues first.
+
+## 🗂️ Backlog
+Enhancement ideas and deferred work live in [`BACKLOG.md`](BACKLOG.md). Add to it
+rather than letting good ideas evaporate mid-task; near-term implementation TODOs
+stay in the `api/` and `apple/` READMEs.

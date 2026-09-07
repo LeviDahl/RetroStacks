@@ -177,15 +177,7 @@ struct CatalogItemDetailView: View {
     }
 
     private func addEntry(status: CollectionStatus) {
-        let entry = CollectionItem(
-            catalogItem: item,
-            status: status,
-            condition: status == .owned ? .good : nil,
-            completeness: status == .owned ? .loose : nil,
-            playStatus: item.kind == .game && status == .owned ? .backlog : nil
-        )
-        modelContext.insert(entry)
-        try? modelContext.save()
+        CollectionActions.add(item, status: status, in: modelContext)
         withAnimation { justAdded = status }
         Task {
             try? await Task.sleep(for: .seconds(2))

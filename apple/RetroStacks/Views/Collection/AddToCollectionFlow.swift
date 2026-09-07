@@ -76,19 +76,11 @@ struct AddToCollectionFlow: View {
     }
 
     private func alreadyExists(_ item: CatalogItem) -> Bool {
-        item.collectionEntries.contains { $0.status == defaultStatus }
+        item.entry(for: defaultStatus) != nil
     }
 
     private func add(_ item: CatalogItem) {
-        let entry = CollectionItem(
-            catalogItem: item,
-            status: defaultStatus,
-            condition: defaultStatus == .owned ? .good : nil,
-            completeness: defaultStatus == .owned ? .loose : nil,
-            playStatus: item.kind == .game && defaultStatus == .owned ? .backlog : nil
-        )
-        modelContext.insert(entry)
-        try? modelContext.save()
+        CollectionActions.add(item, status: defaultStatus, in: modelContext)
         dismiss()
     }
 }
