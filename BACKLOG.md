@@ -6,12 +6,12 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 ## Platform drill-down & adding to collection
 
 - **Bulk add** — multi-select in the *Missing* scope, "Add N to collection".
-- **Quick-condition add** — split the `+` into "Add loose / CIB / sealed" so a
-  batch of adds isn't all `loose / Good`.
-- **"Remaining value"** — total est. value of what you're *missing* on a platform
-  ("how much to finish this set"), shown in the summary strip.
-- **Sort options** in the drill-down — A–Z (current) / value / release year /
-  recently added.
+- ~~**Quick-condition add**~~ — done: the `+` presents `QuickAddSheet` with
+  completeness (Loose/Boxed/CIB/Sealed) + condition before inserting.
+- ~~**"Remaining value"**~~ — done: `SystemSummary.remainingValue`, shown as
+  "To finish" in the summary strip.
+- ~~**Sort options** in the drill-down~~ — done: Title / Release Year /
+  Publisher / Value in the header filter menu.
 - **A–Z section index / scrubber** for long platform catalogs (macOS + iOS), like
   Retro Game Collector's edge scrubber.
 - **Hover actions on macOS rows** — reveal Add / Wishlist / Open on hover.
