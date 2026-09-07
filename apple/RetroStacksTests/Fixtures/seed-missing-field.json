@@ -1,0 +1,15 @@
+{
+  "platforms": [
+    {
+      "name": "Super Nintendo Entertainment System",
+      "shortName": "SNES",
+      "manufacturer": "Nintendo",
+      "generation": 4,
+      "summary": "Missing the required slug field.",
+      "iconSystemName": "gamecontroller"
+    }
+  ],
+  "items": [
+    { "slug": "x", "platformSlug": "snes", "kind": "game", "name": "X" }
+  ]
+}

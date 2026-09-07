@@ -48,8 +48,10 @@ data source  ──▶  build.mjs  ──▶  api/dist/            (gitignored; 
   makes a full pull minutes long, so run it by hand (or a weekly job), review the
   diff, commit the JSON. build.mjs only ever reads the committed files.
 - **`api/data/curated.json`** — the hand-authored set: prices, rich summaries,
-  consoles + accessories, verified art. Regenerate from the app's `SampleData`
-  with **`api/build/export-catalog.swift`**. On merge, curated wins over any
+  consoles + accessories, verified art. **This is the source of truth** — edit it
+  directly. `node api/build/sync-seed.mjs` copies it into the app bundle as
+  `apple/RetroStacks/Resources/CatalogSeed.json` (the first-launch seed the app
+  decodes via `CatalogSeedStore`). On merge into the feed, curated wins over any
   generated game with a matching title (keeps its slug + prices).
 - **`api/build/pricing/pricecharting.mjs`** — implemented, **dormant by default**.
   `refreshPrices(items)` returns per-slug price patches (pennies → dollars). Runs
@@ -88,9 +90,6 @@ doesn't change.
 HTTPS* in Settings → Pages once GitHub enables it.
 
 ## TODO
-- [ ] Invert the source of truth: bundle `curated.json`, have `SampleData` decode it
-      (kills the Swift/JSON duplication — but changes first-launch seeding, so
-      wants a deliberate go-ahead)
 - [ ] Grow the real catalog beyond the 6 cartridge systems — `ingest/igdb.mjs`
       is ready; needs `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET`, then run it for the
       disc systems (PS1/PS2/DC/GCN) and re-enrich the cartridge ones

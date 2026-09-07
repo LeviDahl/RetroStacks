@@ -1,0 +1,9 @@
+{
+  "platforms": [
+    { "slug": "snes", "name": "SNES", "shortName": "SNES", "manufacturer": "Nintendo",
+      "generation": 4, "summary": "", "iconSystemName": "gamecontroller" }
+  ],
+  "items": [
+    { "slug": "gen-sonic", "platformSlug": "genesis", "kind": "game", "name": "Sonic" }
+  ]
+}

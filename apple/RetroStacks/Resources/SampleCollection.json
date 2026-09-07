@@ -1,0 +1,148 @@
+{
+  "note": "Demo collection seeded on first launch only. Dates are days-before-launch so the sample always looks recent. Edit freely — this never ships to the data feed.",
+  "entries": [
+    {
+      "catalogSlug": "sns-001",
+      "status": "owned",
+      "condition": "veryGood",
+      "completeness": "loose",
+      "pricePaid": 75,
+      "acquiredDaysAgo": 220,
+      "acquisitionSource": "onlineMarketplace",
+      "storageLocation": "Shelf A · Bin 2",
+      "notes": "Slight yellowing on the top shell. Retr0brite candidate.",
+      "addedDaysAgo": 220
+    },
+    {
+      "catalogSlug": "snes-chrono-trigger",
+      "status": "owned",
+      "condition": "good",
+      "completeness": "completeInBox",
+      "hasBox": true,
+      "hasManual": true,
+      "hasInserts": true,
+      "pricePaid": 240,
+      "acquiredDaysAgo": 140,
+      "acquisitionSource": "localSeller",
+      "storageLocation": "Display case",
+      "notes": "Box has shelf wear on the top-right corner. Map included.",
+      "playStatus": "completed",
+      "addedDaysAgo": 140
+    },
+    {
+      "catalogSlug": "nes-001",
+      "status": "owned",
+      "condition": "good",
+      "completeness": "boxedNoManual",
+      "hasBox": true,
+      "hasOriginalPackaging": true,
+      "pricePaid": 90,
+      "acquiredDaysAgo": 400,
+      "acquisitionSource": "gameStore",
+      "storageLocation": "Shelf A · Bin 1",
+      "notes": "72-pin connector replaced. Box is rough but present.",
+      "addedDaysAgo": 400
+    },
+    {
+      "catalogSlug": "n64-oot",
+      "status": "owned",
+      "condition": "veryGood",
+      "completeness": "completeInBox",
+      "hasBox": true,
+      "hasManual": true,
+      "pricePaid": 65,
+      "acquiredDaysAgo": 65,
+      "acquisitionSource": "onlineMarketplace",
+      "storageLocation": "Shelf B · Bin 4",
+      "notes": "Grey cart, not gold. Save battery still holds.",
+      "playStatus": "playing",
+      "addedDaysAgo": 65
+    },
+    {
+      "catalogSlug": "ps1-sotn",
+      "status": "owned",
+      "condition": "veryGood",
+      "completeness": "completeInBox",
+      "hasBox": true,
+      "hasManual": true,
+      "pricePaid": 140,
+      "acquiredDaysAgo": 30,
+      "acquisitionSource": "onlineMarketplace",
+      "estimatedValueOverride": 185,
+      "storageLocation": "Display case",
+      "notes": "Jewel-case printing. Manual near-mint.",
+      "playStatus": "backlog",
+      "addedDaysAgo": 30
+    },
+    {
+      "catalogSlug": "gcn-smash-melee",
+      "status": "owned",
+      "condition": "good",
+      "completeness": "loose",
+      "pricePaid": 22,
+      "acquiredDaysAgo": 500,
+      "acquisitionSource": "gift",
+      "storageLocation": "Shelf B · Bin 5",
+      "notes": "Disc has light hairlines, plays fine.",
+      "playStatus": "playing",
+      "addedDaysAgo": 500
+    },
+    {
+      "catalogSlug": "gen-model-2",
+      "status": "owned",
+      "condition": "veryGood",
+      "completeness": "loose",
+      "pricePaid": 35,
+      "acquiredDaysAgo": 310,
+      "acquisitionSource": "localSeller",
+      "storageLocation": "Shelf A · Bin 3",
+      "notes": "Includes one 3-button pad and RF only — need an A/V cable.",
+      "addedDaysAgo": 310
+    },
+    {
+      "catalogSlug": "gb-tetris",
+      "status": "owned",
+      "condition": "good",
+      "completeness": "loose",
+      "pricePaid": 9,
+      "acquiredDaysAgo": 120,
+      "acquisitionSource": "gameStore",
+      "storageLocation": "Handheld drawer",
+      "notes": "Label is clean. Classic.",
+      "playStatus": "completed",
+      "addedDaysAgo": 120
+    },
+    {
+      "catalogSlug": "snes-super-metroid",
+      "status": "wishlist",
+      "notes": "Want a complete-in-box copy under $180.",
+      "addedDaysAgo": 18
+    },
+    {
+      "catalogSlug": "gen-psiv",
+      "status": "wishlist",
+      "notes": "Grail. CIB only. Watching auctions.",
+      "addedDaysAgo": 9
+    },
+    {
+      "catalogSlug": "n64-goldeneye",
+      "status": "wishlist",
+      "notes": "Loose is fine for the party shelf.",
+      "addedDaysAgo": 3
+    },
+    {
+      "catalogSlug": "ps2-gow",
+      "status": "forSale",
+      "condition": "good",
+      "completeness": "completeInBox",
+      "hasBox": true,
+      "hasManual": true,
+      "pricePaid": 5,
+      "acquiredDaysAgo": 700,
+      "estimatedValueOverride": 20,
+      "storageLocation": "Sell box",
+      "notes": "Have a duplicate. Greatest Hits copy.",
+      "addedDaysAgo": 700
+    }
+  ]
+}

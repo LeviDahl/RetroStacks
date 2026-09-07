@@ -1,6 +1,6 @@
-// Data source: the hand-curated set (api/data/curated.json — regenerated from the
-// app's SampleData by ../export-catalog.swift) merged with the bulk catalogs in
-// api/data/generated/*.json (produced by ../ingest/libretro.mjs).
+// Data source: the hand-curated set (api/data/curated.json — the source of truth,
+// synced into the app bundle by ../sync-seed.mjs) merged with the bulk catalogs
+// in api/data/generated/*.json (produced by ../ingest/libretro.mjs or igdb.mjs).
 //
 // Curated wins: platforms + consoles/accessories come only from curated, and a
 // generated game is dropped when a curated game on the same platform has a

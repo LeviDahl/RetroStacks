@@ -1,0 +1,50 @@
+{
+  "platforms": [
+    {
+      "slug": "snes",
+      "name": "Super Nintendo Entertainment System",
+      "shortName": "SNES",
+      "manufacturer": "Nintendo",
+      "generation": 4,
+      "releaseYearNA": 1991,
+      "discontinuedYearNA": 1999,
+      "summary": "16-bit Nintendo.",
+      "iconSystemName": "gamecontroller",
+      "regions": ["NA"]
+    }
+  ],
+  "items": [
+    {
+      "slug": "sns-001",
+      "platformSlug": "snes",
+      "kind": "console",
+      "name": "Super Nintendo",
+      "variant": "SNS-001",
+      "releaseYearNA": 1991,
+      "manufacturerOrPublisher": "Nintendo",
+      "summary": "The original curvy US model.",
+      "priceLoose": 90,
+      "priceComplete": 300,
+      "priceSealed": 6000
+    },
+    {
+      "slug": "snes-chrono-trigger",
+      "platformSlug": "snes",
+      "kind": "game",
+      "name": "Chrono Trigger",
+      "releaseYearNA": 1995,
+      "manufacturerOrPublisher": "Square",
+      "developer": "Square",
+      "genre": "RPG",
+      "summary": "Dream-team JRPG.",
+      "imageURL": "https://example.com/ct.png",
+      "imageCredit": "Box art",
+      "imageLicense": "Publisher artwork",
+      "priceLoose": 130,
+      "priceComplete": 450,
+      "priceSealed": 15000,
+      "priceGraded": 22000,
+      "salesVolumeYearly": 140
+    }
+  ]
+}
