@@ -33,12 +33,13 @@ final class CatalogSyncService {
         return nil
     }
 
-    /// Fetch + reconcile. Safe to call on every launch and from a manual button.
-    func sync(into context: ModelContext) async {
+    /// Fetch + reconcile. Safe to call on every launch; pass `forceReload` from a
+    /// manual "Sync now" to bypass the HTTP cache entirely.
+    func sync(into context: ModelContext, forceReload: Bool = false) async {
         guard phase != .syncing else { return }
         phase = .syncing
         do {
-            let feed = try await repository.fetchCatalog()
+            let feed = try await repository.fetchCatalog(forceReload: forceReload)
             try await reconcile(feed, into: context)
             if context.hasChanges { try context.save() }
             phase = .synced(.now)

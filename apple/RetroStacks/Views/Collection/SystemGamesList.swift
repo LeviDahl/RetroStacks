@@ -14,6 +14,7 @@ struct SystemGamesList: View {
     private var liveEntries: [CollectionItem]
 
     @State private var scope: Scope = .all
+    @State private var quickAddTarget: CatalogItem?
     @AppStorage("system.kindFilter") private var kindRaw = KindFilter.games.rawValue
     @AppStorage("system.sortField") private var sortRaw = SortField.title.rawValue
 
@@ -166,8 +167,14 @@ struct SystemGamesList: View {
                         catalogItem: catalogItem,
                         listStatus: mode.status,
                         onAdd: {
-                            withAnimation {
-                                _ = CollectionActions.add(catalogItem, status: mode.status, in: modelContext)
+                            // Owned copies get the quick-add modal (completeness +
+                            // condition); a wishlist add has nothing to configure.
+                            if mode.status == .owned {
+                                quickAddTarget = catalogItem
+                            } else {
+                                withAnimation {
+                                    _ = CollectionActions.add(catalogItem, status: mode.status, in: modelContext)
+                                }
                             }
                         }
                     )
@@ -195,6 +202,19 @@ struct SystemGamesList: View {
                     Label(emptyTitle, systemImage: scope == .missing ? "checkmark.circle" : mode.status.symbol)
                 } description: {
                     Text(emptyMessage)
+                }
+            }
+        }
+        .sheet(item: $quickAddTarget) { item in
+            QuickAddSheet(catalogItem: item) { completeness, condition in
+                withAnimation {
+                    _ = CollectionActions.add(
+                        item,
+                        status: .owned,
+                        completeness: completeness,
+                        condition: condition,
+                        in: modelContext
+                    )
                 }
             }
         }

@@ -12,15 +12,18 @@ enum CollectionActions {
     static func add(
         _ catalogItem: CatalogItem,
         status: CollectionStatus = .owned,
+        completeness: Completeness? = nil,
+        condition: ConditionGrade? = nil,
         in context: ModelContext
     ) -> CollectionItem {
         if let existing = catalogItem.entry(for: status) { return existing }
+        let owned = status == .owned
         let entry = CollectionItem(
             catalogItem: catalogItem,
             status: status,
-            condition: status == .owned ? .good : nil,
-            completeness: status == .owned ? .loose : nil,
-            playStatus: catalogItem.kind == .game && status == .owned ? .backlog : nil
+            condition: condition ?? (owned ? .good : nil),
+            completeness: completeness ?? (owned ? .loose : nil),
+            playStatus: catalogItem.kind == .game && owned ? .backlog : nil
         )
         context.insert(entry)
         try? context.save()

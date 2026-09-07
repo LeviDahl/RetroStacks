@@ -1,8 +1,13 @@
 import Foundation
 
 nonisolated protocol CatalogRepository: Sendable {
-    func fetchCatalog() async throws -> CatalogFeed
-    func fetchPriceGuides() async throws -> PriceGuideFeed
+    func fetchCatalog(forceReload: Bool) async throws -> CatalogFeed
+    func fetchPriceGuides(forceReload: Bool) async throws -> PriceGuideFeed
+}
+
+extension CatalogRepository {
+    func fetchCatalog() async throws -> CatalogFeed { try await fetchCatalog(forceReload: false) }
+    func fetchPriceGuides() async throws -> PriceGuideFeed { try await fetchPriceGuides(forceReload: false) }
 }
 
 nonisolated enum CatalogError: Error, CustomStringConvertible {
@@ -19,26 +24,38 @@ nonisolated enum CatalogError: Error, CustomStringConvertible {
     }
 }
 
-/// Fetches the static feed. Relies on `URLCache` + the CDN's `ETag` /
-/// `Last-Modified` so repeat calls are cheap and it works offline once warm.
+/// Fetches the static feed. Always **revalidates with the origin** (cheap 304 via
+/// ETag when unchanged) rather than trusting `max-age`, so a fresh publish is
+/// picked up on the next launch without a re-download — and `forceReload` skips
+/// the cache entirely for a manual "Sync now". Falls back to the cache offline.
 nonisolated struct RemoteCatalogRepository: CatalogRepository {
     var session: URLSession = .shared
 
-    func fetchCatalog() async throws -> CatalogFeed {
-        try await get(BackendConfig.catalogURL)
+    func fetchCatalog(forceReload: Bool) async throws -> CatalogFeed {
+        try await get(BackendConfig.catalogURL, forceReload: forceReload)
     }
 
-    func fetchPriceGuides() async throws -> PriceGuideFeed {
-        try await get(BackendConfig.priceGuideURL)
+    func fetchPriceGuides(forceReload: Bool) async throws -> PriceGuideFeed {
+        try await get(BackendConfig.priceGuideURL, forceReload: forceReload)
     }
 
-    private func get<T: Decodable>(_ url: URL) async throws -> T {
-        let request = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 20)
+    private func get<T: Decodable>(_ url: URL, forceReload: Bool) async throws -> T {
+        let policy: URLRequest.CachePolicy = forceReload
+            ? .reloadIgnoringLocalCacheData
+            : .reloadRevalidatingCacheData
+        let request = URLRequest(url: url, cachePolicy: policy, timeoutInterval: 20)
+
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            // Offline / unreachable: fall back to whatever's cached.
+            if !forceReload,
+               let cached = URLCache.shared.cachedResponse(for: request)?.data,
+               let decoded = try? JSONDecoder.retroStacksFeed.decode(T.self, from: cached) {
+                return decoded
+            }
             throw CatalogError.transport(error.localizedDescription)
         }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {

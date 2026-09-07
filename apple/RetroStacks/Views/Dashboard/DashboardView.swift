@@ -54,7 +54,7 @@ struct DashboardView: View {
                     Toggle("Platform Breakdown", isOn: $showBreakdown)
                     Divider()
                     Button {
-                        Task { await sync.sync(into: modelContext) }
+                        Task { await sync.sync(into: modelContext, forceReload: true) }
                     } label: {
                         Label(syncMenuLabel, systemImage: "arrow.triangle.2.circlepath")
                     }
