@@ -7,7 +7,7 @@ import SwiftData
 /// scattering `.navigationDestination` through child views — a type may only be
 /// registered once per stack.
 extension View {
-    func gameTrackerDestinations() -> some View {
+    func appNavigationDestinations() -> some View {
         self
             .navigationDestination(for: CatalogItem.self) { CatalogItemDetailView(item: $0) }
             .navigationDestination(for: CollectionItem.self) { CollectionItemDetailView(item: $0) }

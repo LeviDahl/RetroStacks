@@ -34,7 +34,7 @@ struct CatalogSection: View {
                     )
                 }
             }
-            .gameTrackerDestinations()
+            .appNavigationDestinations()
         }
         .navigationTitle("Catalog")
         .searchable(text: $viewModel.searchText, prompt: "Search consoles, games, accessories")

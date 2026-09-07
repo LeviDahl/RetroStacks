@@ -18,6 +18,8 @@ struct DashboardView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
+                collectionHeader
+
                 statGrid
 
                 if showBreakdown && !systemSummaries.isEmpty {
@@ -30,7 +32,7 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(.background)
-        .gameTrackerDestinations()
+        .appNavigationDestinations()
         .navigationTitle("Dashboard")
         .toolbar {
             ToolbarItem {
@@ -47,6 +49,52 @@ struct DashboardView: View {
                     Label("Browse Catalog", systemImage: "books.vertical")
                 }
             }
+        }
+    }
+
+    /// Retro Game Collector-style headline: the one big number, with context.
+    /// Trailing stat cluster drops out when the width is tight (phones) — the
+    /// same figures are in the stat grid right below.
+    private var collectionHeader: some View {
+        let games = stats.ownedByKind[.game] ?? 0
+        let systems = systemSummaries.count
+
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 16) {
+                bigNumber(games)
+                Spacer(minLength: 8)
+                HStack(spacing: 22) {
+                    headerStat("\(systems)", systems == 1 ? "system" : "systems")
+                    headerStat("\(stats.ownedCount)", "items")
+                    headerStat(Money.string(stats.estimatedValue), "est. value")
+                }
+            }
+            bigNumber(games)
+        }
+    }
+
+    private func bigNumber(_ games: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(games, format: .number)
+                .font(.system(size: 46, weight: .bold, design: .rounded))
+                .contentTransition(.numericText())
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(games == 1 ? "game in your collection" : "games in your collection")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func headerStat(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text(value)
+                .font(.title3.weight(.semibold).monospacedDigit())
+                .lineLimit(1)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

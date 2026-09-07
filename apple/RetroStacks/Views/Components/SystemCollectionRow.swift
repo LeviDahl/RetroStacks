@@ -7,6 +7,8 @@ import SwiftData
 struct SystemCollectionRow: View {
     var summary: CollectionStats.SystemSummary
 
+    private var accent: Color { PlatformPalette.color(for: summary.platformSlug) }
+
     private var countText: String {
         summary.catalogGameCount > 0
             ? "\(summary.ownedGameCount)/\(summary.catalogGameCount)"
@@ -15,6 +17,11 @@ struct SystemCollectionRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(accent)
+                .frame(width: 4)
+                .frame(maxHeight: .infinity)
+
             ItemThumbnail(
                 kind: .console,
                 platformSymbol: summary.iconSystemName,
@@ -44,13 +51,14 @@ struct SystemCollectionRow: View {
                 if summary.catalogGameCount > 0 {
                     ProgressView(value: summary.completionRatio)
                         .progressViewStyle(.linear)
-                        .tint(.accentColor)
+                        .tint(accent)
                         .frame(maxWidth: 240)
                 }
             }
 
             Spacer(minLength: 8)
         }
+        .frame(minHeight: 54)
         .padding(.vertical, 6)
         .contentShape(Rectangle())
     }

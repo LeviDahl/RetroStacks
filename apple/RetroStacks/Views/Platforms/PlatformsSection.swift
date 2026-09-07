@@ -48,7 +48,7 @@ struct PlatformsSection: View {
                     )
                 }
             }
-            .gameTrackerDestinations()
+            .appNavigationDestinations()
         }
         .navigationTitle("Platforms")
         .searchable(text: $searchText, prompt: "Search platforms")
