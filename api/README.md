@@ -44,8 +44,12 @@ data source  ──▶  build.mjs  ──▶  api/dist/            (gitignored; 
   consoles + accessories, verified art. Regenerate from the app's `SampleData`
   with **`api/build/export-catalog.swift`**. On merge, curated wins over any
   generated game with a matching title (keeps its slug + prices).
-- **`api/build/pricing/pricecharting.mjs`** — skeleton enricher. `refreshPrices(items)`
-  returns per-slug price patches (pennies → dollars, 1 req/sec cap).
+- **`api/build/pricing/pricecharting.mjs`** — implemented, **dormant by default**.
+  `refreshPrices(items)` returns per-slug price patches (pennies → dollars). Runs
+  only with `PRICECHARTING_TOKEN` **and** `PRICECHARTING_ENABLE=1`; then it queries
+  un-priced games (newest first), `PRICECHARTING_MAX` per run (default 400),
+  `PRICECHARTING_DELAY_MS` apart (default 1100). Per-item errors are skipped, never
+  fatal.
 - **`.github/workflows/publish-data.yml`** — builds + deploys to GitHub Pages,
   nightly + on push to `api/**`. Live at `https://levidahl.github.io/RetroStacks/`.
 
@@ -77,8 +81,12 @@ doesn't change.
 HTTPS* in Settings → Pages once GitHub enables it.
 
 ## TODO
-- [ ] Invert the source of truth: bundle `catalog.json`, have `SampleData` decode it
-- [ ] Grow the real catalog beyond the sample set
+- [ ] Invert the source of truth: bundle `curated.json`, have `SampleData` decode it
+      (kills the Swift/JSON duplication — but changes first-launch seeding, so
+      wants a deliberate go-ahead)
+- [ ] Grow the real catalog beyond the 6 cartridge systems — disc systems
+      (PS1/PS2/DC/GCN) need IGDB or TheGamesDB (API key) for metadata
+- [ ] Nightly PriceCharting CSV ingest (Legendary tier) instead of per-item calls
 - [ ] Implement a DB source (`sources/mysql.mjs` or `sources/supabase.mjs`) when the
       catalog outgrows a hand-maintained file
 

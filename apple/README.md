@@ -18,7 +18,10 @@ Everything below is relative to this `apple/` directory. Sources live in
 | Wishlist | ✅ same surface, `.wishlist` status |
 | Catalog browser | ✅ poster grid (macOS) / list (iOS), filters, detail, "Add to Collection" |
 | Platforms | ✅ per-system browsing with console/game/accessory tabs |
-| Photos, barcode scan, valuation API, EU/JP regions | ⛔️ stubbed in the model, no UI |
+| System drill-down | ✅ Owned/Missing/All scope, kind + sort, quick-add modal, bulk add, wishlist toggle, A–Z scrubber |
+| Photos | ✅ `PhotosPicker` in the edit form (downscaled JPEG in `photoData`) |
+| Backup | ✅ JSON archive (round-trip) + CSV export |
+| Barcode scan, valuation API, EU/JP regions | ⛔️ stubbed in the model, no UI |
 
 ## Platform layout philosophy
 
@@ -140,14 +143,15 @@ Full source also type-checks under Swift 6 against the macOS 26 and iOS 26 SDKs.
 
 ## Next steps (suggested)
 
-- Replace `SampleData` with a `CatalogRepository` protocol + REST implementation
-  once the domain/API is registered; the mock stays as the preview/offline path.
-- Add a `RemotePricingProvider` (hits our `/price-guide` endpoint) and drop it in
-  ahead of `SampleGuideProvider` in `PricingService.makeDefault()`.
-- Add `PhotosPicker` binding to `CollectionItem.photoData`.
+- ~~Replace `SampleData` with a `CatalogRepository` + remote implementation~~ —
+  done: `RemoteCatalogRepository` + `CatalogSyncService`; `SampleData` is now the
+  first-launch seed + offline fallback + previews.
+- ~~Add a `RemotePricingProvider`~~ — done, ahead of `SampleGuideProvider`.
+- ~~Add `PhotosPicker` binding to `CollectionItem.photoData`~~ — done.
 - Real box-art assets keyed by `CatalogItem.imageName`.
 - Region switching for EU / JP (`Region` enum + `Platform.regionsAvailable` already model it).
-- Valuation history + charts (Swift Charts) on the collection detail.
+- Valuation history + charts (Swift Charts) on the collection detail — needs the
+  feed to carry price history first.
 
 ## Rename history
 
