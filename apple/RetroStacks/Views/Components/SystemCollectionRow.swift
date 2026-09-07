@@ -36,7 +36,7 @@ struct SystemCollectionRow: View {
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
 
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     Label(countText, systemImage: "gamecontroller")
                     if summary.catalogGameCount > 0 {
                         Label("\(summary.completionPercent)%", systemImage: "chart.pie")
@@ -47,6 +47,7 @@ struct SystemCollectionRow: View {
                 .foregroundStyle(.secondary)
                 .labelStyle(.titleAndIcon)
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
 
                 if summary.catalogGameCount > 0 {
                     ProgressView(value: summary.completionRatio)

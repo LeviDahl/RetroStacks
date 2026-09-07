@@ -254,11 +254,14 @@ private struct BreakdownBar: View {
     var valueText: String
     var subText: String?
 
+    @Environment(\.horizontalSizeClass) private var hSize
+    private var compact: Bool { hSize == .compact }
+
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: compact ? 8 : 12) {
             Text(shortName)
                 .font(.callout.weight(.medium))
-                .frame(width: 54, alignment: .leading)
+                .frame(width: compact ? 46 : 54, alignment: .leading)
                 .lineLimit(1)
 
             GeometryReader { proxy in
@@ -280,9 +283,9 @@ private struct BreakdownBar: View {
             Text(valueText)
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 78, alignment: .trailing)
+                .frame(width: compact ? 64 : 78, alignment: .trailing)
 
-            if let subText {
+            if let subText, !compact {
                 Text(subText)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.tertiary)

@@ -93,13 +93,15 @@ struct CollectionSection: View {
                 Text("\(systemCount) system\(systemCount == 1 ? "" : "s")")
                 Text("·")
                 Text("\(itemCount) \(mode == .wishlist ? "wanted" : "item\(itemCount == 1 ? "" : "s")")")
-                if mode == .collection {
+                if mode == .collection && value > 0 {
                     Text("·")
                     Text(Money.string(value))
                 }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
         }
         .padding(.horizontal, 14)
         .padding(.top, 10)
