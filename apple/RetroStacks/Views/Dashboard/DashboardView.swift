@@ -7,8 +7,20 @@ struct DashboardView: View {
     @Query private var collectionItems: [CollectionItem]
     @AppStorage("dashboard.showBreakdown") private var showBreakdown = true
 
+    @Environment(\.modelContext) private var modelContext
+    @State private var sync = CatalogSyncService.shared
+
     private var stats: CollectionStats {
         CollectionStatsBuilder.build(from: collectionItems)
+    }
+
+    private var syncMenuLabel: String {
+        switch sync.phase {
+        case .syncing: "Syncing catalog…"
+        case .synced(let date): "Catalog synced \(date.formatted(.relative(presentation: .named)))"
+        case .failed: "Catalog sync failed — retry"
+        case .idle: "Sync catalog now"
+        }
     }
 
     private var systemSummaries: [CollectionStats.SystemSummary] {
@@ -38,6 +50,13 @@ struct DashboardView: View {
             ToolbarItem {
                 Menu {
                     Toggle("Platform Breakdown", isOn: $showBreakdown)
+                    Divider()
+                    Button {
+                        Task { await sync.sync(into: modelContext) }
+                    } label: {
+                        Label(syncMenuLabel, systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(sync.phase == .syncing)
                 } label: {
                     Label("View Options", systemImage: "slider.horizontal.3")
                 }

@@ -69,6 +69,16 @@ nonisolated struct PricingProviderID: RawRepresentable, Hashable, Codable, Senda
     init(_ rawValue: String) { self.rawValue = rawValue }
     var description: String { rawValue }
 
+    // Encode as a bare string (`"sample_guide"`), not `{"rawValue": …}`, so the
+    // JSON wire format matches the data feed.
+    init(from decoder: Decoder) throws {
+        rawValue = try decoder.singleValueContainer().decode(String.self)
+    }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
     static let priceCharting = PricingProviderID("pricecharting")
     static let ebay          = PricingProviderID("ebay")
     static let ggDeals       = PricingProviderID("gg_deals")

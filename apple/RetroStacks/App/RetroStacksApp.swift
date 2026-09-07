@@ -3,8 +3,9 @@ import SwiftData
 
 @main
 struct RetroStacksApp: App {
-    /// One container for the whole app. Seeded with mock data on first launch;
-    /// swap `SampleData.seedIfNeeded` for a network sync later.
+    /// One container for the whole app. `SampleData` seeds it instantly on first
+    /// launch so the UI has content; `CatalogSyncService` then reconciles it with
+    /// the data feed in the background.
     let container: ModelContainer
 
     init() {
@@ -35,6 +36,9 @@ struct RetroStacksApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .task {
+                    await CatalogSyncService.shared.sync(into: container.mainContext)
+                }
         }
         .modelContainer(container)
         #if os(macOS)

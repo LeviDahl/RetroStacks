@@ -27,9 +27,10 @@ final class PricingService {
     static func makeDefault() -> PricingService {
         PricingService(providers: [
             PriceChartingProvider(),   // gold standard — active once a token is set
+            RemotePricingProvider(),   // the RetroStacks data feed (price-guide.json)
             EbayBrowseProvider(),      // redundancy for common items
             GGDealsProvider(),         // digital/modern titles
-            SampleGuideProvider(),     // always-on offline fallback
+            SampleGuideProvider(),     // always-on offline fallback (cached/seed values)
         ])
     }
 
