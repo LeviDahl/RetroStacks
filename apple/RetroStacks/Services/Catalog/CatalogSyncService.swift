@@ -39,7 +39,7 @@ final class CatalogSyncService {
         phase = .syncing
         do {
             let feed = try await repository.fetchCatalog()
-            try reconcile(feed, into: context)
+            try await reconcile(feed, into: context)
             if context.hasChanges { try context.save() }
             phase = .synced(.now)
         } catch {
@@ -49,7 +49,7 @@ final class CatalogSyncService {
 
     // MARK: - Reconcile
 
-    private func reconcile(_ feed: CatalogFeed, into context: ModelContext) throws {
+    private func reconcile(_ feed: CatalogFeed, into context: ModelContext) async throws {
         var platformsBySlug = Dictionary(
             try context.fetch(FetchDescriptor<Platform>()).map { ($0.slug, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -65,15 +65,21 @@ final class CatalogSyncService {
                 context.insert(platform)
                 platformsBySlug[fp.slug] = platform
             }
-            platform.name = fp.name
-            platform.shortName = fp.shortName
-            platform.manufacturer = fp.manufacturer
-            platform.generation = fp.generation
-            platform.releaseYearNA = fp.releaseYearNA
-            platform.discontinuedYearNA = fp.discontinuedYearNA
-            platform.summary = fp.summary
-            platform.iconSystemName = fp.iconSystemName
-            platform.regionsAvailable = fp.regions.compactMap(Region.init(rawValue:))
+            // Only write changed fields — the catalog is thousands of rows and
+            // this runs on every launch; equal-value assignments still dirty the row.
+            func set<V: Equatable>(_ kp: ReferenceWritableKeyPath<Platform, V>, _ v: V) {
+                if platform[keyPath: kp] != v { platform[keyPath: kp] = v }
+            }
+            set(\.name, fp.name)
+            set(\.shortName, fp.shortName)
+            set(\.manufacturer, fp.manufacturer)
+            set(\.generation, fp.generation)
+            set(\.releaseYearNA, fp.releaseYearNA)
+            set(\.discontinuedYearNA, fp.discontinuedYearNA)
+            set(\.summary, fp.summary)
+            set(\.iconSystemName, fp.iconSystemName)
+            let regions = fp.regions.compactMap(Region.init(rawValue:))
+            if platform.regionsAvailable != regions { platform.regionsAvailable = regions }
         }
 
         var itemsBySlug = Dictionary(
@@ -81,7 +87,13 @@ final class CatalogSyncService {
             uniquingKeysWith: { first, _ in first }
         )
 
+        var processed = 0
         for fi in feed.items {
+            processed += 1
+            if processed % 400 == 0 {
+                if context.hasChanges { try? context.save() }
+                await Task.yield()
+            }
             let kind = ItemKind(rawValue: fi.kind) ?? .game
             let item: CatalogItem
             if let existing = itemsBySlug[fi.slug] {
@@ -91,19 +103,23 @@ final class CatalogSyncService {
                 context.insert(item)
                 itemsBySlug[fi.slug] = item
             }
-            item.kind = kind
-            item.name = fi.name
-            item.variant = fi.variant
-            item.releaseYearNA = fi.releaseYearNA
-            item.manufacturerOrPublisher = fi.manufacturerOrPublisher
-            item.developer = fi.developer
-            item.genre = fi.genre
-            item.upc = fi.upc
-            item.summary = fi.summary
-            item.imageURLString = fi.imageURL
-            item.imageCredit = fi.imageCredit
-            item.imageLicense = fi.imageLicense
-            item.platform = platformsBySlug[fi.platformSlug]
+            func set<V: Equatable>(_ kp: ReferenceWritableKeyPath<CatalogItem, V>, _ v: V) {
+                if item[keyPath: kp] != v { item[keyPath: kp] = v }
+            }
+            if item.kind != kind { item.kind = kind }
+            set(\.name, fi.name)
+            set(\.variant, fi.variant)
+            set(\.releaseYearNA, fi.releaseYearNA)
+            set(\.manufacturerOrPublisher, fi.manufacturerOrPublisher)
+            set(\.developer, fi.developer)
+            set(\.genre, fi.genre)
+            set(\.upc, fi.upc)
+            set(\.summary, fi.summary)
+            set(\.imageURLString, fi.imageURL)
+            set(\.imageCredit, fi.imageCredit)
+            set(\.imageLicense, fi.imageLicense)
+            let platform = platformsBySlug[fi.platformSlug]
+            if item.platform?.slug != platform?.slug { item.platform = platform }
         }
     }
 }

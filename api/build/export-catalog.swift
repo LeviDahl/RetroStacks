@@ -1,4 +1,4 @@
-// Regenerates api/data/catalog.json from the app's SampleData — the current
+// Regenerates api/data/curated.json from the app's SampleData — the current
 // source of truth for the sample catalog. Run when SampleData changes:
 //
 //   cd apple/RetroStacks
@@ -6,7 +6,7 @@
 //     ../../api/build/export-catalog.swift \
 //     Models/*.swift Services/CollectionStats.swift Services/SampleData.swift \
 //     Services/Pricing/*.swift Views/Components/Formatting.swift \
-//     -o /tmp/export-catalog && /tmp/export-catalog > ../../api/data/catalog.json
+//     -o /tmp/export-catalog && /tmp/export-catalog > ../../api/data/curated.json
 //
 // (A follow-up will invert this so catalog.json is primary and SampleData
 // decodes it — see api/README.md.)

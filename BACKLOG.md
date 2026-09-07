@@ -31,14 +31,26 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 
 ## Data feed & backend
 
-- Implement `api/build/sources/{mysql,supabase}.mjs` when the catalog outgrows the
-  hand-maintained `api/data/catalog.json`.
+- **Disc-system catalogs** (PS1 / PS2 / Dreamcast / GameCube) — the
+  `api/build/ingest/libretro.mjs` script can list them, but libretro-database has
+  no genre/year/publisher for redump systems. Needs IGDB or TheGamesDB (both need
+  a key) for real metadata before pulling ~5k more games.
 - Implement `api/build/pricing/pricecharting.mjs` (token; 1 req/sec, or nightly CSV).
-- Grow the real catalog beyond the ~60 sample items.
-- Invert source of truth: bundle `catalog.json` in the app, have `SampleData`
-  decode it (kill the duplication).
-- Own image CDN (R2 / S3) — drop the Wikimedia / LibRetro hot-links, broaden
-  coverage, normalize sizes.
+  Right now only the ~66 curated items have prices; the ~3,500 imported games
+  show "no pricing yet".
+- **Bulk-sync perf** — first `CatalogSyncService` sync now inserts ~3,600 rows on
+  the main actor (chunked saves + `Task.yield` every 400, change-detection after).
+  If the catalog keeps growing, move `reconcile` to a background `ModelContext` /
+  `ModelActor`, or split the feed per-platform and sync lazily.
+- Invert source of truth: bundle `curated.json` in the app, have `SampleData`
+  decode it (kill the Swift/JSON duplication).
+- Slug scheme: curated uses short slugs (`nes-smb3`), generated uses
+  `nes-super-mario-bros-3`. Merge dedups by normalized title, but a full switch to
+  the generated scheme would need a one-time slug migration for existing rows.
+- Implement `api/build/sources/{mysql,supabase}.mjs` when the catalog outgrows the
+  file-based source.
+- Own image CDN (R2 / S3) — drop the Wikimedia / Libretro hot-links, broaden
+  coverage, normalize sizes; many imported games have no boxart on the CDN.
 
 ## Multi-user (Phase 1+)
 

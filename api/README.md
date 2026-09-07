@@ -28,16 +28,24 @@ data source  ──▶  build.mjs  ──▶  api/dist/            (gitignored; 
   enricher, emits the `v1/*.json` files. `SOURCE`, `FEED_CNAME`,
   `PRICECHARTING_TOKEN` are env vars (wired to repo variables/secrets in the
   workflow).
-- **`api/build/sources/`** — the swap point. `local-file.mjs` reads
-  `api/data/catalog.json` (the current source of truth). `mysql.mjs` /
+- **`api/build/sources/`** — the swap point. `local-file.mjs` merges
+  `api/data/curated.json` + `api/data/generated/*.json`. `mysql.mjs` /
   `supabase.mjs` are **skeletons**: implement `loadCatalog()` to return the shape
   `local-file.mjs` documents and the rest of the pipeline is unchanged.
+- **`api/build/ingest/libretro.mjs`** — pulls a US game catalog per platform from
+  **libretro-database** (No-Intro / Redump lists + genre/year/publisher/developer
+  metadata) → `api/data/generated/<platform>.json`. Cartridge systems only for now
+  (NES, SNES, Genesis, N64, Game Boy, Atari 2600 — ~3,550 games); libretro-database
+  has no genre/year/publisher for disc systems, so those wait on IGDB/TheGamesDB.
+  Filters to licensed US releases (drops proto/beta/homebrew/multicart/re-release
+  compilations; keeps only titles with metadata). Box art URLs point at the
+  Libretro thumbnails CDN.
+- **`api/data/curated.json`** — the hand-authored set: prices, rich summaries,
+  consoles + accessories, verified art. Regenerate from the app's `SampleData`
+  with **`api/build/export-catalog.swift`**. On merge, curated wins over any
+  generated game with a matching title (keeps its slug + prices).
 - **`api/build/pricing/pricecharting.mjs`** — skeleton enricher. `refreshPrices(items)`
   returns per-slug price patches (pennies → dollars, 1 req/sec cap).
-- **`api/data/catalog.json`** — canonical catalog for the `local-file` source.
-  Regenerate from the app's `SampleData` with **`api/build/export-catalog.swift`**
-  when SampleData changes (see its header). *Follow-up: invert this so
-  `catalog.json` is primary and `SampleData` decodes the bundled copy.*
 - **`.github/workflows/publish-data.yml`** — builds + deploys to GitHub Pages,
   nightly + on push to `api/**`. Live at `https://levidahl.github.io/RetroStacks/`.
 
