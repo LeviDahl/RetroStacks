@@ -15,6 +15,21 @@ struct SystemGamesList: View {
 
     @State private var scope: Scope = .all
     @AppStorage("system.kindFilter") private var kindRaw = KindFilter.games.rawValue
+    @AppStorage("system.sortField") private var sortRaw = SortField.title.rawValue
+
+    enum SortField: String, CaseIterable, Identifiable {
+        case title, releaseYear, publisher, value
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .title: "Title"
+            case .releaseYear: "Release Year"
+            case .publisher: "Publisher"
+            case .value: "Value"
+            }
+        }
+    }
+    private var sortField: SortField { SortField(rawValue: sortRaw) ?? .title }
 
     enum Scope: String, CaseIterable, Identifiable {
         case inList, missing, all
@@ -55,15 +70,31 @@ struct SystemGamesList: View {
 
     private var catalog: [CatalogItem] {
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        return platform.catalogItems
-            .filter { item in
-                (kindFilter.kind == nil || item.kind == kindFilter.kind)
-                    && (q.isEmpty
-                        || item.name.lowercased().contains(q)
-                        || (item.variant?.lowercased().contains(q) ?? false)
-                        || (item.manufacturerOrPublisher?.lowercased().contains(q) ?? false))
+        let filtered = platform.catalogItems.filter { item in
+            (kindFilter.kind == nil || item.kind == kindFilter.kind)
+                && (q.isEmpty
+                    || item.name.lowercased().contains(q)
+                    || (item.variant?.lowercased().contains(q) ?? false)
+                    || (item.manufacturerOrPublisher?.lowercased().contains(q) ?? false))
+        }
+        return filtered.sorted { a, b in
+            switch sortField {
+            case .title:
+                return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+            case .releaseYear:
+                return (a.releaseYearNA ?? .max, a.name.lowercased())
+                    < (b.releaseYearNA ?? .max, b.name.lowercased())
+            case .publisher:
+                return (a.manufacturerOrPublisher ?? "~", a.name.lowercased())
+                    < (b.manufacturerOrPublisher ?? "~", b.name.lowercased())
+            case .value:
+                let av = a.entry(for: mode.status)?.estimatedValue ?? a.headlineValue ?? 0
+                let bv = b.entry(for: mode.status)?.estimatedValue ?? b.headlineValue ?? 0
+                return av == bv
+                    ? a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+                    : av > bv
             }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
     }
 
     private func inList(_ c: CatalogItem) -> Bool { c.entry(for: mode.status) != nil }
@@ -102,12 +133,18 @@ struct SystemGamesList: View {
                     .labelsHidden()
 
                     Menu {
-                        Picker("Kind", selection: $kindRaw) {
+                        Picker("Show", selection: $kindRaw) {
                             ForEach(KindFilter.allCases) { Text($0.label).tag($0.rawValue) }
                         }
                         .pickerStyle(.inline)
+                        Divider()
+                        Picker("Sort by", selection: $sortRaw) {
+                            ForEach(SortField.allCases) { Text($0.label).tag($0.rawValue) }
+                        }
+                        .pickerStyle(.inline)
                     } label: {
-                        Label(kindFilter.label, systemImage: "line.3.horizontal.decrease.circle")
+                        Label("\(kindFilter.label) · \(sortField.label)",
+                              systemImage: "line.3.horizontal.decrease.circle")
                             .labelStyle(.iconOnly)
                     }
                     .menuStyle(.borderlessButton)
@@ -277,6 +314,10 @@ struct SystemSummaryStrip: View {
             metric("Complete", summary.catalogGameCount > 0 ? "\(summary.completionPercent)%" : "—")
             Divider().frame(height: 34)
             metric("Value", Money.string(summary.value))
+            if summary.remainingValue > 0 {
+                Divider().frame(height: 34)
+                metric("To finish", Money.string(summary.remainingValue))
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
@@ -285,7 +326,7 @@ struct SystemSummaryStrip: View {
 
     private func metric(_ label: String, _ value: String) -> some View {
         VStack(spacing: 3) {
-            Text(value).font(.headline.monospacedDigit())
+            Text(value).font(.headline.monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
             Text(label).font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)

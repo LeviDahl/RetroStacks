@@ -29,6 +29,9 @@ struct CollectionStats {
         var ownedGameCount: Int
         var catalogGameCount: Int
         var value: Decimal
+        /// Sum of reference prices for catalogued games on this platform you
+        /// don't own — roughly "what finishing the set would cost".
+        var remainingValue: Decimal
         /// 0…1, `ownedGameCount / catalogGameCount` (0 when the catalog has no games yet).
         var completionRatio: Double
 
@@ -92,7 +95,12 @@ enum CollectionStatsBuilder {
         return groups.compactMap { slug, group -> CollectionStats.SystemSummary? in
             guard let platform = group.first?.catalogItem?.platform else { return nil }
             let ownedGames = group.filter { $0.kind == .game }.count
-            let catalogGames = platform.games.count
+            let games = platform.games
+            let ownedSlugs = Set(group.compactMap { $0.catalogItem?.slug })
+            let remaining = games
+                .filter { !ownedSlugs.contains($0.slug) }
+                .compactMap(\.headlineValue)
+                .reduce(Decimal(0), +)
             let hero = (platform.consoles.first { $0.imageURL != nil } ?? platform.consoles.first)?.imageURL
             return CollectionStats.SystemSummary(
                 platformSlug: slug,
@@ -102,10 +110,11 @@ enum CollectionStatsBuilder {
                 heroImageURL: hero,
                 ownedItemCount: group.count,
                 ownedGameCount: ownedGames,
-                catalogGameCount: catalogGames,
+                catalogGameCount: games.count,
                 value: group.compactMap(\.estimatedValue).reduce(0, +),
-                completionRatio: catalogGames > 0
-                    ? min(1, Double(ownedGames) / Double(catalogGames)) : 0
+                remainingValue: remaining,
+                completionRatio: games.count > 0
+                    ? min(1, Double(ownedGames) / Double(games.count)) : 0
             )
         }
         .sorted { ($0.ownedItemCount, $0.value) > ($1.ownedItemCount, $1.value) }
