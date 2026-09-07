@@ -54,7 +54,18 @@ DNS is set.
 - [ ] Point `data.retrostacks.com` at it (GoDaddy `CNAME` → `<owner>.github.io`) and set `BackendConfig.baseURL`
 - [ ] Invert the source of truth: bundle `catalog.json`, have `SampleData` decode it
 - [ ] Grow the real catalog beyond the ~50 sample items
-- [ ] CloudKit for `CollectionItem` (needs the iCloud capability in Xcode + dropping `@Attribute(.unique)`)
+
+## Collection data (no iCloud)
+
+No Apple Developer account → no CloudKit / iCloud KVS / iCloud Documents.
+Current: **local JSON export/import** (`CollectionArchive` ⇄ `.json` via
+`fileExporter`/`fileImporter`, Merge or Replace). Backup + manual "sync" by
+putting the file in a folder Dropbox/Drive already syncs.
+
+Automatic multi-device sync, if wanted later, would be **Supabase** (Postgres +
+email/magic-link auth, no Apple account) or a tiny **Cloudflare Worker + token** —
+that's also where accounts/subscriptions would live for monetization (which
+itself needs the $99/yr Apple Developer Program, blocked for now).
 
 ## Pricing (adapter layer — schema already lives in the app)
 
