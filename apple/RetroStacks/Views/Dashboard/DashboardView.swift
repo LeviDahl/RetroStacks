@@ -4,11 +4,13 @@ import SwiftData
 struct DashboardView: View {
     var onSelectSection: (AppSection) -> Void = { _ in }
 
-    @Query private var collectionItems: [CollectionItem]
+    @Query(filter: #Predicate<CollectionItem> { $0.deletedAt == nil })
+    private var collectionItems: [CollectionItem]
     @AppStorage("dashboard.showBreakdown") private var showBreakdown = true
 
     @Environment(\.modelContext) private var modelContext
     @State private var sync = CatalogSyncService.shared
+    @State private var account = AccountService.shared
 
     private var stats: CollectionStats {
         CollectionStatsBuilder.build(from: collectionItems)
@@ -57,6 +59,9 @@ struct DashboardView: View {
                         Label(syncMenuLabel, systemImage: "arrow.triangle.2.circlepath")
                     }
                     .disabled(sync.phase == .syncing)
+                    Divider()
+                    Label(account.summary, systemImage: "person.crop.circle")
+                        .disabled(true)
                 } label: {
                     Label("View Options", systemImage: "slider.horizontal.3")
                 }

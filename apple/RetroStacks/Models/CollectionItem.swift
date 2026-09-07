@@ -42,6 +42,16 @@ final class CollectionItem {
 
     var dateAdded: Date
 
+    // MARK: Sync bookkeeping (Phase 0 — no sync engine wired yet)
+
+    /// Last local mutation. Bumped via `touch()`; the basis for last-write-wins
+    /// once a `CollectionSyncEngine` is connected.
+    var updatedAt: Date = Date.now
+
+    /// Tombstone. `nil` = live. Set by `markDeleted()` instead of a hard delete
+    /// so the removal can propagate to other devices later. Queries filter these out.
+    var deletedAt: Date?
+
     var status: CollectionStatus {
         get { CollectionStatus(rawValue: statusRaw) ?? .owned }
         set { statusRaw = newValue.rawValue }
@@ -114,6 +124,7 @@ final class CollectionItem {
         self.photoData = photoData
         self.playStatusRaw = playStatus?.rawValue
         self.dateAdded = dateAdded
+        self.updatedAt = dateAdded
     }
 }
 
@@ -124,6 +135,20 @@ extension CollectionItem {
         let id = UUID()
         exportID = id
         return id
+    }
+
+    var isDeleted: Bool { deletedAt != nil }
+
+    /// Call after any local mutation so sync can order writes.
+    func touch(_ date: Date = .now) {
+        updatedAt = date
+    }
+
+    /// Soft delete — mark a tombstone instead of removing the row, so the
+    /// deletion can sync to other devices later. Nothing prunes tombstones yet.
+    func markDeleted(_ date: Date = .now) {
+        deletedAt = date
+        updatedAt = date
     }
 
     var title: String { catalogItem?.displayTitle ?? "Unknown Item" }

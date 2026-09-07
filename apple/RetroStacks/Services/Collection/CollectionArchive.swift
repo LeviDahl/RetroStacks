@@ -36,6 +36,7 @@ nonisolated struct CollectionArchive: Codable, Sendable {
         var notes: String
         var playStatus: String?
         var dateAdded: Date
+        var updatedAt: Date?          // absent in v1 archives
         var photosBase64: [String]
     }
 
@@ -47,6 +48,7 @@ nonisolated struct CollectionArchive: Codable, Sendable {
     static func make(from items: [CollectionItem]) -> CollectionArchive {
         CollectionArchive(
             entries: items
+                .filter { !$0.isDeleted }
                 .sorted { $0.dateAdded < $1.dateAdded }
                 .map { item in
                     Entry(
@@ -71,6 +73,7 @@ nonisolated struct CollectionArchive: Codable, Sendable {
                         notes: item.notes,
                         playStatus: item.playStatus?.rawValue,
                         dateAdded: item.dateAdded,
+                        updatedAt: item.updatedAt,
                         photosBase64: item.photoData.map { $0.base64EncodedString() }
                     )
                 }
@@ -129,6 +132,8 @@ nonisolated struct CollectionArchive: Codable, Sendable {
             item.playStatus = entry.playStatus.flatMap(PlayStatus.init(rawValue:))
             item.dateAdded = entry.dateAdded
             item.photoData = entry.photosBase64.compactMap { Data(base64Encoded: $0) }
+            item.deletedAt = nil   // importing an entry means it's live
+            item.updatedAt = entry.updatedAt ?? entry.dateAdded
         }
 
         try context.save()

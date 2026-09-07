@@ -9,7 +9,9 @@ struct SystemGamesList: View {
     var searchText: String = ""
 
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \CollectionItem.dateAdded, order: .reverse) private var allItems: [CollectionItem]
+    @Query(filter: #Predicate<CollectionItem> { $0.deletedAt == nil },
+           sort: \CollectionItem.dateAdded, order: .reverse)
+    private var allItems: [CollectionItem]
 
     private var items: [CollectionItem] {
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
@@ -66,7 +68,7 @@ struct SystemGamesList: View {
     }
 
     private func delete(_ item: CollectionItem) {
-        modelContext.delete(item)
+        item.markDeleted()
         try? modelContext.save()
     }
 }

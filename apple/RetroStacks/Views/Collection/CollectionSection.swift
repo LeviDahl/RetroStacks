@@ -27,7 +27,9 @@ struct CollectionSection: View {
     var mode: Mode
 
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \CollectionItem.dateAdded, order: .reverse) private var allItems: [CollectionItem]
+    @Query(filter: #Predicate<CollectionItem> { $0.deletedAt == nil },
+           sort: \CollectionItem.dateAdded, order: .reverse)
+    private var allItems: [CollectionItem]
     @Query(sort: \Platform.generation) private var platforms: [Platform]
 
     @State private var viewModel = CollectionListViewModel()
@@ -293,7 +295,7 @@ struct CollectionSection: View {
     }
 
     private func delete(_ item: CollectionItem) {
-        modelContext.delete(item)
+        item.markDeleted()
         try? modelContext.save()
     }
 

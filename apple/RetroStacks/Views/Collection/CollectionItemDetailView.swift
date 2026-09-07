@@ -5,6 +5,7 @@ struct CollectionItemDetailView: View {
     @Bindable var item: CollectionItem
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @State private var isEditing = false
     @State private var showDeleteConfirm = false
 
@@ -57,8 +58,9 @@ struct CollectionItemDetailView: View {
         }
         .confirmationDialog("Delete this item?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
-                modelContext.delete(item)
+                item.markDeleted()
                 try? modelContext.save()
+                dismiss()
             }
         }
     }
@@ -193,7 +195,7 @@ struct CollectionItemDetailView: View {
         Picker("Status", selection: $item.status) {
             ForEach(CollectionStatus.allCases) { Label($0.displayName, systemImage: $0.symbol).tag($0) }
         }
-        .onChange(of: item.status) { try? modelContext.save() }
+        .onChange(of: item.status) { item.touch(); try? modelContext.save() }
     }
 }
 

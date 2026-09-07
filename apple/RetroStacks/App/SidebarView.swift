@@ -4,7 +4,8 @@ import SwiftData
 struct SidebarView: View {
     @Binding var selection: AppSection
 
-    @Query private var collectionItems: [CollectionItem]
+    @Query(filter: #Predicate<CollectionItem> { $0.deletedAt == nil })
+    private var collectionItems: [CollectionItem]
     @Query(sort: \Platform.generation) private var platforms: [Platform]
 
     /// `List` on iOS only offers the optional-selection initializer; bridge the
