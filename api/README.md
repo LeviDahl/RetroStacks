@@ -36,10 +36,17 @@ data source  ──▶  build.mjs  ──▶  api/dist/            (gitignored; 
   **libretro-database** (No-Intro / Redump lists + genre/year/publisher/developer
   metadata) → `api/data/generated/<platform>.json`. Cartridge systems only for now
   (NES, SNES, Genesis, N64, Game Boy, Atari 2600 — ~3,550 games); libretro-database
-  has no genre/year/publisher for disc systems, so those wait on IGDB/TheGamesDB.
+  has no genre/year/publisher for disc systems, so those wait on IGDB.
   Filters to licensed US releases (drops proto/beta/homebrew/multicart/re-release
   compilations; keeps only titles with metadata). Box art URLs point at the
   Libretro thumbnails CDN.
+- **`api/build/ingest/igdb.mjs`** — the same job from the **IGDB API** (Twitch),
+  which *does* have metadata + region-aware release dates for disc systems. Writes
+  the identical `generated/<platform>.json` shape. Needs `IGDB_CLIENT_ID` +
+  `IGDB_CLIENT_SECRET` (free — an app at dev.twitch.tv); `--dry-run` prints the
+  APICalypse queries without a token. **Not wired into CI** — IGDB's 4 req/sec cap
+  makes a full pull minutes long, so run it by hand (or a weekly job), review the
+  diff, commit the JSON. build.mjs only ever reads the committed files.
 - **`api/data/curated.json`** — the hand-authored set: prices, rich summaries,
   consoles + accessories, verified art. Regenerate from the app's `SampleData`
   with **`api/build/export-catalog.swift`**. On merge, curated wins over any
@@ -84,8 +91,9 @@ HTTPS* in Settings → Pages once GitHub enables it.
 - [ ] Invert the source of truth: bundle `curated.json`, have `SampleData` decode it
       (kills the Swift/JSON duplication — but changes first-launch seeding, so
       wants a deliberate go-ahead)
-- [ ] Grow the real catalog beyond the 6 cartridge systems — disc systems
-      (PS1/PS2/DC/GCN) need IGDB or TheGamesDB (API key) for metadata
+- [ ] Grow the real catalog beyond the 6 cartridge systems — `ingest/igdb.mjs`
+      is ready; needs `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET`, then run it for the
+      disc systems (PS1/PS2/DC/GCN) and re-enrich the cartridge ones
 - [ ] Nightly PriceCharting CSV ingest (Legendary tier) instead of per-item calls
 - [ ] Implement a DB source (`sources/mysql.mjs` or `sources/supabase.mjs`) when the
       catalog outgrows a hand-maintained file
