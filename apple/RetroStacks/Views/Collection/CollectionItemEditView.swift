@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import SwiftData
 
@@ -8,6 +9,9 @@ struct CollectionItemEditView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+
+    @State private var photoPicks: [PhotosPickerItem] = []
+    @State private var importingPhotos = false
 
     var body: some View {
         Form {
@@ -106,6 +110,8 @@ struct CollectionItemEditView: View {
                 TextField("Notes", text: $item.notes, axis: .vertical)
                     .lineLimit(3...8)
             }
+
+            photosSection
         }
         .formStyle(.grouped)
         .navigationTitle("Edit Item")
@@ -128,6 +134,97 @@ struct CollectionItemEditView: View {
             }
         }
         .frame(minWidth: 420, minHeight: 520)
+    }
+
+    // MARK: - Photos
+
+    private var photosSection: some View {
+        Section {
+            if !item.photoData.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(item.photoData.enumerated()), id: \.offset) { index, data in
+                            photoThumbnail(data, at: index)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            PhotosPicker(
+                selection: $photoPicks,
+                maxSelectionCount: max(1, PhotoImport.maxPhotosPerItem - item.photoData.count),
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                Label(
+                    item.photoData.isEmpty ? "Add Photos" : "Add More Photos",
+                    systemImage: "photo.badge.plus"
+                )
+            }
+            .disabled(importingPhotos || item.photoData.count >= PhotoImport.maxPhotosPerItem)
+
+            if importingPhotos {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Adding photos…").foregroundStyle(.secondary)
+                }
+                .font(.caption)
+            }
+        } header: {
+            Text("Photos")
+        } footer: {
+            Text("Stored with your collection and included in exports. Up to \(PhotoImport.maxPhotosPerItem).")
+        }
+        .onChange(of: photoPicks) { _, picks in
+            guard !picks.isEmpty else { return }
+            loadPhotos(picks)
+        }
+    }
+
+    private func photoThumbnail(_ data: Data, at index: Int) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Group {
+                if let image = Image(photoData: data) {
+                    image.resizable().scaledToFill()
+                } else {
+                    Rectangle().fill(.quaternary)
+                        .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
+                }
+            }
+            .frame(width: 84, height: 84)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            Button {
+                item.photoData.remove(at: index)
+                item.touch()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.6))
+                    .font(.body)
+            }
+            .buttonStyle(.plain)
+            .padding(3)
+        }
+    }
+
+    private func loadPhotos(_ picks: [PhotosPickerItem]) {
+        importingPhotos = true
+        Task {
+            var added: [Data] = []
+            for pick in picks {
+                if let raw = try? await pick.loadTransferable(type: Data.self),
+                   let jpeg = PhotoImport.normalizedJPEG(from: raw) {
+                    added.append(jpeg)
+                }
+            }
+            let room = PhotoImport.maxPhotosPerItem - item.photoData.count
+            if room > 0 { item.photoData.append(contentsOf: added.prefix(room)) }
+            if !added.isEmpty { item.touch() }
+            photoPicks = []
+            importingPhotos = false
+        }
     }
 }
 

@@ -38,6 +38,7 @@ struct CollectionSection: View {
 
     // Backup / restore (local file — no iCloud).
     @State private var showExporter = false
+    @State private var showCSVExporter = false
     @State private var showImporter = false
     @State private var pendingImport: CollectionArchive?
     @State private var transferMessage: String?
@@ -90,6 +91,18 @@ struct CollectionSection: View {
                     transferMessage = "Export failed: \(error.localizedDescription)"
                 } else {
                     transferMessage = "Exported \(allItems.count) items."
+                }
+            }
+            .fileExporter(
+                isPresented: $showCSVExporter,
+                document: CollectionCSVDocument(text: CollectionCSV.string(from: allItems)),
+                contentType: .commaSeparatedText,
+                defaultFilename: exportFilename
+            ) { result in
+                if case .failure(let error) = result {
+                    transferMessage = "CSV export failed: \(error.localizedDescription)"
+                } else {
+                    transferMessage = "Exported \(allItems.count) items to CSV."
                 }
             }
             .fileImporter(
@@ -276,6 +289,11 @@ struct CollectionSection: View {
                     showExporter = true
                 } label: {
                     Label("Export Collection…", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    showCSVExporter = true
+                } label: {
+                    Label("Export as CSV…", systemImage: "tablecells")
                 }
                 Button {
                     showImporter = true
