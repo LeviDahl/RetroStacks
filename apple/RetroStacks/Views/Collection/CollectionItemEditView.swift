@@ -133,7 +133,7 @@ struct CollectionItemEditView: View {
 #Preview {
     let container = SampleData.previewContainer()
     let item = try! container.mainContext.fetch(FetchDescriptor<CollectionItem>()).first!
-    return NavigationStack {
+    NavigationStack {
         CollectionItemEditView(item: item)
     }
     .modelContainer(container)

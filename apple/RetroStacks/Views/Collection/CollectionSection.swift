@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// The user's collection (or wishlist). Defaults to a **system-first** view —
 /// a list of consoles you drill into — with an **All Games** toggle for a flat
@@ -32,6 +33,12 @@ struct CollectionSection: View {
     @State private var viewModel = CollectionListViewModel()
     @State private var path = NavigationPath()
     @State private var showingCatalogPicker = false
+
+    // Backup / restore (local file — no iCloud).
+    @State private var showExporter = false
+    @State private var showImporter = false
+    @State private var pendingImport: CollectionArchive?
+    @State private var transferMessage: String?
 
     /// Persisted per install. Default: drill into each system.
     @AppStorage("collection.groupBySystem") private var groupBySystem = true
@@ -70,6 +77,42 @@ struct CollectionSection: View {
                         prompt: groupBySystem ? "Search systems" : "Search \(mode.title.lowercased())")
             .sheet(isPresented: $showingCatalogPicker) {
                 AddToCollectionFlow(defaultStatus: mode.status)
+            }
+            .fileExporter(
+                isPresented: $showExporter,
+                document: CollectionDocument(archive: CollectionArchive.make(from: allItems)),
+                contentType: .json,
+                defaultFilename: exportFilename
+            ) { result in
+                if case .failure(let error) = result {
+                    transferMessage = "Export failed: \(error.localizedDescription)"
+                } else {
+                    transferMessage = "Exported \(allItems.count) items."
+                }
+            }
+            .fileImporter(
+                isPresented: $showImporter,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                handleImportPick(result)
+            }
+            .confirmationDialog(
+                pendingImport.map { "Import \($0.itemCount) items" } ?? "Import",
+                isPresented: Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } }),
+                titleVisibility: .visible,
+                presenting: pendingImport
+            ) { archive in
+                Button("Merge into my collection") { runImport(archive, mode: .merge) }
+                Button("Replace my collection", role: .destructive) { runImport(archive, mode: .replace) }
+                Button("Cancel", role: .cancel) { pendingImport = nil }
+            } message: { archive in
+                Text("From \(archive.exportedAt.formatted(date: .abbreviated, time: .shortened)).")
+            }
+            .alert("Collection", isPresented: Binding(get: { transferMessage != nil }, set: { if !$0 { transferMessage = nil } })) {
+                Button("OK", role: .cancel) { transferMessage = nil }
+            } message: {
+                Text(transferMessage ?? "")
             }
         }
         .onAppear { viewModel.statusFilter = mode.status }
@@ -225,13 +268,64 @@ struct CollectionSection: View {
                 Label("Add Item", systemImage: "plus")
             }
         }
+        ToolbarItem {
+            Menu {
+                Button {
+                    showExporter = true
+                } label: {
+                    Label("Export Collection…", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    showImporter = true
+                } label: {
+                    Label("Import Collection…", systemImage: "square.and.arrow.down")
+                }
+            } label: {
+                Label("Backup", systemImage: "ellipsis.circle")
+            }
+        }
     }
 
     // MARK: Actions
 
+    private var exportFilename: String {
+        "RetroStacks Collection \(Date.now.formatted(.iso8601.year().month().day()))"
+    }
+
     private func delete(_ item: CollectionItem) {
         modelContext.delete(item)
         try? modelContext.save()
+    }
+
+    private func handleImportPick(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure(let error):
+            transferMessage = "Couldn't open the file: \(error.localizedDescription)"
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let archive = try CollectionArchive.decode(Data(contentsOf: url))
+                pendingImport = archive
+            } catch {
+                transferMessage = "That file isn't a RetroStacks collection export."
+            }
+        }
+    }
+
+    private func runImport(_ archive: CollectionArchive, mode: CollectionArchive.ImportMode) {
+        pendingImport = nil
+        do {
+            let (inserted, updated, deleted) = try archive.restore(into: modelContext, mode: mode)
+            var parts: [String] = []
+            if inserted > 0 { parts.append("\(inserted) added") }
+            if updated > 0 { parts.append("\(updated) updated") }
+            if deleted > 0 { parts.append("\(deleted) removed") }
+            transferMessage = parts.isEmpty ? "Nothing to import." : "Imported: " + parts.joined(separator: ", ") + "."
+        } catch {
+            transferMessage = "Import failed: \(error.localizedDescription)"
+        }
     }
 }
 

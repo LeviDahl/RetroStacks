@@ -49,7 +49,7 @@ struct SidebarView: View {
 
 #Preview {
     @Previewable @State var selection: AppSection = .dashboard
-    return NavigationSplitView {
+    NavigationSplitView {
         SidebarView(selection: $selection)
     } detail: {
         Text(selection.title)

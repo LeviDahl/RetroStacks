@@ -68,7 +68,7 @@ struct CatalogPosterCard: View {
 #Preview {
     let container = SampleData.previewContainer()
     let items = try! container.mainContext.fetch(FetchDescriptor<CatalogItem>())
-    return ScrollView {
+    ScrollView {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 16)], spacing: 16) {
             ForEach(items.prefix(9).map { $0 }) { CatalogPosterCard(item: $0) }
         }

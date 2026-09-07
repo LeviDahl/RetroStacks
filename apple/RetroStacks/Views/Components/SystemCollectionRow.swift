@@ -69,6 +69,6 @@ struct SystemCollectionRow: View {
     let container = SampleData.previewContainer()
     let items = try! container.mainContext.fetch(FetchDescriptor<CollectionItem>())
     let summaries = CollectionStatsBuilder.systemSummaries(from: items, status: .owned)
-    return List(summaries) { SystemCollectionRow(summary: $0) }
+    List(summaries) { SystemCollectionRow(summary: $0) }
         .modelContainer(container)
 }

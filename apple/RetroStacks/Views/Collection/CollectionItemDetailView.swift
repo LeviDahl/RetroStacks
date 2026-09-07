@@ -259,7 +259,7 @@ private struct ChecklistRow: View {
     let container = SampleData.previewContainer()
     let all = try! container.mainContext.fetch(FetchDescriptor<CollectionItem>())
     let item = all.first { !$0.notes.isEmpty } ?? all[0]
-    return NavigationStack {
+    NavigationStack {
         CollectionItemDetailView(item: item)
     }
     .modelContainer(container)

@@ -60,6 +60,6 @@ struct CollectionItemRow: View {
 #Preview {
     let container = SampleData.previewContainer()
     let items = try! container.mainContext.fetch(FetchDescriptor<CollectionItem>())
-    return List(items) { CollectionItemRow(item: $0) }
+    List(items) { CollectionItemRow(item: $0) }
         .modelContainer(container)
 }

@@ -134,7 +134,7 @@ private struct FactTile: View {
     let container = SampleData.previewContainer()
     let all = try! container.mainContext.fetch(FetchDescriptor<Platform>())
     let platform = all.first { $0.slug == "snes" } ?? all[0]
-    return NavigationStack {
+    NavigationStack {
         PlatformDetailView(platform: platform)
     }
     .modelContainer(container)

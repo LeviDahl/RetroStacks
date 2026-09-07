@@ -5,6 +5,12 @@ import SwiftData
 /// and notes. This is the data the tracker is really about.
 @Model
 final class CollectionItem {
+    /// Stable id that survives export → import (and, later, device → device).
+    /// `persistentModelID` can't do that job. Optional so adding it to an
+    /// existing store migrates cleanly; `SampleData.seedIfNeeded` back-fills any
+    /// `nil`s on launch, and `resolvedExportID` never returns nil.
+    var exportID: UUID?
+
     var catalogItem: CatalogItem?
 
     private var statusRaw: String
@@ -85,8 +91,10 @@ final class CollectionItem {
         notes: String = "",
         photoData: [Data] = [],
         playStatus: PlayStatus? = nil,
-        dateAdded: Date = .now
+        dateAdded: Date = .now,
+        exportID: UUID? = nil
     ) {
+        self.exportID = exportID ?? UUID()
         self.catalogItem = catalogItem
         self.statusRaw = status.rawValue
         self.conditionRaw = condition?.rawValue
@@ -110,6 +118,14 @@ final class CollectionItem {
 }
 
 extension CollectionItem {
+    /// `exportID`, assigning one if this row predates the field.
+    var resolvedExportID: UUID {
+        if let exportID { return exportID }
+        let id = UUID()
+        exportID = id
+        return id
+    }
+
     var title: String { catalogItem?.displayTitle ?? "Unknown Item" }
     var kind: ItemKind { catalogItem?.kind ?? .game }
     var platformShortName: String { catalogItem?.platformShortName ?? "—" }

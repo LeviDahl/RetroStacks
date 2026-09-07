@@ -281,7 +281,7 @@ private struct MarketValueCard: View {
     let container = SampleData.previewContainer()
     let all = try! container.mainContext.fetch(FetchDescriptor<CatalogItem>())
     let item = all.first { $0.slug == "snes-chrono-trigger" } ?? all[0]
-    return NavigationStack {
+    NavigationStack {
         CatalogItemDetailView(item: item)
     }
     .modelContainer(container)

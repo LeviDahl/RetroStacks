@@ -58,6 +58,6 @@ struct CatalogItemRow: View {
 #Preview {
     let container = SampleData.previewContainer()
     let items = try! container.mainContext.fetch(FetchDescriptor<CatalogItem>())
-    return List(items.prefix(12).map { $0 }) { CatalogItemRow(item: $0) }
+    List(items.prefix(12).map { $0 }) { CatalogItemRow(item: $0) }
         .modelContainer(container)
 }

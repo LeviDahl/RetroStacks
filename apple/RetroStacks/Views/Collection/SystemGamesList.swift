@@ -104,7 +104,7 @@ struct SystemSummaryStrip: View {
     let container = SampleData.previewContainer()
     let platform = try! container.mainContext.fetch(FetchDescriptor<Platform>())
         .first { $0.slug == "snes" }!
-    return NavigationStack {
+    NavigationStack {
         SystemGamesList(platform: platform, mode: .collection)
             .navigationDestination(for: CollectionItem.self) { CollectionItemDetailView(item: $0) }
             .navigationDestination(for: CatalogItem.self) { CatalogItemDetailView(item: $0) }

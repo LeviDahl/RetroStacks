@@ -56,6 +56,12 @@ enum SampleData {
                 }
             }
         }
+        // Back-fill exportID on collection rows that predate the field.
+        if let entries = try? context.fetch(FetchDescriptor<CollectionItem>()) {
+            for entry in entries where entry.exportID == nil {
+                entry.exportID = UUID()
+            }
+        }
         if context.hasChanges { try? context.save() }
     }
 
