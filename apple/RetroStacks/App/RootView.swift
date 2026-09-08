@@ -12,6 +12,16 @@ struct RootView: View {
     #endif
 
     var body: some View {
+        layout
+            .overlay(alignment: .bottomTrailing) {
+                AppStatusBadge()
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 16)
+            }
+    }
+
+    @ViewBuilder
+    private var layout: some View {
         #if os(iOS)
         if horizontalSizeClass == .compact {
             tabLayout

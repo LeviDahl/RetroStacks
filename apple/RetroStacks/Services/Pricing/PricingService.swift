@@ -79,6 +79,19 @@ final class PricingService {
         let guide = await priceGuide(for: item, forceRefresh: true)
         apply(guide, to: item)
         try? context.save()
+
+        // We expected a live provider to answer but fell back to the built-in
+        // guide — surface it instead of silently showing stale numbers.
+        if hasLiveProvider, guide.primaryProvider == .sampleGuide {
+            AppStatusCenter.shared.report(
+                .pricing,
+                severity: .info,
+                title: "Couldn’t refresh prices",
+                detail: "Showing the last known values for \(item.displayTitle)."
+            )
+        } else {
+            AppStatusCenter.shared.clear(.pricing)
+        }
         return guide
     }
 

@@ -39,10 +39,9 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 
 ## Data feed & backend
 
-- **Disc-system catalogs** (PS1 / PS2 / Dreamcast / GameCube) — the
-  `api/build/ingest/libretro.mjs` script can list them, but libretro-database has
-  no genre/year/publisher for redump systems. Needs IGDB or TheGamesDB (both need
-  a key) for real metadata before pulling ~5k more games.
+- **Disc-system catalogs** (PS1 / PS2 / Dreamcast / GameCube) — `ingest/igdb.mjs`
+  is written and handles them; blocked only on `IGDB_CLIENT_ID` /
+  `IGDB_CLIENT_SECRET`. Run it, review the diff, commit the generated JSON.
 - ~~Implement `api/build/pricing/pricecharting.mjs`~~ — done, but **dormant**:
   needs `PRICECHARTING_TOKEN` (paid) **and** `PRICECHARTING_ENABLE=1`, then fills
   in prices for un-priced games newest-first, `PRICECHARTING_MAX` calls/night.
@@ -52,8 +51,9 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
   the main actor (chunked saves + `Task.yield` every 400, change-detection after).
   If the catalog keeps growing, move `reconcile` to a background `ModelContext` /
   `ModelActor`, or split the feed per-platform and sync lazily.
-- Invert source of truth: bundle `curated.json` in the app, have `SampleData`
-  decode it (kill the Swift/JSON duplication).
+- ~~Invert source of truth~~ — done: `api/data/curated.json` is authored
+  directly, `api/build/sync-seed.mjs` → `Resources/CatalogSeed.json`, decoded by
+  `CatalogSeedStore` (covered by `RetroStacksTests/CatalogSeedTests`).
 - Slug scheme: curated uses short slugs (`nes-smb3`), generated uses
   `nes-super-mario-bros-3`. Merge dedups by normalized title, but a full switch to
   the generated scheme would need a one-time slug migration for existing rows.
@@ -76,6 +76,9 @@ Phase 0 groundwork is done (`CollectionItem.updatedAt` / `deletedAt`,
 
 ## Platform & polish
 
+- ~~Surface background API failures in the UI~~ — done: `AppStatusCenter` +
+  corner `AppStatusBadge`. Wired for catalog sync + price refresh; `Supabase*`
+  engines should `report(.collectionSync, …)` / `clear` the same way.
 - iPad: a proper 3-column layout for the collection drill-down.
 - EU / JP region switch (`Region` already modeled).
 - Revisit the `GeometryReader` breakdown bar if the `_NSDetectedLayoutRecursion`

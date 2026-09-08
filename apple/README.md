@@ -20,6 +20,7 @@ Everything below is relative to this `apple/` directory. Sources live in
 | System screen | ✅ `SystemGamesList` — one screen per platform: collapsible "About" mini-wiki, Owned/Wanted/Missing/All scope, kind + sort, quick-add modal, bulk add, wishlist toggle, A–Z scrubber |
 | Photos | ✅ `PhotosPicker` in the edit form (downscaled JPEG in `photoData`) |
 | Backup | ✅ JSON archive (round-trip) + CSV export |
+| Failure surfacing | ✅ `AppStatusCenter` + a corner `AppStatusBadge` — background failures (catalog sync, price refresh) show one small icon with detail + Retry; auto-clears on the next success |
 | Barcode scan, valuation API, EU/JP regions | ⛔️ stubbed in the model, no UI |
 
 ## Platform layout philosophy

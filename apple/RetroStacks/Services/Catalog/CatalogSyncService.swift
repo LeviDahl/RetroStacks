@@ -21,11 +21,20 @@ final class CatalogSyncService {
     private(set) var phase: Phase = .idle
 
     private let repository: CatalogRepository
+    /// Remembered so the status badge's Retry can re-run without a view handy.
+    /// It's the app-lifetime `mainContext`, so holding it is harmless.
+    private var lastContext: ModelContext?
 
     static let shared = CatalogSyncService(repository: RemoteCatalogRepository())
 
     init(repository: CatalogRepository) {
         self.repository = repository
+    }
+
+    /// Re-run the last sync as a forced reload. No-op if we've never synced.
+    func retry() {
+        guard let context = lastContext else { return }
+        Task { await sync(into: context, forceReload: true) }
     }
 
     var lastSynced: Date? {
@@ -37,14 +46,24 @@ final class CatalogSyncService {
     /// manual "Sync now" to bypass the HTTP cache entirely.
     func sync(into context: ModelContext, forceReload: Bool = false) async {
         guard phase != .syncing else { return }
+        lastContext = context
         phase = .syncing
         do {
             let feed = try await repository.fetchCatalog(forceReload: forceReload)
             try await reconcile(feed, into: context)
             if context.hasChanges { try context.save() }
             phase = .synced(.now)
+            AppStatusCenter.shared.clear(.catalogSync)
         } catch {
             phase = .failed(String(describing: error))
+            let message = (error as? CatalogError)?.userMessage ?? error.localizedDescription
+            AppStatusCenter.shared.report(
+                .catalogSync,
+                severity: .warning,
+                title: "Catalog didn’t update",
+                detail: "\(message) Showing the last synced copy.",
+                retry: { CatalogSyncService.shared.retry() }
+            )
         }
     }
 

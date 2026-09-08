@@ -22,6 +22,15 @@ nonisolated enum CatalogError: Error, CustomStringConvertible {
         case .decoding(let m): "bad data: \(m)"
         }
     }
+
+    /// Plain-language version for the status badge (no error dumps).
+    var userMessage: String {
+        switch self {
+        case .badStatus(let code): "The data server returned an error (\(code))."
+        case .transport: "Couldn’t reach the data server."
+        case .decoding: "The update was in an unexpected format."
+        }
+    }
 }
 
 /// Fetches the static feed. Always **revalidates with the origin** (cheap 304 via
