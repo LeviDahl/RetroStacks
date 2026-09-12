@@ -66,10 +66,14 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 
 Phase 0 groundwork is done (`CollectionItem.updatedAt` / `deletedAt`,
 `AccountService`, `CollectionSyncEngine` + `Sync.engine`, `CollectionActions`).
+Plan + schema written up in [`supabase/README.md`](supabase/README.md) /
+[`supabase/schema.sql`](supabase/schema.sql) — **blocked on the user creating the
+Supabase project** and handing back the project URL + anon key.
 
-- Supabase: Postgres schema + RLS, `SupabaseAccountService` +
+- Supabase: run `schema.sql`, then `SupabaseAccountService` +
   `SupabaseCollectionSyncEngine`, magic-link sign-in sheet, a sync coordinator
-  (last-write-wins by `updatedAt`, tombstones carry deletes).
+  (last-write-wins by `updatedAt`, tombstones carry deletes). Photos go to a
+  Supabase Storage bucket, not inlined base64.
 - Companion **website** on `retrostacks.com` — same schema, Supabase JS client;
   read-only mirror first, then editing.
 - Prune old tombstones after a confirmed successful sync.
