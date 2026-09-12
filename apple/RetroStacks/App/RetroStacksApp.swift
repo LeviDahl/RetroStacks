@@ -8,11 +8,33 @@ struct RetroStacksApp: App {
     /// the data feed in the background.
     let container: ModelContainer
 
+    /// UI tests (`RetroStacksUITests`) pass `-uiTesting` so every run gets a
+    /// fresh, deterministic, in-memory store — the seed data, nothing carried
+    /// over from a previous run or from actually using the app on this Mac.
+    static let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
+
     init() {
         Self.configureImageCache()
+        if Self.isUITesting {
+            // The in-memory ModelContainer below already gives every run a
+            // fresh collection/catalog, but @AppStorage (view-option toggles,
+            // filters, sort order, the platform-breakdown visibility switch)
+            // reads real UserDefaults.standard, which persists across launches
+            // regardless of the store. Without this, a UI test's result can
+            // depend on whatever state a *previous* run — or a developer
+            // manually poking at the app — left behind. Full reset for a
+            // truly clean slate every time.
+            if let bundleID = Bundle.main.bundleIdentifier {
+                UserDefaults.standard.removePersistentDomain(forName: bundleID)
+            }
+        }
         do {
+            let configuration = Self.isUITesting
+                ? ModelConfiguration(isStoredInMemoryOnly: true)
+                : ModelConfiguration()
             let container = try ModelContainer(
-                for: Platform.self, CatalogItem.self, CollectionItem.self
+                for: Platform.self, CatalogItem.self, CollectionItem.self,
+                configurations: configuration
             )
             self.container = container
             // `App.init()` runs on the main actor, so the seed is safe here.
@@ -37,6 +59,9 @@ struct RetroStacksApp: App {
         WindowGroup {
             RootView()
                 .task {
+                    // Keep UI test runs deterministic — no real network sync
+                    // racing the test against its in-memory seed.
+                    guard !Self.isUITesting else { return }
                     await CatalogSyncService.shared.sync(into: container.mainContext)
                 }
         }

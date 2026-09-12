@@ -140,6 +140,7 @@ struct DashboardView: View {
                      systemImage: "square.grid.2x2", tint: .indigo,
                      footnote: kindBreakdown,
                      action: { onSelectSection(.collection) })
+                .accessibilityIdentifier(AccessibilityID.Dashboard.ownedItemsTile)
             StatTile(title: "Estimated Value", value: Money.string(stats.estimatedValue),
                      systemImage: "chart.line.uptrend.xyaxis", tint: .green,
                      footnote: stats.totalInvested > 0
@@ -347,6 +348,7 @@ private struct BreakdownBar: View {
         if let platform {
             NavigationLink(value: platform) { labelContent }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier(AccessibilityID.Dashboard.breakdownRow(platform.slug))
         } else {
             labelContent
         }

@@ -30,6 +30,28 @@ Utilize the following `XcodeBuildMCP` compatible tools. Do not guess `xcodebuild
 - **Plan Mode**: Run `claude` and initialize in plan mode (`/init` or explicit instructions) before attempting complex state logic changes.
 - **Error Remediation**: If a compilation error breaks the pipeline, check for missing target imports or Swift concurrency isolation issues first.
 
+## 🧪 Testing Discipline
+- **When a bug reaches the user, it doesn't get closed out without a regression
+  test.** Add the test *while fixing the bug*, not as a follow-up. Reason
+  about why it wasn't already caught, and fix that gap too if it's cheap.
+- **Pick the cheapest test that actually exercises the failure**, in this order:
+  1. Pure unit test (`RetroStacksTests`, Swift Testing) — logic, decoding, model
+     behavior. Fast, no UI, no simulator.
+  2. Integration test with a fake dependency (e.g. a fake `CatalogRepository`
+     driving `CatalogSyncService` end-to-end) — for bugs at a seam between
+     components, still no UI needed.
+  3. UI test (`RetroStacksUITests`, XCUITest) — **only** for what's literally
+     impossible to test lower: rendering, navigation composition (this is how
+     the `NavigationSplitView`/`NavigationStack` detail-column bug should have
+     been caught), visual layout, accessibility.
+- Launch UI tests with `-uiTesting` (`RetroStacksApp.isUITesting`) for a fresh
+  in-memory store seeded from `SampleData` — deterministic, no real network
+  sync, nothing left over between runs.
+- `AccessibilityAuditTests` runs `performAccessibilityAudit()` every UI-test
+  pass but doesn't fail on findings yet (the app has ~zero accessibility
+  coverage — see the Accessibility section of `BACKLOG.md`). Tighten it as
+  that backlog item lands; don't just delete it.
+
 ## 🗂️ Backlog
 Enhancement ideas and deferred work live in [`BACKLOG.md`](BACKLOG.md). Add to it
 rather than letting good ideas evaporate mid-task; near-term implementation TODOs
