@@ -7,13 +7,32 @@ struct StatTile: View {
     var tint: Color = .accentColor
     var footnote: String? = nil
     var footnoteColor: Color = .secondary
+    /// When set, the whole tile becomes a button (e.g. "Owned Items" → My Collection).
+    var action: (() -> Void)? = nil
 
     var body: some View {
+        if let action {
+            Button(action: action) { content }
+                .buttonStyle(TileButtonStyle())
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .labelStyle(.titleAndIcon)
+            HStack {
+                Label(title, systemImage: systemImage)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .labelStyle(.titleAndIcon)
+                if action != nil {
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
 
             Text(value)
                 .font(.system(.title, design: .rounded, weight: .semibold))
@@ -40,6 +59,17 @@ struct StatTile: View {
                 .frame(width: 3)
                 .padding(.vertical, 12)
         }
+    }
+}
+
+/// Subtle press feedback for tappable tiles/cards — scale + fade, no extra chrome.
+private struct TileButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(RoundedRectangle(cornerRadius: LayoutMetrics.cardCornerRadius, style: .continuous))
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

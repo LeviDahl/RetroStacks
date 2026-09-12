@@ -126,7 +126,8 @@ struct DashboardView: View {
         LazyVGrid(columns: LayoutMetrics.cardColumns(), spacing: LayoutMetrics.cardSpacing) {
             StatTile(title: "Owned Items", value: "\(stats.ownedCount)",
                      systemImage: "square.grid.2x2", tint: .indigo,
-                     footnote: kindBreakdown)
+                     footnote: kindBreakdown,
+                     action: { onSelectSection(.collection) })
             StatTile(title: "Estimated Value", value: Money.string(stats.estimatedValue),
                      systemImage: "chart.line.uptrend.xyaxis", tint: .green,
                      footnote: stats.totalInvested > 0
@@ -252,6 +253,7 @@ private struct PlatformBreakdownCard: View {
             VStack(spacing: 8) {
                 ForEach(rows, id: \.summary.id) { row in
                     BreakdownBar(
+                        icon: row.summary.iconSystemName,
                         shortName: row.summary.platformShortName,
                         fraction: row.fraction,
                         color: PlatformPalette.color(for: row.summary.platformSlug),
@@ -272,6 +274,7 @@ private struct PlatformBreakdownCard: View {
 }
 
 private struct BreakdownBar: View {
+    var icon: String
     var shortName: String
     var fraction: Double
     var color: Color
@@ -283,10 +286,15 @@ private struct BreakdownBar: View {
 
     var body: some View {
         HStack(spacing: compact ? 8 : 12) {
-            Text(shortName)
-                .font(.callout.weight(.medium))
-                .frame(width: compact ? 46 : 54, alignment: .leading)
-                .lineLimit(1)
+            Label {
+                Text(shortName).lineLimit(1)
+            } icon: {
+                Image(systemName: icon).foregroundStyle(color)
+            }
+            .font(.callout.weight(.medium))
+            .labelStyle(.titleAndIcon)
+            .frame(width: compact ? 80 : 92, alignment: .leading)
+            .minimumScaleFactor(0.85)
 
             GeometryReader { proxy in
                 let clamped = max(0, min(1, fraction))

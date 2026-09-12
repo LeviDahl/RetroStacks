@@ -5,6 +5,9 @@ import SwiftData
 /// mini-wiki) sits on top of the platform's whole catalog, scoped **Owned /
 /// Wanted / Missing / All** so you can manage the collection and the wishlist
 /// without leaving the page. A kind filter (Games by default) narrows it further.
+///
+/// macOS gets its own layout: a poster-tile grid instead of a single-column
+/// list, so a roomy window doesn't read as a stretched iPhone screen.
 struct SystemGamesList: View {
     var platform: Platform
     /// Only sets the initial scope (My Collection → Owned, Wishlist → Wanted).
@@ -29,6 +32,9 @@ struct SystemGamesList: View {
     @State private var bulkCompleteness: Completeness = .loose
     @AppStorage("system.kindFilter") private var kindRaw = KindFilter.games.rawValue
     @AppStorage("system.sortField") private var sortRaw = SortField.title.rawValue
+    /// Applies to whichever `sortField` is active — add a new field and it's
+    /// reversible for free, no per-field "reverse" case needed.
+    @AppStorage("system.sortAscending") private var sortAscending = true
     @AppStorage("system.showAbout") private var showAbout = true
 
     enum SortField: String, CaseIterable, Identifiable {
@@ -97,21 +103,30 @@ struct SystemGamesList: View {
         return filtered.sorted { a, b in
             switch sortField {
             case .title:
-                return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+                return ascendingCompare(a.name.lowercased(), b.name.lowercased())
             case .releaseYear:
-                return (a.releaseYearNA ?? .max, a.name.lowercased())
-                    < (b.releaseYearNA ?? .max, b.name.lowercased())
+                return ascendingCompare(a.releaseYearNA ?? .max, b.releaseYearNA ?? .max,
+                                         tiebreak: (a.name, b.name))
             case .publisher:
-                return (a.manufacturerOrPublisher ?? "~", a.name.lowercased())
-                    < (b.manufacturerOrPublisher ?? "~", b.name.lowercased())
+                return ascendingCompare(a.manufacturerOrPublisher ?? "~", b.manufacturerOrPublisher ?? "~",
+                                         tiebreak: (a.name, b.name))
             case .value:
                 let av = a.ownedEntry?.estimatedValue ?? a.headlineValue ?? 0
                 let bv = b.ownedEntry?.estimatedValue ?? b.headlineValue ?? 0
-                return av == bv
-                    ? a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
-                    : av > bv
+                return ascendingCompare(av, bv, tiebreak: (a.name, b.name))
             }
         }
+    }
+
+    /// One comparator every sort field routes through, `sortAscending`-aware.
+    /// Equal primary values fall back to `tiebreak` (always name-ascending, so
+    /// ties never look shuffled) when one is supplied.
+    private func ascendingCompare<T: Comparable>(
+        _ lhs: T, _ rhs: T, tiebreak: (String, String)? = nil
+    ) -> Bool {
+        if lhs != rhs { return sortAscending ? lhs < rhs : lhs > rhs }
+        guard let tiebreak else { return false }
+        return tiebreak.0.localizedCaseInsensitiveCompare(tiebreak.1) == .orderedAscending
     }
 
     private func matches(_ c: CatalogItem, _ scope: Scope) -> Bool {
@@ -128,8 +143,6 @@ struct SystemGamesList: View {
 
     private var shown: [CatalogItem] { catalog.filter { matches($0, scope) } }
 
-    private func count(_ scope: Scope) -> Int { catalog.filter { matches($0, scope) }.count }
-
     private var summary: CollectionStats.SystemSummary? {
         CollectionStatsBuilder.systemSummaries(from: liveEntries, status: .owned)
             .first { $0.platformSlug == platform.slug }
@@ -138,9 +151,58 @@ struct SystemGamesList: View {
     // MARK: Body
 
     var body: some View {
+        content
+            .navigationTitle(platform.name)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                if canBulkAdd {
+                    ToolbarItem {
+                        Button(selecting ? "Done" : "Select") {
+                            withAnimation {
+                                selecting.toggle()
+                                if !selecting { picked.removeAll() }
+                            }
+                        }
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if selecting { bulkAddBar }
+            }
+            .onChange(of: scope) { _, _ in if selecting { picked.removeAll() } }
+            .overlay {
+                if shown.isEmpty {
+                    ContentUnavailableView {
+                        Label(emptyTitle, systemImage: emptySymbol)
+                    } description: {
+                        Text(emptyMessage)
+                    }
+                }
+            }
+            .sheet(item: $quickAddTarget) { item in
+                QuickAddSheet(catalogItem: item) { completeness, condition in
+                    withAnimation {
+                        _ = CollectionActions.add(
+                            item,
+                            status: .owned,
+                            completeness: completeness,
+                            condition: condition,
+                            in: modelContext
+                        )
+                    }
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(macOS)
+        macGrid
+        #else
         ScrollViewReader { proxy in
-            listBody
-                #if os(iOS)
+            iosList
                 .overlay(alignment: .trailing) {
                     if showScrubber {
                         AZScrubber(letters: letterIndex.map(\.letter)) { letter in
@@ -151,61 +213,28 @@ struct SystemGamesList: View {
                         .padding(.trailing, 2)
                     }
                 }
-                #endif
         }
+        #endif
     }
 
-    private var listBody: some View {
+    // MARK: iOS — List
+
+    #if os(iOS)
+    private var iosList: some View {
         List {
             Section {
-                if showAbout {
+                DisclosureGroup(isExpanded: $showAbout) {
                     AboutSystemCard(platform: platform, summary: summary)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 10, trailing: 12))
-                        .listRowBackground(Color.clear)
-                }
-            } header: {
-                Button {
-                    withAnimation(.snappy(duration: 0.2)) { showAbout.toggle() }
+                        .padding(.top, 6)
                 } label: {
-                    HStack {
-                        Text("About \(platform.shortName)")
-                        Spacer()
-                        Image(systemName: showAbout ? "chevron.down" : "chevron.right")
-                            .font(.caption2)
-                    }
-                    .contentShape(Rectangle())
+                    Text("About \(platform.shortName)").font(.subheadline.weight(.medium))
                 }
-                .buttonStyle(.plain)
             }
 
             Section {
-                HStack(spacing: 10) {
-                    Picker("Scope", selection: $scope) {
-                        ForEach(Scope.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-
-                    Menu {
-                        Picker("Show", selection: $kindRaw) {
-                            ForEach(KindFilter.allCases) { Text($0.label).tag($0.rawValue) }
-                        }
-                        .pickerStyle(.inline)
-                        Divider()
-                        Picker("Sort by", selection: $sortRaw) {
-                            ForEach(SortField.allCases) { Text($0.label).tag($0.rawValue) }
-                        }
-                        .pickerStyle(.inline)
-                    } label: {
-                        Label("\(kindFilter.label) · \(sortField.label)",
-                              systemImage: "line.3.horizontal.decrease.circle")
-                            .labelStyle(.iconOnly)
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-                .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 8, trailing: 12))
-                .listRowBackground(Color.clear)
+                controlsRow
+                    .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 8, trailing: 12))
+                    .listRowBackground(Color.clear)
 
                 if let summary {
                     SystemSummaryStrip(summary: summary)
@@ -223,46 +252,133 @@ struct SystemGamesList: View {
                 Text("\(shown.count) \(shown.count == 1 ? "title" : "titles")")
             }
         }
-        .navigationTitle(platform.name)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            if canBulkAdd {
-                ToolbarItem {
-                    Button(selecting ? "Done" : "Select") {
-                        withAnimation {
-                            selecting.toggle()
-                            if !selecting { picked.removeAll() }
-                        }
+    }
+
+    private var controlsRow: some View {
+        HStack(spacing: 10) {
+            scopePicker
+            filterSortMenu
+        }
+    }
+    #endif
+
+    // MARK: macOS — poster-tile grid
+
+    #if os(macOS)
+    private var macGrid: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
+                aboutCard
+                controlsBar
+
+                if let summary {
+                    SystemSummaryStrip(summary: summary)
+                }
+
+                Text("\(shown.count) \(shown.count == 1 ? "title" : "titles")")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                LazyVGrid(columns: LayoutMetrics.cardColumns(), spacing: LayoutMetrics.cardSpacing) {
+                    ForEach(shown) { catalogItem in
+                        tile(for: catalogItem)
                     }
                 }
             }
+            .padding(LayoutMetrics.screenEdgePadding)
         }
-        .safeAreaInset(edge: .bottom) {
-            if selecting { bulkAddBar }
+    }
+
+    private var aboutCard: some View {
+        DisclosureGroup(isExpanded: $showAbout) {
+            AboutSystemCard(platform: platform, summary: summary)
+                .padding(.top, 10)
+        } label: {
+            Text("About \(platform.shortName)").font(.headline)
         }
-        .onChange(of: scope) { _, _ in if selecting { picked.removeAll() } }
-        .overlay {
-            if shown.isEmpty {
-                ContentUnavailableView {
-                    Label(emptyTitle, systemImage: emptySymbol)
-                } description: {
-                    Text(emptyMessage)
+        .padding(16)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: LayoutMetrics.cardCornerRadius, style: .continuous))
+    }
+
+    /// A floating control cluster over content — the appropriate place for
+    /// Liquid Glass (chrome, not content).
+    private var controlsBar: some View {
+        HStack(spacing: 14) {
+            scopePicker
+                .frame(maxWidth: 440)
+            Spacer(minLength: 8)
+            filterSortMenu
+        }
+        .padding(12)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func tile(for catalogItem: CatalogItem) -> some View {
+        if selecting {
+            SelectableCatalogTile(
+                catalogItem: catalogItem,
+                alreadyIn: inList(catalogItem),
+                picked: picked.contains(catalogItem.slug),
+                toggle: { togglePick(catalogItem) }
+            )
+        } else {
+            let addStatus = scope.addStatus
+            SystemCatalogTile(
+                catalogItem: catalogItem,
+                listStatus: addStatus,
+                onAdd: { handleAdd(catalogItem, status: addStatus) },
+                onToggleWishlist: addStatus == .owned ? { toggleWishlist(catalogItem) } : nil,
+                onRemove: catalogItem.entry(for: addStatus).map { entry in
+                    { withAnimation { CollectionActions.remove(entry, in: modelContext) } }
                 }
+            )
+        }
+    }
+    #endif
+
+    // MARK: Shared controls
+
+    private var scopePicker: some View {
+        Picker("Scope", selection: $scope) {
+            ForEach(Scope.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+
+    private var filterSortMenu: some View {
+        Menu {
+            Picker("Show", selection: $kindRaw) {
+                ForEach(KindFilter.allCases) { Text($0.label).tag($0.rawValue) }
             }
+            .pickerStyle(.inline)
+            Divider()
+            Picker("Sort by", selection: $sortRaw) {
+                ForEach(SortField.allCases) { Text($0.label).tag($0.rawValue) }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Toggle(isOn: $sortAscending) {
+                Label("Ascending", systemImage: "arrow.up")
+            }
+        } label: {
+            Label("\(kindFilter.label) · \(sortField.label) \(sortAscending ? "↑" : "↓")",
+                  systemImage: "line.3.horizontal.decrease.circle")
+                .labelStyle(.iconOnly)
         }
-        .sheet(item: $quickAddTarget) { item in
-            QuickAddSheet(catalogItem: item) { completeness, condition in
-                withAnimation {
-                    _ = CollectionActions.add(
-                        item,
-                        status: .owned,
-                        completeness: completeness,
-                        condition: condition,
-                        in: modelContext
-                    )
-                }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func handleAdd(_ catalogItem: CatalogItem, status: CollectionStatus) {
+        // Owned copies get the quick-add modal (completeness + condition); a
+        // wishlist add has nothing to configure.
+        if status == .owned {
+            quickAddTarget = catalogItem
+        } else {
+            withAnimation {
+                _ = CollectionActions.add(catalogItem, status: status, in: modelContext)
             }
         }
     }
@@ -299,8 +415,9 @@ struct SystemGamesList: View {
         }
     }
 
-    // MARK: Rows
+    // MARK: iOS rows
 
+    #if os(iOS)
     @ViewBuilder
     private func rowContent(for catalogItem: CatalogItem) -> some View {
         if selecting {
@@ -315,17 +432,7 @@ struct SystemGamesList: View {
             PlatformCatalogRow(
                 catalogItem: catalogItem,
                 listStatus: addStatus,
-                onAdd: {
-                    // Owned copies get the quick-add modal (completeness +
-                    // condition); a wishlist add has nothing to configure.
-                    if addStatus == .owned {
-                        quickAddTarget = catalogItem
-                    } else {
-                        withAnimation {
-                            _ = CollectionActions.add(catalogItem, status: addStatus, in: modelContext)
-                        }
-                    }
-                },
+                onAdd: { handleAdd(catalogItem, status: addStatus) },
                 onToggleWishlist: addStatus == .owned ? { toggleWishlist(catalogItem) } : nil
             )
             .swipeActions(edge: .trailing) {
@@ -339,8 +446,9 @@ struct SystemGamesList: View {
             }
         }
     }
+    #endif
 
-    // MARK: A–Z jump index
+    // MARK: A–Z jump index (iOS)
 
     /// First row (by slug) for each leading letter of the shown titles, in order.
     private var letterIndex: [(letter: String, slug: String)] {
@@ -354,7 +462,7 @@ struct SystemGamesList: View {
     }
 
     private var showScrubber: Bool {
-        sortField == .title && !selecting && letterIndex.count > 3 && shown.count > 40
+        sortField == .title && sortAscending && !selecting && letterIndex.count > 3 && shown.count > 40
     }
 
     static func indexLetter(for title: String) -> String {
@@ -437,7 +545,7 @@ struct SystemGamesList: View {
     }
 }
 
-// MARK: - Row
+// MARK: - iOS row
 
 /// Thumbnail + title + meta line — the shared visual for every catalog row in
 /// the drill-down (plain, selectable, hover).
@@ -606,7 +714,7 @@ struct AZScrubber: View {
             }
         }
         .padding(.vertical, 6)
-        .background(.thinMaterial, in: Capsule())
+        .glassEffect(.regular, in: Capsule())
         .contentShape(Capsule())
         .gesture(
             DragGesture(minimumDistance: 0)
