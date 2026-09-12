@@ -134,7 +134,7 @@ final class CatalogSyncService {
             set(\.developer, fi.developer)
             set(\.genre, fi.genre)
             set(\.upc, fi.upc)
-            set(\.summary, fi.summary)
+            set(\.summary, fi.summary ?? "")
             set(\.imageURLString, fi.imageURL)
             set(\.imageCredit, fi.imageCredit)
             set(\.imageLicense, fi.imageLicense)

@@ -34,7 +34,9 @@ nonisolated struct FeedItem: Decodable, Sendable {
     var developer: String?
     var genre: String?
     var upc: String?
-    var summary: String
+    /// Only the ~66 curated entries carry a hand-written summary; the ~3,500
+    /// imported games don't (see `ingest/libretro.mjs` / `ingest/igdb.mjs`).
+    var summary: String?
     var imageURL: String?
     var imageCredit: String?
     var imageLicense: String?

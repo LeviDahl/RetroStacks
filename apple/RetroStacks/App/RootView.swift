@@ -16,7 +16,7 @@ struct RootView: View {
             .overlay(alignment: .bottomTrailing) {
                 AppStatusBadge()
                     .padding(.trailing, 16)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, statusBadgeBottomPadding)
             }
     }
 
@@ -30,6 +30,18 @@ struct RootView: View {
         }
         #else
         splitLayout
+        #endif
+    }
+
+    /// iPhone's tab bar floats as an inset capsule near the trailing edge, so a
+    /// plain corner inset collides with its last item (confirmed in the
+    /// simulator: it sat right on top of the "Catalog" label). Clear it there;
+    /// the split layout has no tab bar to dodge.
+    private var statusBadgeBottomPadding: CGFloat {
+        #if os(iOS)
+        horizontalSizeClass == .compact ? 88 : 16
+        #else
+        16
         #endif
     }
 
