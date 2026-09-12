@@ -56,22 +56,10 @@ struct RootView: View {
     private var tabLayout: some View {
         TabView(selection: $selection) {
             ForEach(AppSection.allCases) { section in
-                tabContent(for: section)
+                sectionView(for: section)
                     .tabItem { Label(section.tabTitle, systemImage: section.symbol) }
                     .tag(section)
             }
-        }
-    }
-
-    /// On iPhone the split sections collapse to their own stack, so only the
-    /// plain Dashboard needs an explicit `NavigationStack` wrapper.
-    @ViewBuilder
-    private func tabContent(for section: AppSection) -> some View {
-        switch section {
-        case .dashboard:
-            NavigationStack { DashboardView(onSelectSection: { selection = $0 }) }
-        default:
-            sectionView(for: section)
         }
     }
 

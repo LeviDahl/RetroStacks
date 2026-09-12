@@ -6,6 +6,7 @@ struct DashboardView: View {
 
     @Query(filter: #Predicate<CollectionItem> { $0.deletedAt == nil })
     private var collectionItems: [CollectionItem]
+    @Query(sort: \Platform.generation) private var platforms: [Platform]
     @AppStorage("dashboard.showBreakdown") private var showBreakdown = true
 
     @Environment(\.modelContext) private var modelContext
@@ -29,48 +30,59 @@ struct DashboardView: View {
         CollectionStatsBuilder.systemSummaries(from: collectionItems, status: .owned)
     }
 
+    /// Self-contained, like every other section — `NavigationLink`s inside
+    /// Dashboard need their own `NavigationStack` to push into. Without one, a
+    /// `NavigationLink` fired from inside a `NavigationSplitView`'s detail
+    /// column tries to target a column *after* detail — which doesn't exist —
+    /// and silently fails (Xcode logs "There is no next column after the
+    /// detail column"). Only mattered on macOS/iPadOS: the iPhone tab layout
+    /// used to paper over this by wrapping Dashboard in its own stack, which
+    /// is also why this went unnoticed until the breakdown row's link was
+    /// click-tested on macOS.
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
-                collectionHeader
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
+                    collectionHeader
 
-                statGrid
+                    statGrid
 
-                if showBreakdown && !systemSummaries.isEmpty {
-                    PlatformBreakdownCard(summaries: systemSummaries)
-                }
-
-                twoColumnLists
-            }
-            .padding(LayoutMetrics.screenEdgePadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .background(.background)
-        .appNavigationDestinations()
-        .navigationTitle("Dashboard")
-        .toolbar {
-            ToolbarItem {
-                Menu {
-                    Toggle("Platform Breakdown", isOn: $showBreakdown)
-                    Divider()
-                    Button {
-                        Task { await sync.sync(into: modelContext, forceReload: true) }
-                    } label: {
-                        Label(syncMenuLabel, systemImage: "arrow.triangle.2.circlepath")
+                    if showBreakdown && !systemSummaries.isEmpty {
+                        PlatformBreakdownCard(summaries: systemSummaries, platforms: platforms)
                     }
-                    .disabled(sync.phase == .syncing)
-                    Divider()
-                    Label(account.summary, systemImage: "person.crop.circle")
-                        .disabled(true)
-                } label: {
-                    Label("View Options", systemImage: "slider.horizontal.3")
+
+                    twoColumnLists
                 }
+                .padding(LayoutMetrics.screenEdgePadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            ToolbarItem {
-                Button {
-                    onSelectSection(.catalog)
-                } label: {
-                    Label("Browse Catalog", systemImage: "books.vertical")
+            .background(.background)
+            .appNavigationDestinations()
+            .navigationTitle("Dashboard")
+            .toolbar {
+                ToolbarItem {
+                    Menu {
+                        Toggle("Platform Breakdown", isOn: $showBreakdown)
+                        Divider()
+                        Button {
+                            Task { await sync.sync(into: modelContext, forceReload: true) }
+                        } label: {
+                            Label(syncMenuLabel, systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(sync.phase == .syncing)
+                        Divider()
+                        Label(account.summary, systemImage: "person.crop.circle")
+                            .disabled(true)
+                    } label: {
+                        Label("View Options", systemImage: "slider.horizontal.3")
+                    }
+                }
+                ToolbarItem {
+                    Button {
+                        onSelectSection(.catalog)
+                    } label: {
+                        Label("Browse Catalog", systemImage: "books.vertical")
+                    }
                 }
             }
         }
@@ -210,10 +222,15 @@ private enum BreakdownMetric: String, CaseIterable, Identifiable {
 
 private struct PlatformBreakdownCard: View {
     var summaries: [CollectionStats.SystemSummary]
+    var platforms: [Platform]
 
     @AppStorage("dashboard.breakdownMetric") private var metricRaw = BreakdownMetric.value.rawValue
 
     private var metric: BreakdownMetric { BreakdownMetric(rawValue: metricRaw) ?? .value }
+
+    private func platform(for slug: String) -> Platform? {
+        platforms.first { $0.slug == slug }
+    }
 
     /// (summary, bar fraction 0…1, trailing label), sorted by the active metric.
     private var rows: [(summary: CollectionStats.SystemSummary, fraction: Double, label: String)] {
@@ -254,7 +271,9 @@ private struct PlatformBreakdownCard: View {
                 ForEach(rows, id: \.summary.id) { row in
                     BreakdownBar(
                         icon: row.summary.iconSystemName,
+                        imageURL: row.summary.heroImageURL,
                         shortName: row.summary.platformShortName,
+                        platform: platform(for: row.summary.platformSlug),
                         fraction: row.fraction,
                         color: PlatformPalette.color(for: row.summary.platformSlug),
                         valueText: row.label,
@@ -275,7 +294,11 @@ private struct PlatformBreakdownCard: View {
 
 private struct BreakdownBar: View {
     var icon: String
+    var imageURL: URL?
     var shortName: String
+    /// When present, the icon/name (only — not the bar or value) links to that
+    /// system's collection screen.
+    var platform: Platform?
     var fraction: Double
     var color: Color
     var valueText: String
@@ -286,15 +309,8 @@ private struct BreakdownBar: View {
 
     var body: some View {
         HStack(spacing: compact ? 8 : 12) {
-            Label {
-                Text(shortName).lineLimit(1)
-            } icon: {
-                Image(systemName: icon).foregroundStyle(color)
-            }
-            .font(.callout.weight(.medium))
-            .labelStyle(.titleAndIcon)
-            .frame(width: compact ? 80 : 92, alignment: .leading)
-            .minimumScaleFactor(0.85)
+            label
+                .frame(width: compact ? 80 : 92, alignment: .leading)
 
             GeometryReader { proxy in
                 let clamped = max(0, min(1, fraction))
@@ -324,6 +340,32 @@ private struct BreakdownBar: View {
                     .frame(width: 30, alignment: .trailing)
             }
         }
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if let platform {
+            NavigationLink(value: platform) { labelContent }
+                .buttonStyle(.plain)
+        } else {
+            labelContent
+        }
+    }
+
+    private var labelContent: some View {
+        HStack(spacing: 6) {
+            ItemThumbnail(
+                kind: .console,
+                platformSymbol: icon,
+                imageURL: imageURL,
+                size: 22, cornerRadius: 5, contentMode: .fit
+            )
+            Text(shortName)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .contentShape(Rectangle())
     }
 }
 
