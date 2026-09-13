@@ -18,6 +18,12 @@ struct CatalogSection: View {
         return allItems.first { $0.persistentModelID == selectedID }
     }
 
+    private var navigationTitleText: String {
+        guard let slug = viewModel.platformSlugFilter,
+              let platform = platforms.first(where: { $0.slug == slug }) else { return "Catalog" }
+        return platform.shortName
+    }
+
     var body: some View {
         NavigationSplitView {
             contentColumn
@@ -36,8 +42,11 @@ struct CatalogSection: View {
             }
             .appNavigationDestinations()
         }
-        .navigationTitle("Catalog")
-        .searchable(text: $viewModel.searchText, prompt: "Search consoles, games, accessories")
+        .navigationTitle(navigationTitleText)
+        .searchable(
+            text: $viewModel.searchText,
+            prompt: viewModel.platformSlugFilter == nil ? "Search the whole catalog" : "Search \(navigationTitleText)"
+        )
         .toolbar { toolbarContent }
         .onAppear {
             if let initialPlatformSlug { viewModel.platformSlugFilter = initialPlatformSlug }
@@ -45,39 +54,65 @@ struct CatalogSection: View {
         }
     }
 
+    /// Browsing by system is the default landing view — at ~3,600 catalog
+    /// entries and growing, a flat list of everything doesn't scale as a
+    /// starting point. As soon as the user touches any filter or search
+    /// (`hasActiveFilters`), this steps aside for the existing flat/filtered
+    /// list below, which already handles every combination correctly —
+    /// picking a platform here just sets `platformSlugFilter`, the same
+    /// field the toolbar's own Platform picker already used.
     @ViewBuilder
     private var contentColumn: some View {
-        if items.isEmpty {
+        if !viewModel.hasActiveFilters {
+            platformList
+        } else if items.isEmpty {
             EmptyStateView(
                 title: "No Matches",
                 message: "Nothing in the catalog matches your filters.",
                 systemImage: "magnifyingglass",
-                actionTitle: viewModel.hasActiveFilters ? "Clear Filters" : nil,
-                action: viewModel.hasActiveFilters ? { viewModel.clearFilters() } : nil
+                actionTitle: "Clear Filters",
+                action: { viewModel.clearFilters() }
             )
         } else {
-            #if os(macOS)
-            ScrollView {
-                LazyVGrid(columns: LayoutMetrics.posterColumns(), spacing: LayoutMetrics.cardSpacing) {
-                    ForEach(items) { item in
-                        Button { selectedID = item.persistentModelID } label: {
-                            CatalogPosterCard(item: item)
-                        }
-                        .buttonStyle(.plain)
-                        .overlay(selectionRing(for: item))
-                    }
-                }
-                .padding(LayoutMetrics.screenEdgePadding)
-            }
-            #else
-            List(selection: $selectedID) {
-                ForEach(items) { item in
-                    CatalogItemRow(item: item).tag(item.persistentModelID)
-                }
-            }
-            .listStyle(.plain)
-            #endif
+            filteredList
         }
+    }
+
+    private var platformList: some View {
+        List(platforms) { platform in
+            Button {
+                viewModel.platformSlugFilter = platform.slug
+            } label: {
+                CatalogPlatformRow(platform: platform)
+            }
+            .buttonStyle(.plain)
+        }
+        .listStyle(.inset)
+    }
+
+    @ViewBuilder
+    private var filteredList: some View {
+        #if os(macOS)
+        ScrollView {
+            LazyVGrid(columns: LayoutMetrics.posterColumns(), spacing: LayoutMetrics.cardSpacing) {
+                ForEach(items) { item in
+                    Button { selectedID = item.persistentModelID } label: {
+                        CatalogPosterCard(item: item)
+                    }
+                    .buttonStyle(.plain)
+                    .overlay(selectionRing(for: item))
+                }
+            }
+            .padding(LayoutMetrics.screenEdgePadding)
+        }
+        #else
+        List(selection: $selectedID) {
+            ForEach(items) { item in
+                CatalogItemRow(item: item).tag(item.persistentModelID)
+            }
+        }
+        .listStyle(.plain)
+        #endif
     }
 
     @ViewBuilder
@@ -90,6 +125,16 @@ struct CatalogSection: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        if viewModel.platformSlugFilter != nil {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    viewModel.platformSlugFilter = nil
+                    viewModel.searchText = ""
+                } label: {
+                    Label("All Systems", systemImage: "chevron.left")
+                }
+            }
+        }
         ToolbarItem {
             Picker("Kind", selection: $viewModel.kindFilter) {
                 Text("All").tag(ItemKind?.none)
