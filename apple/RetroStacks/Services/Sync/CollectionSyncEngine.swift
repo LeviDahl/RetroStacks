@@ -26,8 +26,11 @@ extension CollectionChange {
     }
 }
 
-/// The seam a real backend (Supabase / a custom API) implements. No engine is
-/// connected yet — `Sync.engine` is `DisabledSyncEngine`.
+/// The seam a real backend (Supabase / a custom API) implements —
+/// `SupabaseCollectionSyncEngine` is the one `Sync.engine` actually points at
+/// (see the bottom of this file); `DisabledSyncEngine` below stays as the
+/// local-first fallback shape and for tests that don't want real network/
+/// Keychain calls.
 nonisolated protocol CollectionSyncEngine: Sendable {
     var isEnabled: Bool { get }
 

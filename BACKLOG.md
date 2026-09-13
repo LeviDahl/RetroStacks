@@ -29,7 +29,7 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 
 - ~~`PhotosPicker` → `CollectionItem.photoData`~~ — done: Photos section in the
   edit form (multi-select, capped, ImageIO-downscaled to 1600px JPEG).
-- ~~**Barcode scan to add**~~ — implemented 2026-09-14, once the user added
+- ~~**Barcode scan to add**~~ — implemented 2026-09-13, once the user added
   `NSCameraUsageDescription`: `BarcodeScannerView.swift`
   (`DataScannerViewController` wrapped for SwiftUI, `#if os(iOS)` — VisionKit
   has no macOS equivalent), reachable via a toolbar button in
@@ -49,8 +49,8 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 
 ## Data feed & backend
 
-- **Disc-system catalogs** (PS1 / PS2 / Dreamcast / GameCube) — `ingest/igdb.mjs`
-  is written and handles them; blocked only on `IGDB_CLIENT_ID` /
+- **Disc-system catalogs** (PS1 / PS2 / Dreamcast / GameCube) —
+  `api/build/ingest/igdb.mjs` is written and handles them; blocked only on `IGDB_CLIENT_ID` /
   `IGDB_CLIENT_SECRET`. Run it, review the diff, commit the generated JSON.
 - ~~Implement `api/build/pricing/pricecharting.mjs`~~ — done, but **dormant**:
   needs `PRICECHARTING_TOKEN` (paid) **and** `PRICECHARTING_ENABLE=1`, then fills
