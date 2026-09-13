@@ -172,15 +172,6 @@ struct SystemGamesList: View {
                 if selecting { bulkAddBar }
             }
             .onChange(of: scope) { _, _ in if selecting { picked.removeAll() } }
-            .overlay {
-                if shown.isEmpty {
-                    ContentUnavailableView {
-                        Label(emptyTitle, systemImage: emptySymbol)
-                    } description: {
-                        Text(emptyMessage)
-                    }
-                }
-            }
             .sheet(item: $quickAddTarget) { item in
                 QuickAddSheet(catalogItem: item) { completeness, condition in
                     withAnimation {
@@ -243,13 +234,21 @@ struct SystemGamesList: View {
                 }
             }
 
-            Section {
-                ForEach(shown) { catalogItem in
-                    rowContent(for: catalogItem)
-                        .id(catalogItem.slug)
+            if shown.isEmpty {
+                Section {
+                    emptyState
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                 }
-            } header: {
-                Text("\(shown.count) \(shown.count == 1 ? "title" : "titles")")
+            } else {
+                Section {
+                    ForEach(shown) { catalogItem in
+                        rowContent(for: catalogItem)
+                            .id(catalogItem.slug)
+                    }
+                } header: {
+                    Text("\(shown.count) \(shown.count == 1 ? "title" : "titles")")
+                }
             }
         }
     }
@@ -275,13 +274,17 @@ struct SystemGamesList: View {
                     SystemSummaryStrip(summary: summary)
                 }
 
-                Text("\(shown.count) \(shown.count == 1 ? "title" : "titles")")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if shown.isEmpty {
+                    emptyState
+                } else {
+                    Text("\(shown.count) \(shown.count == 1 ? "title" : "titles")")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
 
-                LazyVGrid(columns: LayoutMetrics.cardColumns(), spacing: LayoutMetrics.cardSpacing) {
-                    ForEach(shown) { catalogItem in
-                        tile(for: catalogItem)
+                    LazyVGrid(columns: LayoutMetrics.cardColumns(), spacing: LayoutMetrics.cardSpacing) {
+                        ForEach(shown) { catalogItem in
+                            tile(for: catalogItem)
+                        }
                     }
                 }
             }
@@ -301,16 +304,21 @@ struct SystemGamesList: View {
     }
 
     /// A floating control cluster over content — the appropriate place for
-    /// Liquid Glass (chrome, not content).
+    /// Liquid Glass (chrome, not content). Hugs its own content and anchors
+    /// left; it must NOT stretch to the row's full proposed width, or the
+    /// segmented control stretches with it and the glass pill reads as an
+    /// oversized, mostly-empty bar with the filter icon stranded far right.
     private var controlsBar: some View {
-        HStack(spacing: 14) {
-            scopePicker
-                .frame(maxWidth: 440)
-            Spacer(minLength: 8)
-            filterSortMenu
+        HStack(spacing: 0) {
+            HStack(spacing: 14) {
+                scopePicker
+                filterSortMenu
+            }
+            .padding(12)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Spacer(minLength: 0)
         }
-        .padding(12)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder
@@ -399,6 +407,19 @@ struct SystemGamesList: View {
         case .missing: "Nothing missing"
         case .all: "No \(kindFilter.label.lowercased()) catalogued"
         }
+    }
+
+    /// Scoped to just the list/grid region (below the About card, controls,
+    /// and summary strip) rather than the whole screen — a screen-wide
+    /// `.overlay` here centers across all that header content too and ends up
+    /// clipped against the stats strip right above it.
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label(emptyTitle, systemImage: emptySymbol)
+        } description: {
+            Text(emptyMessage)
+        }
+        .frame(maxWidth: .infinity, minHeight: 240)
     }
 
     private var emptyMessage: String {
