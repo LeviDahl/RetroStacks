@@ -47,7 +47,7 @@ struct CatalogItemRow: View {
                             .accessibilityLabel("Owned")
                     }
                     if item.isWishlisted {
-                        Image(systemName: "star.fill").foregroundStyle(.yellow)
+                        Image(systemName: "star.fill").foregroundStyle(.accentGold)
                             .accessibilityLabel("Wishlisted")
                     }
                 }

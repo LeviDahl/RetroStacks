@@ -54,7 +54,10 @@ struct CatalogPosterCard: View {
         if item.isOwned {
             badge(symbol: "checkmark.seal.fill", color: .green, label: "Owned")
         } else if item.isWishlisted {
-            badge(symbol: "star.fill", color: .yellow, label: "Wishlisted")
+            // Fixed dark gold, not `.accentGold` — a white icon sits on top
+            // of this fill (see `badge(...)` below), so it needs to stay
+            // dark in both appearances, unlike text-on-wash uses.
+            badge(symbol: "star.fill", color: Color(red: 0.471, green: 0.337, blue: 0.0), label: "Wishlisted")
         }
     }
 

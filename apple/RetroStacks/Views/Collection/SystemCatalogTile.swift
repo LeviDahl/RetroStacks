@@ -72,7 +72,11 @@ struct SystemCatalogTile: View {
                         .font(.caption)
                         .foregroundStyle(.white)
                         .padding(5)
-                        .background(listStatus == .wishlist ? Color.yellow : Color.green, in: Circle())
+                        // Fixed dark gold, not `.accentGold` — a white icon
+                        // sits on top of this fill, so it needs to stay dark
+                        // in both appearances (see the .tint(...) comment in
+                        // SystemGamesList's swipe action for the same case).
+                        .background(listStatus == .wishlist ? Color(red: 0.471, green: 0.337, blue: 0.0) : Color.green, in: Circle())
                         .padding(6)
                         .accessibilityLabel(listStatus == .wishlist ? "Wishlisted" : "Owned")
                 }
@@ -131,7 +135,7 @@ struct SystemCatalogTile: View {
                     Image(systemName: wishlisted ? "star.fill" : "star")
                 }
                 .buttonStyle(.borderless)
-                .foregroundStyle(wishlisted ? .yellow : .secondary)
+                .foregroundStyle(wishlisted ? .accentGold : .secondary)
                 .help(wishlisted ? "Remove from wishlist" : "Add to wishlist")
                 .accessibilityLabel(wishlisted ? "Remove from wishlist" : "Add to wishlist")
                 .transition(.opacity)

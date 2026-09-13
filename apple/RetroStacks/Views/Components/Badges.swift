@@ -1,5 +1,22 @@
 import SwiftUI
 
+// `Color.accentGold` is Xcode-generated from `Assets.xcassets/AccentGold.colorset`
+// (asset symbol generation, no manual extension needed/allowed — colliding
+// with one is a build error). Stand-in for `.yellow` wherever it's used as
+// *text or icon* color (condition/status dots, badges, wishlist stars)
+// rather than a purely decorative fill: a dark amber (#785600) in light
+// mode, the standard systemYellow dark value (#FFD60A) in dark mode.
+//
+// Found 2026-09-13 doing the accessibility contrast pass: plain `.yellow`
+// text/icon on its usual pale-yellow wash background measured **~1.4:1** in
+// light mode (computed from the actual composited sRGB values, WCAG
+// relative-luminance formula) — badly under the 3:1 floor for UI components,
+// let alone 4.5:1 for text. `.yellow` in *dark* mode was already fine
+// (~6.1:1) — yellow-on-light is the classic WCAG failure case, dark mode
+// wasn't the problem. `#785600` gets back to ~5.3:1 in light mode while
+// staying legible as "gold" (not brown), and dark mode is untouched (still
+// systemYellow's own dark value).
+
 /// Small pill used for completeness (CIB / LOOSE / SEALED …).
 struct CompletenessBadge: View {
     var completeness: Completeness?
@@ -56,7 +73,7 @@ struct ConditionLabel: View {
         switch condition {
         case .sealed, .mint: .green
         case .veryGood: .mint
-        case .good: .yellow
+        case .good: .accentGold
         case .fair: .orange
         case .poor: .red
         case .none: .secondary
@@ -79,7 +96,7 @@ struct StatusBadge: View {
     private var color: Color {
         switch status {
         case .owned: .green
-        case .wishlist: .yellow
+        case .wishlist: .accentGold
         case .forSale: .blue
         case .forTrade: .purple
         }

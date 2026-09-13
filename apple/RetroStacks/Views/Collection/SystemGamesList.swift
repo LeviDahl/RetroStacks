@@ -663,7 +663,7 @@ struct PlatformCatalogRow: View {
             if let onToggleWishlist, wishlistButtonVisible {
                 Button(action: onToggleWishlist) {
                     Image(systemName: wishlisted ? "star.fill" : "star")
-                        .foregroundStyle(wishlisted ? .yellow : .secondary)
+                        .foregroundStyle(wishlisted ? .accentGold : .secondary)
                 }
                 .buttonStyle(.borderless)
                 .help(wishlisted ? "Remove from wishlist" : "Add to wishlist")
@@ -685,7 +685,11 @@ struct PlatformCatalogRow: View {
                     Label(wishlisted ? "Unwish" : "Wishlist",
                           systemImage: wishlisted ? "star.slash" : "star")
                 }
-                .tint(.yellow)
+                // Fixed, not `.accentGold` — this is a fill with the
+                // system's own white label drawn on top, not text-on-wash,
+                // so it needs to stay dark enough for white-on-top contrast
+                // in *both* appearances, not flip like `.accentGold` does.
+                .tint(Color(red: 0.471, green: 0.337, blue: 0.0))
             }
         }
     }
@@ -701,7 +705,7 @@ struct PlatformCatalogRow: View {
                     CompletenessBadge(completeness: entry.completeness)
                     Image(systemName: listStatus == .wishlist ? "star.fill" : "checkmark.seal.fill")
                         .font(.caption)
-                        .foregroundStyle(listStatus == .wishlist ? .yellow : .green)
+                        .foregroundStyle(listStatus == .wishlist ? .accentGold : .green)
                         .accessibilityLabel(listStatus == .wishlist ? "Wishlisted" : "Owned")
                 }
             }
