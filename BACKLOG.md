@@ -64,111 +64,144 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 
 ## Multi-user (Phase 1+)
 
-Phase 0 groundwork is done (`CollectionItem.updatedAt` / `deletedAt`,
-`AccountService`, `CollectionSyncEngine` + `Sync.engine`, `CollectionActions`).
-Plan + schema written up in [`supabase/README.md`](supabase/README.md) /
-[`supabase/schema.sql`](supabase/schema.sql) — **blocked on the user creating the
-Supabase project** and handing back the project URL + anon key.
+**Wired up 2026-09-12** — the user's Supabase project went live and handed back
+the URL + anon key (`Services/Sync/SupabaseConfig.swift`). Done:
 
-- Supabase: run `schema.sql`, then `SupabaseAccountService` +
-  `SupabaseCollectionSyncEngine`, magic-link sign-in sheet, a sync coordinator
-  (last-write-wins by `updatedAt`, tombstones carry deletes). Photos go to a
-  Supabase Storage bucket, not inlined base64.
+- `SupabaseAuthClient` (`Services/Sync/SupabaseAuthClient.swift`) — GoTrue over
+  plain REST, no SDK (avoids an SPM package dependency, which would mean
+  editing `project.pbxproj` — off-limits per `CLAUDE.md`). Email magic-link,
+  but **the user pastes the link back** instead of the app catching a deep-link
+  callback (`completeSignIn(pastedLink:)` parses `token`/`token_hash` + `type`
+  straight out of the link's query string and calls `/verify` directly) — that
+  needed no custom URL scheme, so no Xcode target changes either. `SignInSheet`
+  (`Views/Account/SignInSheet.swift`) is the UI, reachable from the Dashboard's
+  account row.
+- `SupabaseSession` + `SupabaseSessionStore` (Keychain-backed, not
+  `UserDefaults` — access/refresh tokens shouldn't sit in a plist).
+  `AccountService` now does real sign-in/out and token refresh
+  (`validAccessToken()`), restoring the session from Keychain at launch.
+- `SupabaseCollectionSyncEngine` implements `CollectionSyncEngine` against
+  `public.collection_items` (PostgREST upsert with `Prefer:
+  resolution=merge-duplicates`) — `Sync.engine` now points at it instead of
+  `DisabledSyncEngine`.
+- `SyncCoordinator` (`Services/Sync/SyncCoordinator.swift`) — pull, resolve
+  last-write-wins by `updatedAt`, push what's still locally dirty, settle
+  authoritative timestamps back. Runs on app launch (`.task` in
+  `RetroStacksApp`, alongside `CatalogSyncService`, both no-ops while signed
+  out) and right after sign-in; a manual "Sync collection now" sits in the
+  Dashboard's menu next to the existing catalog one. Failures report to
+  `AppStatusCenter.shared(.collectionSync)`, same corner badge as everything
+  else. Covered by `RetroStacksTests/SyncCoordinatorTests.swift` (conflict
+  resolution, first-sync, failure path — fake engine, no network) and
+  `SupabaseAuthClientTests.swift` (link-parsing).
+- `CollectionArchive.Entry.init(item:)` / `.apply(to:catalogBySlug:)` — the
+  field mapping used to live inline in `CollectionArchive.make`/`.restore`
+  only; extracted so the sync engine's row mapping and the local JSON backup
+  share one place to get it right. `CollectionArchiveTests.swift` locks the
+  round trip down.
+
+**Not done yet:**
+- **Photos.** `CollectionItem.photoData` still isn't synced — needs the
+  Storage bucket upload (`collection-photos`, already created by `schema.sql`,
+  path `<user_id>/<exportID>/<n>.jpg`) wired into `SupabaseCollectionSyncEngine`
+  or a sibling type. Field sync (everything else) works without it, so this
+  was left for a follow-up rather than blocking the rest.
+- **A live end-to-end test.** Everything above compiles and is unit-tested
+  against a fake engine, but nobody has actually sent an email, pasted a real
+  link back, or watched a real row land in the `collection_items` table yet —
+  see `supabase/README.md`'s original note about wanting a real round trip
+  before this touches anyone's collection. First real sign-in attempt should
+  happen with the user watching, in case GoTrue's actual link format or
+  `/verify` response shape differs from what the REST docs describe.
 - Companion **website** on `retrostacks.com` — same schema, Supabase JS client;
   read-only mirror first, then editing.
 - Prune old tombstones after a confirmed successful sync.
 
 ## Accessibility — path to full VoiceOver compliance
 
-Near-zero today: 5 accessibility annotations in the whole app (2 identifiers
-bootstrapped 2026-09-12 for `NavigationTests`, the A–Z scrubber's label, the
-status badge icon's label, one more), and ~19 view files with interactive
-`Button`s that have no VoiceOver label — they lean on `.help()`, a macOS
-mouse-hover tooltip that VoiceOver never reads. Two independent reasons to
-close this gap: real VoiceOver support, and reliable automation (both my own
-testing and `RetroStacksUITests`) — discovered the hard way when `System
-Events` and then `app.staticTexts[...]` both had nothing queryable to act on.
-First real audit (`AccessibilityAuditTests`, Dashboard only) already found 9
-issues. This is the full path; each phase is independently shippable and
-should land screen-by-screen (per `CLAUDE.md`'s Testing Discipline), not as
-one sweep — the identifier work only (phase 1) is already started.
+**Phases 1–3 done 2026-09-12** across the highest-traffic screens (Dashboard,
+`SystemGamesList`/`SystemCatalogTile`, `CollectionSection`/`CollectionItemRow`,
+`CatalogItemRow`, `SystemCollectionRow`, `CollectionItemEditView`,
+`AppStatusBadge`, `StatTile`, `SignInSheet`). What landed:
 
-**Phase 1 — identifiers (automation-focused, in progress).** `App/AccessibilityID.swift`,
-namespaced per `Views/<Feature>/` folder, two shapes: static ids for one-off
-chrome (`AccessibilityID.Dashboard.ownedItemsTile`), keyed ids for repeated
-content built from the model's own durable identity — `platform.slug`,
-`catalogItem.slug`, `item.resolvedExportID` — **never** array position, so a
-resort/refilter never changes what a row is addressed as. Currently covers 2
-Dashboard elements; extend to every interactive element per screen as phases
-2+ touch that screen (no separate pass — add the identifier while adding the
-label, same edit).
+- **Phase 1 (identifiers)** — `AccessibilityID.swift` grew a `Sidebar` and
+  `Account` namespace alongside the original `Dashboard` one, all following the
+  same "keyed by durable model identity, never array position" rule.
+- **Phase 2 (labels/hints/grouping)** — every icon-only `Button` in `Views/`
+  now has a real `.accessibilityLabel` (a `grep` sweep for `Button { Image(
+  systemName:...) }` with no label, re-run until it came back empty — it did,
+  see the sweep in git history for the exact pattern). Composite rows
+  (`CollectionItemRow`, `CatalogItemRow`, `SystemCollectionRow`,
+  `PlatformCatalogRow`'s trailing value cluster) now use
+  `.accessibilityElement(children: .combine)` so VoiceOver reads one sentence
+  per row; their `ItemThumbnail`s are `.accessibilityHidden(true)` (decorative
+  — the title text beside them says the same thing); status icons
+  (owned/wishlisted checkmarks and stars) got explicit labels instead of
+  leaking their SF Symbol name. Along the way, found and fixed a real bug:
+  `ConditionLabel(compact: true)` (used in every `CollectionItemRow`) rendered
+  as a bare colored `Circle()` with **no accessible text at all** — condition
+  was completely invisible to VoiceOver on every collection row. Now has an
+  explicit `.accessibilityLabel`.
+- **Phase 3 (Dynamic Type)** — the one concretely-named risk spot,
+  `DashboardView`'s big collection-count number
+  (`.font(.system(size: 46, ...))`, a literal point size that doesn't scale
+  with Dynamic Type at all) now uses `@ScaledMetric(relativeTo: .largeTitle)`
+  so it still scales up at larger accessibility text sizes. Audited the rest of
+  the `.font(.system(size:))` call sites in `Views/` — the other two are
+  decorative glyphs sized proportionally to a fixed-size container
+  (`AboutSystemCard`'s fallback console icon, `ItemThumbnail`'s placeholder),
+  which is the *correct* thing to leave fixed (scaling them would overflow
+  their box) — not a gap.
 
-**Phase 2 — VoiceOver labels, hints, and element grouping.** The mechanical
-"missing description" fixes, screen by screen:
-- Every icon-only control (`Button` wrapping just an `Image(systemName:)`,
-  found via `grep -rln "labelStyle(.iconOnly)" Views App`) gets a real
-  `.accessibilityLabel` — what it *is* — and `.accessibilityHint` where the
-  result of tapping isn't obvious from the label alone (e.g. the sort/kind
-  menu trigger, the wishlist star toggle).
-- Every composite row/tile (`PlatformCatalogRow`, `SystemCatalogTile`,
-  `CollectionItemRow`, `CatalogItemRow`, `StatTile`, `SystemCollectionRow`) —
-  currently several separate `Text`/`Image` children — gets
-  `.accessibilityElement(children: .combine)` (or `.ignore` + one explicit
-  `.accessibilityLabel`) so VoiceOver reads one coherent sentence per row
-  ("Chrono Trigger, Game, 1995, Square, Complete in Box, $450, Owned") instead
-  of announcing each fragment as a separate stop. This is also what determines
-  swipe-navigation order — needs checking against visual reading order per row,
-  not just "does a label exist."
-- Purely decorative images (box art sitting right next to the title text that
-  already says the same thing) get `.accessibilityHidden(true)` rather than a
-  redundant label — don't over-announce.
+**Phase 4 (contrast) — investigated, lower risk than this doc originally
+guessed.** The original note here assumed `PlatformPalette` colors were used
+as text-on-fill; checked every call site and that's not actually how they're
+used — `BreakdownBar`'s colored capsule is a plain decorative fill with no text
+drawn on top of it (the value/count labels sit beside it against the normal
+background), and `SystemCollectionRow`'s accent is a thin bar + a
+`ProgressView` tint, also no text-on-color. `PlatformPalette.colors` are also
+all Apple system semantic colors (`.red`, `.teal`, …), not custom hex, which
+Apple already tunes per-appearance for legibility. Real remaining question:
+`Badges.swift`'s `StatusBadge`/`CompletenessBadge` pattern (saturated color
+text on a `color.opacity(0.16-0.18)` wash of the *same* hue) — probably fine,
+but `.yellow` (the wishlist `StatusBadge`) is the one classic problem color for
+contrast and is worth an actual look with Xcode's contrast checker or
+`Accessibility Inspector.app` rather than guessing further from code.
 
-**Phase 3 — Dynamic Type.** Verify layout holds at the accessibility text
-sizes (AX1–AX5), not just the default size. Known risk spots: `DashboardView`'s
-fixed `.font(.system(size: 46, …))` big number, any `.lineLimit`+no
-`.minimumScaleFactor` combination on a row that's already tight (the SNES
-breakdown-row width fix from earlier this session is exactly this kind of
-issue). Test via the Simulator's Settings → Accessibility → Larger Text at
-max, or `xcrun simctl ui <device> content_size accessibility-extra-extra-extra-large`,
-and re-run the screenshot-based visual check per screen.
+**Not done — genuinely needs a live VoiceOver pass, not more code-reading:**
+attempted to verify Phases 2–3 by actually inspecting the accessibility tree
+(the iOS Simulator tool's `inspect` action, a real stand-in for VoiceOver —
+see `Phase 5` below) but the simulator device isn't yet authorized for Claude
+to attach to in this environment ("the user has not granted Claude access to
+iPhone 17 Pro"); a macOS-hosted `xcodebuild test` run (which is how
+`AccessibilityAuditTests`/`NavigationTests` actually execute) currently hangs
+indefinitely in this environment too (see "Automated leak testing" section
+below — same root cause, `testmanagerd` never completing its handshake for a
+macOS test host). Tests **do** run and pass on the iOS Simulator destination
+(`-destination 'platform=iOS Simulator,...'`), so the code itself is verified
+by that path, but nobody has actually watched a real device/simulator
+announce these screens with VoiceOver toggled on yet.
 
-**Phase 4 — contrast & visual accessibility.** `PlatformPalette`'s per-platform
-colors (used as text-on-fill in `BreakdownBar`, badge backgrounds) need a WCAG
-AA contrast check against both the light and dark palette — some of the
-lighter accent colors are likely borderline against white text at the sizes
-used. `performAccessibilityAudit()` (phase 6) catches some of this
-automatically; a manual pass with Xcode's contrast checker or
-`Accessibility Inspector.app` (already installed with Xcode, GUI-only, can't
-drive it myself — genuinely needs the user or a screenshot-based color-sample
-check) covers the rest.
-
-**Phase 5 — reading order & real VoiceOver navigation.** Structural audits
-(phase 6) can't catch "does swiping through this screen with VoiceOver on
-actually make sense" — that needs either a human running VoiceOver on a real
-device/Simulator, or me inspecting the accessibility-hierarchy dump (the same
-`xcrun xcresulttool export attachments ... --test-id` technique used to debug
-`NavigationTests` this session shows the exact tree VoiceOver reads from,
-including label/value/trait per element — a real, if indirect, way for me to
-verify order and content without literally hearing speech output). Plan: once
-phases 2–4 land for a screen, pull that screen's hierarchy dump and read
-through it as a stand-in for a VoiceOver pass; do a real device VoiceOver
-pass before calling any screen actually done.
+**Phase 5 — reading order & real VoiceOver navigation.** Once the Simulator
+authorization above is granted (one-time: attach the simulator panel and click
+"Let Claude use it"), pull each screen's accessibility-hierarchy dump via
+`inspect` (or `xcrun xcresulttool export attachments ... --test-id` off a UI
+test run, the technique already proven this session for `NavigationTests`) and
+read through it as a stand-in for a VoiceOver pass; still do a real device
+VoiceOver pass before calling any screen actually done — that step is a
+device/OS interaction, not something I can substitute for.
 
 **Phase 6 — the automated gate.** `AccessibilityAuditTests.testDashboardAccessibilityAudit`
-currently logs+attaches findings but never fails (see `CLAUDE.md`). Once a
-screen clears phases 2–4, add a screen-specific audit test for it that
-**does** fail on new findings (`XCTAssertTrue(issue.auditType != .sufficientElementDescription`-style
-filtering, or just `try app.performAccessibilityAudit()` with no
-issue-handler once a screen is genuinely clean) — this is what keeps a screen
-from silently regressing once it's fixed, same "regression test at fix time"
-discipline as the rest of the suite.
+still logs+attaches findings but never fails (see `CLAUDE.md`) — deliberately
+left alone this pass since it needs the Phase 5 live pass first to know what
+"clean" actually looks like for a screen; tightening it now would either be a
+guess or lock in whatever the audit happens to currently report.
 
-**Suggested order** (highest-traffic first): Dashboard (partially started) →
-`SystemGamesList` / `SystemCatalogTile` (the densest screen, most icon-only
-controls) → `CollectionSection` / `CollectionItemRow` → `CatalogSection` /
-`CatalogItemRow` → detail/edit views (`CollectionItemDetailView`,
-`CollectionItemEditView`, `CatalogItemDetailView`, `QuickAddSheet`,
-`AddToCollectionFlow`) → chrome (`SidebarView`, `AppStatusBadge`).
+**Remaining screens** (same phase order, not yet touched): `CatalogSection` /
+`CatalogItemRow` polish, detail/edit views (`CollectionItemDetailView`,
+`CatalogItemDetailView`, `QuickAddSheet`, `AddToCollectionFlow`), and
+`SidebarView` (already has identifiers from earlier this session; check for
+any remaining icon-only spots once the sidebar grows badges/actions).
 
 ## Automated leak testing — exhaustive, unattended
 
@@ -205,39 +238,60 @@ rediscover these):
   "walkthrough" both target the *same* process instead of fighting over who
   launches it.
 
-**Phase 1 — `Scripts/leak-check.sh`.** Wire the above into one script:
-build (signed) → `open ... --args -uiTesting` → capture PID → `xctrace record
+**Phase 1 — `Scripts/leak-check.sh`. Written 2026-09-12, not yet run
+end-to-end** (see the blocker below). Wires the above into one script: build
+(signed) → `open ... --args -uiTesting` → capture PID → `xctrace record
 --instrument Leaks --attach <pid> --no-prompt` in the background → run an
 XCUITest "walkthrough" class against the running instance → SIGINT the
 recorder → `xctrace export` the Leaks detail table → parse for `<row>`
 elements → exit non-zero (and print the leaked objects + stacks) if any exist.
-Valuable even before phase 2 is done — it's a real, working, rerunnable tool
-from day one, just with partial screen coverage until the walkthrough grows.
+Results land in `leak-results/<timestamp>/` (gitignored).
 
-**Phase 2 — `RetroStacksUITests/AppWalkthroughTests.swift`.** A test class that
-attaches (doesn't launch) and systematically visits **every** screen, **more
-than once** — a single visit often won't surface a retain cycle, visiting and
-leaving 2–3× and confirming nothing accumulates is the real test:
-Dashboard → tap into a breakdown row → back → tap Owned Items → My Collection
-→ toggle By System/All Games → drill into 2–3 systems → open an item detail →
-open the edit sheet, cancel → open it again, change a field, save → back out
-→ Wishlist (same shape) → Browse Catalog → open a few item details → back →
-repeat the whole loop once more. Needs Phase 1 of the Accessibility path
-(identifiers) to exist for whatever it's currently missing — the two efforts
-share infrastructure, not just tooling philosophy.
+**Phase 2 — `RetroStacksUITests/AppWalkthroughTests.swift`. Written
+2026-09-12.** Attaches (doesn't launch) and visits Dashboard → Owned Items →
+My Collection → toggle grouping → a system screen (scope picker + About
+disclosure) → Wishlist → Catalog → back to Dashboard, **twice** — a single
+visit often won't surface a retain cycle, visiting/leaving and confirming
+nothing accumulates on the second pass is the actual test. Builds cleanly.
+Narrower than the ideal coverage described in earlier drafts of this plan
+(doesn't yet touch item detail/edit sheets) — worth widening once the
+run-it-at-all blocker below is cleared and there's a real trace to check
+widening against.
 
-**Phase 3 — assert, don't just report.** Once phase 1+2 are solid, this
-becomes a real regression gate (matching `CLAUDE.md`'s Testing Discipline):
-non-empty Leaks table = script exits non-zero. Run it locally before a
-release, or on demand — real Instruments profiling has genuine wall-clock
-cost (this session's runs took 45–90s of recording plus build/export time),
-so it's a deliberate "run me" tool, not a be-run-on-every-commit unit test.
+**Currently blocked: `xcodebuild test` hangs indefinitely for this project on
+macOS in this environment**, discovered while adding unit tests for the
+Supabase sync work above. Every macOS-destination `xcodebuild ... test` (or
+`test-without-building`) invocation stalls forever at "Testing started
+completed" — 0% CPU, no test host process ever appears, reproducible across
+multiple clean attempts, survives killing a stale `testmanagerd`, and is
+identical whether or not the invocation was just rebuilt. The **same test
+target runs and passes cleanly** on an iOS Simulator destination
+(`-destination 'platform=iOS Simulator,...'`) — so this isn't a code problem,
+it's specific to macOS-hosted test execution (`RetroStacksTests`'/
+`RetroStacksUITests`' `TEST_HOST` launches the real signed `RetroStacks.app`
+as the actual test host on macOS) in this particular environment. Likely a
+permissions/session gap for whatever `testmanagerd` needs to inject into and
+control a macOS host app — possibly adjacent to the Screen Recording /
+Accessibility / Developer Tools permissions this session already had to sort
+out for `xctrace` and window-scoped screenshots earlier. **Needs the user**:
+either run `Scripts/leak-check.sh` (or plain `xcodebuild test -destination
+'platform=macOS'`) once locally in a normal Terminal/Xcode session to confirm
+it's environment-specific and not a real regression, or point at whatever
+permission macOS wants granted for automated macOS UI testing.
+
+**Phase 3 — assert, don't just report.** Once the above is unblocked and the
+walkthrough's coverage is widened, this becomes a real regression gate
+(matching `CLAUDE.md`'s Testing Discipline): non-empty Leaks table = script
+exits non-zero. Run it locally before a release, or on demand — real
+Instruments profiling has genuine wall-clock cost (this session's manual runs
+took 45–90s of recording plus build/export time), so it's a deliberate
+"run me" tool, not a be-run-on-every-commit unit test.
 
 ## Platform & polish
 
 - ~~Surface background API failures in the UI~~ — done: `AppStatusCenter` +
-  corner `AppStatusBadge`. Wired for catalog sync + price refresh; `Supabase*`
-  engines should `report(.collectionSync, …)` / `clear` the same way.
+  corner `AppStatusBadge`. Wired for catalog sync + price refresh + collection
+  sync (`SyncCoordinator` reports/clears `.collectionSync`, same pattern).
 - iPad: a proper 3-column layout for the collection drill-down.
 - EU / JP region switch (`Region` already modeled).
 - Revisit the `GeometryReader` breakdown bar if the `_NSDetectedLayoutRecursion`

@@ -28,6 +28,9 @@ xcuserdata/
 *.dSYM.zip
 *.dSYM
 
+# Scripts/leak-check.sh output (traces + logs, regenerated per run)
+/leak-results/
+
 # Swift Package Manager
 .build/
 .swiftpm/
