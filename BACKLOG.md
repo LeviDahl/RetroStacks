@@ -201,21 +201,6 @@ the URL + anon key (`Services/Sync/SupabaseConfig.swift`). Done:
   which is the *correct* thing to leave fixed (scaling them would overflow
   their box) — not a gap.
 
-**Phase 4 (contrast) — investigated, lower risk than this doc originally
-guessed.** The original note here assumed `PlatformPalette` colors were used
-as text-on-fill; checked every call site and that's not actually how they're
-used — `BreakdownBar`'s colored capsule is a plain decorative fill with no text
-drawn on top of it (the value/count labels sit beside it against the normal
-background), and `SystemCollectionRow`'s accent is a thin bar + a
-`ProgressView` tint, also no text-on-color. `PlatformPalette.colors` are also
-all Apple system semantic colors (`.red`, `.teal`, …), not custom hex, which
-Apple already tunes per-appearance for legibility. Real remaining question:
-`Badges.swift`'s `StatusBadge`/`CompletenessBadge` pattern (saturated color
-text on a `color.opacity(0.16-0.18)` wash of the *same* hue) — probably fine,
-but `.yellow` (the wishlist `StatusBadge`) is the one classic problem color for
-contrast and is worth an actual look with Xcode's contrast checker or
-`Accessibility Inspector.app` rather than guessing further from code.
-
 **Extended 2026-09-13** to the remaining thumbnail-bearing views:
 `CatalogPosterCard` (Browse Catalog grid), `CollectionTable` (macOS table
 row), and the detail-view headers (`CollectionItemDetailView`,
@@ -225,39 +210,67 @@ row), and the detail-view headers (`CollectionItemDetailView`,
 the row components. A target-wide sweep for icon-only `Button`/`Menu`
 controls with no `.accessibilityLabel` now comes back completely empty.
 
-**Not done — genuinely needs a live VoiceOver pass, not more code-reading.**
-Simulator access is now authorized (one-time grant, confirmed persistent
-across sessions), so the `inspect` action (a real stand-in for VoiceOver —
-see Phase 5) is available going forward, though it returned "not available
-right now" both times it was tried this session — worth retrying, possibly
-just needs the app already running when called. `AccessibilityAuditTests`/
-`NavigationTests` (macOS-hosted UI tests) need the user's own interactive
-session to run at all (see "Automated leak testing" section — same
-constraint, not a bug). Unit-level coverage passes on the iOS Simulator
-destination, so the code itself is verified by that path, but nobody has
-actually watched a real device/simulator announce these screens with
-VoiceOver toggled on yet.
+**Phase 4 (contrast) — done with real numbers, not guesses, 2026-09-13.**
+Got `xcodebuild test` working reliably on the iOS Simulator destination for
+`RetroStacksUITests` (macOS-hosted UI tests still need the user's own
+interactive session — see "Automated leak testing" below), which unlocked
+both a real `performAccessibilityAudit()` run *and* hand-computing WCAG
+contrast from actual sampled/known sRGB values:
 
-**Phase 5 — reading order & real VoiceOver navigation.** Once the Simulator
-authorization above is granted (one-time: attach the simulator panel and click
-"Let Claude use it"), pull each screen's accessibility-hierarchy dump via
-`inspect` (or `xcrun xcresulttool export attachments ... --test-id` off a UI
-test run, the technique already proven this session for `NavigationTests`) and
-read through it as a stand-in for a VoiceOver pass; still do a real device
-VoiceOver pass before calling any screen actually done — that step is a
-device/OS interaction, not something I can substitute for.
+- **`.yellow`** (`StatusBadge`'s wishlist case: text+icon on its own
+  `opacity(0.16)` wash) measured **~1.4:1 in light mode** — badly under the
+  3:1 UI-component floor, let alone 4.5:1 for text. Dark mode was already
+  fine (~6.1:1). Confirmed by hand: sampled the app's real background pixel
+  color from a live screenshot, took systemYellow's documented sRGB values,
+  composited them the same way the badge does, ran the actual WCAG
+  relative-luminance formula.
+- Re-ran `performAccessibilityAudit()` on Dashboard with the *OS's own* audit
+  (not hand-math) and got 13 real findings, all with element identifiers +
+  `.detailedDescription` (not just the near-useless `.compactDescription`).
+  Confirmed `.green` has the identical light-mode failure shape (StatTile's
+  "+$472 vs. invested" footnote), and 2 `StatTile` texts risk Dynamic-Type
+  clipping (`.lineLimit(1)` with no `.minimumScaleFactor`).
+- Fixed: new `AccentGold`/`AccentGreen`/`AccentRed` colorsets (darker in
+  light mode, unchanged system color in dark mode — see the comment above
+  `Color.accentGold` in `Badges.swift`), swapped into every place
+  `.yellow`/`.green`/`.red` carried real semantic meaning (owned/wishlisted/
+  gain/loss/complete) as text or icon color, app-wide, not just Dashboard.
+  `StatTile`'s clipping risk fixed with `.minimumScaleFactor`.
+- **Result: 13 → 10 findings.** Left unresolved on purpose (see
+  `AccessibilityAuditTests`'s doc comment for the full reasoning): 3 hard
+  "Contrast failed" findings inside `BreakdownBar` that survived switching to
+  explicit `.primary` — best-evidenced theory is a saturated bar washing out
+  nearby text structurally, not a wrong-color-choice, and needs a real visual
+  iteration pass; and 7 "`.secondary` at `.caption` nearly passes" warnings,
+  which is the *default look of `.secondary` text everywhere in the app*, not
+  a Dashboard bug — a design decision on how muted that should read, not
+  something to change unilaterally.
 
-**Phase 6 — the automated gate.** `AccessibilityAuditTests.testDashboardAccessibilityAudit`
-still logs+attaches findings but never fails (see `CLAUDE.md`) — deliberately
-left alone this pass since it needs the Phase 5 live pass first to know what
-"clean" actually looks like for a screen; tightening it now would either be a
-guess or lock in whatever the audit happens to currently report.
+**Phase 6 (the automated gate) — done, as a ratchet.**
+`AccessibilityAuditTests.testDashboardAccessibilityAudit` now asserts
+`findings.count <= knownFindingBaseline` (10) instead of only logging —
+catches any *new* regression immediately without requiring the screen to be
+perfectly clean first (which Phase 5 hasn't happened yet). Lower the baseline
+as the remaining 10 get fixed for real.
 
-**Remaining screens** (same phase order, not yet touched): `AddToCollectionFlow`,
-`CatalogSection`'s own chrome (as opposed to `CatalogItemRow`/`CatalogPosterCard`,
-both now covered), and `SidebarView` (already has identifiers from earlier
-this session; check for any remaining icon-only spots once the sidebar grows
-badges/actions).
+**Phase 5 — reading order & real VoiceOver navigation. Not done.** Simulator
+access is authorized (one-time grant, confirmed persistent across sessions),
+but the `inspect` action returned "not available right now" every time it was
+tried this session (worth retrying — possibly needs the app already running,
+or is just flaky in this environment). The `xcresulttool export attachments`
+route *does* work reliably now (used it for the Phase 4 audit above) and is a
+real, proven substitute — pull each screen's accessibility-hierarchy dump
+that way and read through it as a stand-in for a VoiceOver pass. Still do a
+real device VoiceOver pass before calling any screen actually done — that
+step is a device/OS interaction, not something to substitute away entirely.
+
+**Remaining screens** (same phase order, not yet touched): `AddToCollectionFlow`
+(new this session — the barcode scanner and system-first picker haven't had
+an accessibility pass yet), `CatalogSection`'s own chrome, and `SidebarView`
+(already has identifiers; check for icon-only spots once it grows
+badges/actions). And the audit above only ever exercised Dashboard — the
+same real-audit technique (not hand-guessing) should extend to
+`SystemGamesList`, `CollectionSection`, and `CatalogSection` next.
 
 ## Automated leak testing — exhaustive, unattended
 
@@ -329,6 +342,16 @@ this one isn't a one-time grant, it's "someone has to actually run it"). So:
 not a blocker to fix, just a fact about this tool. That run also surfaced 4
 real UI test failures, traced to a genuine bug (see "Multi-user" section
 above) and fixed.
+
+**Update, same day:** `-destination 'platform=iOS Simulator,...'` *does* work
+reliably from this automated session for `RetroStacksUITests` (used it for
+the whole Phase 4 accessibility-audit push above) — no interactive-session
+requirement there, since it's driving a simulator process, not injecting
+into a real macOS window. The one real rough edge: `CoreSimulatorService`
+itself crashed mid-run twice this session ("(ipc/mig) server died"),
+unrelated to any of this project's code — `killall -9
+com.apple.CoreSimulator.CoreSimulatorService` (it restarts itself) and retry
+if a run fails with that specific error.
 
 **Phase 3 — assert, don't just report.** Once the above is unblocked and the
 walkthrough's coverage is widened, this becomes a real regression gate
