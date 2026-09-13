@@ -44,12 +44,18 @@ struct CollectionItemDetailView: View {
             ToolbarItem {
                 Menu {
                     statusMenu
-                    Divider()
-                    Button(role: .destructive) { showDeleteConfirm = true } label: {
-                        Label("Delete from Collection", systemImage: "trash")
-                    }
+                    conditionMenu
+                    completenessMenu
                 } label: {
-                    Label("More", systemImage: "ellipsis.circle")
+                    Label("Quick Edit", systemImage: "slider.horizontal.3")
+                }
+            }
+            // A direct button, not nested in the menu above — the same
+            // destructive action buried a level deeper cost a tap for no
+            // safety benefit (the confirmation below is the actual guard).
+            ToolbarItem {
+                Button(role: .destructive) { showDeleteConfirm = true } label: {
+                    Label("Delete from Collection", systemImage: "trash")
                 }
             }
         }
@@ -197,6 +203,31 @@ struct CollectionItemDetailView: View {
             ForEach(CollectionStatus.allCases) { Label($0.displayName, systemImage: $0.symbol).tag($0) }
         }
         .onChange(of: item.status) { item.touch(); try? modelContext.save() }
+    }
+
+    /// Same shape as `statusMenu` — was previously only reachable through the
+    /// full edit form (Edit → tap field → tap value → Save, 4 taps for a
+    /// single-field change); this cuts the common case to 2.
+    @ViewBuilder
+    private var conditionMenu: some View {
+        Picker("Condition", selection: Binding(
+            get: { item.condition ?? .good },
+            set: { item.condition = $0 }
+        )) {
+            ForEach(ConditionGrade.allCases) { Text($0.displayName).tag($0) }
+        }
+        .onChange(of: item.condition) { item.touch(); try? modelContext.save() }
+    }
+
+    @ViewBuilder
+    private var completenessMenu: some View {
+        Picker("Completeness", selection: Binding(
+            get: { item.completeness ?? .loose },
+            set: { item.completeness = $0 }
+        )) {
+            ForEach(Completeness.allCases) { Text($0.displayName).tag($0) }
+        }
+        .onChange(of: item.completeness) { item.touch(); try? modelContext.save() }
     }
 }
 

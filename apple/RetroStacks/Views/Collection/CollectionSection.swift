@@ -41,7 +41,16 @@ struct CollectionSection: View {
     @State private var showCSVExporter = false
     @State private var showImporter = false
     @State private var pendingImport: CollectionArchive?
-    @State private var transferMessage: String?
+    /// Auto-dismissing — nothing to decide, just an FYI. A blocking `alert`
+    /// was previously used for both success and failure; success doesn't
+    /// need a tap to dismiss, it needs to get out of the way.
+    @State private var successToast: String?
+    /// Set alongside `successToast` only when that toast should offer an
+    /// "Undo" (swipe-to-delete) — nil for plain FYIs like export/import.
+    @State private var toastUndo: (() -> Void)?
+    /// Still a real blocking `alert` — an actual failure is worth making
+    /// sure the user saw.
+    @State private var errorMessage: String?
 
     /// Persisted per install. Default: drill into each system.
     @AppStorage("collection.groupBySystem") private var groupBySystem = true
@@ -88,9 +97,9 @@ struct CollectionSection: View {
                 defaultFilename: exportFilename
             ) { result in
                 if case .failure(let error) = result {
-                    transferMessage = "Export failed: \(error.localizedDescription)"
+                    errorMessage = "Export failed: \(error.localizedDescription)"
                 } else {
-                    transferMessage = "Exported \(allItems.count) items."
+                    successToast = "Exported \(allItems.count) items."
                 }
             }
             .fileExporter(
@@ -100,9 +109,9 @@ struct CollectionSection: View {
                 defaultFilename: exportFilename
             ) { result in
                 if case .failure(let error) = result {
-                    transferMessage = "CSV export failed: \(error.localizedDescription)"
+                    errorMessage = "CSV export failed: \(error.localizedDescription)"
                 } else {
-                    transferMessage = "Exported \(allItems.count) items to CSV."
+                    successToast = "Exported \(allItems.count) items to CSV."
                 }
             }
             .fileImporter(
@@ -124,10 +133,14 @@ struct CollectionSection: View {
             } message: { archive in
                 Text("From \(archive.exportedAt.formatted(date: .abbreviated, time: .shortened)).")
             }
-            .alert("Collection", isPresented: Binding(get: { transferMessage != nil }, set: { if !$0 { transferMessage = nil } })) {
-                Button("OK", role: .cancel) { transferMessage = nil }
+            .alert("Collection", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
-                Text(transferMessage ?? "")
+                Text(errorMessage ?? "")
+            }
+            .toast(successToast, actionTitle: toastUndo != nil ? "Undo" : nil, action: toastUndo) {
+                successToast = nil
+                toastUndo = nil
             }
         }
         .onAppear { viewModel.statusFilter = mode.status }
@@ -312,15 +325,28 @@ struct CollectionSection: View {
         "RetroStacks Collection \(Date.now.formatted(.iso8601.year().month().day()))"
     }
 
+    /// Swipe-to-remove had no confirmation at all (unlike the detail view's
+    /// destructive menu action for the same underlying change) — rather than
+    /// bolting on a blocking confirmation here too (which would undo the
+    /// point of a fast swipe gesture), a brief "Undo" toast gives the same
+    /// safety net without adding a tap to the common case.
     private func delete(_ item: CollectionItem) {
+        let title = item.title
         item.markDeleted()
         try? modelContext.save()
+        successToast = "Removed \(title)"
+        toastUndo = { [weak item] in
+            guard let item else { return }
+            item.deletedAt = nil
+            item.touch()
+            try? modelContext.save()
+        }
     }
 
     private func handleImportPick(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
-            transferMessage = "Couldn't open the file: \(error.localizedDescription)"
+            errorMessage = "Couldn't open the file: \(error.localizedDescription)"
         case .success(let urls):
             guard let url = urls.first else { return }
             let scoped = url.startAccessingSecurityScopedResource()
@@ -329,7 +355,7 @@ struct CollectionSection: View {
                 let archive = try CollectionArchive.decode(Data(contentsOf: url))
                 pendingImport = archive
             } catch {
-                transferMessage = "That file isn't a RetroStacks collection export."
+                errorMessage = "That file isn't a RetroStacks collection export."
             }
         }
     }
@@ -342,9 +368,9 @@ struct CollectionSection: View {
             if inserted > 0 { parts.append("\(inserted) added") }
             if updated > 0 { parts.append("\(updated) updated") }
             if deleted > 0 { parts.append("\(deleted) removed") }
-            transferMessage = parts.isEmpty ? "Nothing to import." : "Imported: " + parts.joined(separator: ", ") + "."
+            successToast = parts.isEmpty ? "Nothing to import." : "Imported: " + parts.joined(separator: ", ") + "."
         } catch {
-            transferMessage = "Import failed: \(error.localizedDescription)"
+            errorMessage = "Import failed: \(error.localizedDescription)"
         }
     }
 }

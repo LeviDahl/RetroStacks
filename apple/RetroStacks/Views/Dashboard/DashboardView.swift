@@ -88,30 +88,43 @@ struct DashboardView: View {
                             Label(syncMenuLabel, systemImage: "arrow.triangle.2.circlepath")
                         }
                         .disabled(sync.phase == .syncing)
-                        if account.state.isSignedIn {
+                    } label: {
+                        Label("View Options", systemImage: "slider.horizontal.3")
+                    }
+                }
+                // A dedicated entry point, not nested inside "View Options" —
+                // that menu reads as display settings, not account/sync, so
+                // Sign In was two taps deep in a place a first-time user had
+                // no reason to look. Signed out, this is a single tap
+                // straight to the sheet; signed in, the icon itself signals
+                // state and the menu holds the account-scoped actions.
+                ToolbarItem {
+                    if account.state.isSignedIn {
+                        Menu {
                             Button {
                                 Task { await collectionSync.sync(into: modelContext) }
                             } label: {
                                 Label(collectionSyncMenuLabel, systemImage: "arrow.triangle.2.circlepath")
                             }
                             .disabled(collectionSync.phase == .syncing)
-                        }
-                        Divider()
-                        Button {
-                            showingSignIn = true
-                        } label: {
-                            Label(account.summary, systemImage: "person.crop.circle")
-                        }
-                        .accessibilityIdentifier(AccessibilityID.Account.signInRow)
-                        if account.state.isSignedIn {
+                            Divider()
+                            Text(account.summary)
                             Button(role: .destructive) {
                                 account.signOut()
                             } label: {
                                 Label("Sign Out", systemImage: "person.crop.circle.badge.xmark")
                             }
+                        } label: {
+                            Label(account.summary, systemImage: "person.crop.circle.fill")
                         }
-                    } label: {
-                        Label("View Options", systemImage: "slider.horizontal.3")
+                        .accessibilityIdentifier(AccessibilityID.Account.signInRow)
+                    } else {
+                        Button {
+                            showingSignIn = true
+                        } label: {
+                            Label("Sign In", systemImage: "person.crop.circle")
+                        }
+                        .accessibilityIdentifier(AccessibilityID.Account.signInRow)
                     }
                 }
                 ToolbarItem {

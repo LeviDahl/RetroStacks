@@ -30,6 +30,8 @@ struct SystemGamesList: View {
     @State private var selecting = false
     @State private var picked: Set<String> = []
     @State private var bulkCompleteness: Completeness = .loose
+    @State private var successToast: String?
+    @State private var toastUndo: (() -> Void)?
     @AppStorage("system.kindFilter") private var kindRaw = KindFilter.games.rawValue
     @AppStorage("system.sortField") private var sortRaw = SortField.title.rawValue
     /// Applies to whichever `sortField` is active — add a new field and it's
@@ -185,6 +187,24 @@ struct SystemGamesList: View {
                     }
                 }
             }
+            .toast(successToast, actionTitle: toastUndo != nil ? "Undo" : nil, action: toastUndo) {
+                successToast = nil
+                toastUndo = nil
+            }
+    }
+
+    /// Swipe-to-remove has no confirmation (unlike the detail view's
+    /// destructive menu action for the same change) — an "Undo" toast gives
+    /// the same safety net without adding a blocking tap to the fast path.
+    private func removeWithUndo(_ entry: CollectionItem, title: String) {
+        CollectionActions.remove(entry, in: modelContext)
+        successToast = "Removed \(title)"
+        toastUndo = { [weak entry] in
+            guard let entry else { return }
+            entry.deletedAt = nil
+            entry.touch()
+            try? modelContext.save()
+        }
     }
 
     @ViewBuilder
@@ -459,7 +479,7 @@ struct SystemGamesList: View {
             .swipeActions(edge: .trailing) {
                 if let entry = catalogItem.entry(for: addStatus) {
                     Button(role: .destructive) {
-                        withAnimation { CollectionActions.remove(entry, in: modelContext) }
+                        withAnimation { removeWithUndo(entry, title: catalogItem.displayTitle) }
                     } label: {
                         Label("Remove", systemImage: "trash")
                     }
@@ -614,6 +634,20 @@ struct PlatformCatalogRow: View {
     private var entry: CollectionItem? { catalogItem.entry(for: listStatus) }
     private var wishlisted: Bool { catalogItem.entry(for: .wishlist) != nil }
 
+    /// On iOS there's no hover state, so gating on `hovering` (macOS-only)
+    /// left the *only* way to add a not-yet-wishlisted item to the wishlist
+    /// from this row an undiscoverable leading swipe — the button only ever
+    /// appeared once an item was already wishlisted. Persistent on iOS;
+    /// still hover-revealed on macOS, where it's genuinely just decluttering
+    /// a denser layout, not hiding the only way in.
+    private var wishlistButtonVisible: Bool {
+        #if os(iOS)
+        true
+        #else
+        hovering || wishlisted
+        #endif
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             if let entry {
@@ -626,7 +660,7 @@ struct PlatformCatalogRow: View {
 
             Spacer(minLength: 8)
 
-            if let onToggleWishlist, hovering || wishlisted {
+            if let onToggleWishlist, wishlistButtonVisible {
                 Button(action: onToggleWishlist) {
                     Image(systemName: wishlisted ? "star.fill" : "star")
                         .foregroundStyle(wishlisted ? .yellow : .secondary)
