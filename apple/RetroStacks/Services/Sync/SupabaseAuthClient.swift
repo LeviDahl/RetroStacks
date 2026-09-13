@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 nonisolated enum SupabaseAuthError: Error, CustomStringConvertible {
     case badStatus(Int, String?)
@@ -153,13 +154,16 @@ nonisolated struct SupabaseAuthClient: Sendable {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            AppLog.network.error("SupabaseAuthClient \(path): transport error — \(error.localizedDescription)")
             throw SupabaseAuthError.transport(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else {
+            AppLog.network.error("SupabaseAuthClient \(path): no HTTP response")
             throw SupabaseAuthError.transport("no HTTP response")
         }
         guard (200..<300).contains(http.statusCode) else {
             let message = (try? JSONDecoder().decode(GoTrueErrorBody.self, from: data))?.text
+            AppLog.auth.error("SupabaseAuthClient \(path): HTTP \(http.statusCode) — \(message ?? "no message")")
             throw SupabaseAuthError.badStatus(http.statusCode, message)
         }
         return data

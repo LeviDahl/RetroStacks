@@ -1,10 +1,19 @@
 import Foundation
+import os
 
 /// Wire row for `public.collection_items` (see `supabase/schema.sql`) — plain
-/// PostgREST over REST, no SDK. `keyEncodingStrategy/.convertToSnakeCase` on
-/// `JSONEncoder.supabase` maps these camelCase names to the DB's snake_case
-/// columns automatically.
-nonisolated private struct SupabaseCollectionRow: Codable {
+/// PostgREST over REST, no SDK. Explicit `CodingKeys`, deliberately **not**
+/// paired with `.convertToSnakeCase`/`.convertFromSnakeCase` — see the long
+/// comment on `JSONEncoder.exactKeys` for why: that strategy's automatic
+/// conversion mangles `userID` (`"user_id"` decodes back to `"userId"`, not
+/// `"userID"`), which silently broke `SupabaseSessionStore` and would have
+/// broken every `pull()` here the same way, since `user_id` is a `NOT NULL`
+/// column present on every single row.
+/// Internal (not `private`) purely so `SupabaseCollectionRowTests` can decode
+/// a realistic PostgREST payload directly — the exact bug this locks down
+/// (`userID` mis-decoding through `.convertFromSnakeCase`) only shows up once
+/// real JSON round-trips through this exact type.
+nonisolated struct SupabaseCollectionRow: Codable {
     var id: UUID
     var userID: UUID
     var catalogSlug: String?
@@ -27,6 +36,29 @@ nonisolated private struct SupabaseCollectionRow: Codable {
     var dateAdded: Date
     var updatedAt: Date
     var deletedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userID = "user_id"
+        case catalogSlug = "catalog_slug"
+        case status, condition, completeness
+        case hasBox = "has_box"
+        case hasManual = "has_manual"
+        case hasInserts = "has_inserts"
+        case hasOriginalPackaging = "has_original_packaging"
+        case gradingCompany = "grading_company"
+        case gradeScore = "grade_score"
+        case pricePaid = "price_paid"
+        case dateAcquired = "date_acquired"
+        case acquisitionSource = "acquisition_source"
+        case estimatedValueOverride = "estimated_value_override"
+        case storageLocation = "storage_location"
+        case notes
+        case playStatus = "play_status"
+        case dateAdded = "date_added"
+        case updatedAt = "updated_at"
+        case deletedAt = "deleted_at"
+    }
 
     init(change: CollectionChange, userID: UUID) {
         let entry = change.payload
@@ -116,9 +148,10 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
 
         let data = try await request(path: "collection_items", method: "GET", query: query, accessToken: token)
         do {
-            let rows = try JSONDecoder.supabase.decode([SupabaseCollectionRow].self, from: data)
+            let rows = try JSONDecoder.exactKeys.decode([SupabaseCollectionRow].self, from: data)
             return rows.map(\.asChange)
         } catch {
+            AppLog.sync.error("SupabaseCollectionSyncEngine.pull: decode failed — \(error)")
             throw SyncError.transport("bad response: \(error)")
         }
     }
@@ -133,8 +166,9 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
         let rows = changes.map { SupabaseCollectionRow(change: $0, userID: userID) }
         let body: Data
         do {
-            body = try JSONEncoder.supabase.encode(rows)
+            body = try JSONEncoder.exactKeys.encode(rows)
         } catch {
+            AppLog.sync.error("SupabaseCollectionSyncEngine.push: encode failed — \(error)")
             throw SyncError.transport("couldn't encode changes: \(error)")
         }
 
@@ -147,9 +181,10 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
             prefer: "resolution=merge-duplicates,return=representation"
         )
         do {
-            let responseRows = try JSONDecoder.supabase.decode([SupabaseCollectionRow].self, from: data)
+            let responseRows = try JSONDecoder.exactKeys.decode([SupabaseCollectionRow].self, from: data)
             return responseRows.map(\.asChange)
         } catch {
+            AppLog.sync.error("SupabaseCollectionSyncEngine.push: decode failed — \(error)")
             throw SyncError.transport("bad response: \(error)")
         }
     }
@@ -180,13 +215,16 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            AppLog.network.error("SupabaseCollectionSyncEngine \(method) \(path): transport error — \(error.localizedDescription)")
             throw SyncError.transport(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else {
+            AppLog.network.error("SupabaseCollectionSyncEngine \(method) \(path): no HTTP response")
             throw SyncError.transport("no HTTP response")
         }
         guard (200..<300).contains(http.statusCode) else {
             let message = String(data: data, encoding: .utf8) ?? "status \(http.statusCode)"
+            AppLog.network.error("SupabaseCollectionSyncEngine \(method) \(path): HTTP \(http.statusCode) — \(message)")
             throw SyncError.transport(message)
         }
         return data

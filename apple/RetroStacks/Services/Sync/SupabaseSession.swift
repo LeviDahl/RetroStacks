@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import os
 
 /// A GoTrue (Supabase Auth) session — just enough to authorize REST calls and
 /// know who's signed in. Kept deliberately separate from `AccountService`
@@ -37,25 +38,56 @@ nonisolated final class SupabaseSessionStore: Sendable {
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return try? JSONDecoder.supabase.decode(SupabaseSession.self, from: data)
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess else {
+            if status != errSecItemNotFound {
+                AppLog.sync.error("SupabaseSessionStore.load: SecItemCopyMatching failed, status \(status)")
+            }
+            return nil
+        }
+        guard let data = item as? Data else {
+            AppLog.sync.error("SupabaseSessionStore.load: keychain item had no data")
+            return nil
+        }
+        do {
+            return try JSONDecoder.exactKeys.decode(SupabaseSession.self, from: data)
+        } catch {
+            AppLog.sync.error("SupabaseSessionStore.load: decode failed — \(error)")
+            return nil
+        }
     }
 
     func save(_ session: SupabaseSession) {
-        guard let data = try? JSONEncoder.supabase.encode(session) else { return }
-        var query = baseQuery
-        if SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess {
-            SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        let data: Data
+        do {
+            data = try JSONEncoder.exactKeys.encode(session)
+        } catch {
+            AppLog.sync.error("SupabaseSessionStore.save: encode failed — \(error)")
+            return
+        }
+        let query = baseQuery
+        let existsStatus = SecItemCopyMatching(query as CFDictionary, nil)
+        if existsStatus == errSecSuccess {
+            let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            if updateStatus != errSecSuccess {
+                AppLog.sync.error("SupabaseSessionStore.save: SecItemUpdate failed, status \(updateStatus)")
+            }
         } else {
-            query[kSecValueData as String] = data
-            query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            SecItemAdd(query as CFDictionary, nil)
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if addStatus != errSecSuccess {
+                AppLog.sync.error("SupabaseSessionStore.save: SecItemAdd failed, status \(addStatus)")
+            }
         }
     }
 
     func clear() {
-        SecItemDelete(baseQuery as CFDictionary)
+        let status = SecItemDelete(baseQuery as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            AppLog.sync.error("SupabaseSessionStore.clear: SecItemDelete failed, status \(status)")
+        }
     }
 
     private var baseQuery: [String: Any] {
@@ -68,10 +100,33 @@ nonisolated final class SupabaseSessionStore: Sendable {
 }
 
 extension JSONEncoder {
+    /// For GoTrue's own wire format (auth responses) — safe to auto-convert
+    /// because none of those fields are acronym-cased.
     nonisolated static var supabase: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.keyEncodingStrategy = .convertToSnakeCase
+        return encoder
+    }
+
+    /// For types with their own explicit `CodingKeys` (`SupabaseSession`,
+    /// `SupabaseCollectionRow`) — **not** paired with `.convertToSnakeCase`.
+    ///
+    /// `userID` is exactly the case `.convertToSnakeCase`/`.convertFromSnakeCase`
+    /// get wrong asymmetrically: encoding "userID" → "user_id" is correct
+    /// (Foundation's to-snake-case groups a trailing run of capitals as one
+    /// unit), but decoding "user_id" back only naively capitalizes each
+    /// underscore-separated segment, producing "userId" (lowercase d) — which
+    /// doesn't match the property name, so `Decodable` throws `keyNotFound`
+    /// and silently disappears behind a `try?`. Found 2026-09-13: this made
+    /// `SupabaseSessionStore.load()` always return nil after a successful
+    /// `save()`, and would have broken `SupabaseCollectionSyncEngine.pull()`
+    /// on every real server response. Explicit `CodingKeys` sidestep the
+    /// asymmetry entirely — this coder must never also set a key strategy, or
+    /// the two conversions fight each other.
+    nonisolated static var exactKeys: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
         return encoder
     }
 }
@@ -81,6 +136,13 @@ extension JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return decoder
+    }
+
+    /// See `JSONEncoder.exactKeys` — the decoding half of the same pairing.
+    nonisolated static var exactKeys: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         return decoder
     }
 }

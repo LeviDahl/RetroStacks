@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 nonisolated protocol CatalogRepository: Sendable {
     func fetchCatalog(forceReload: Bool) async throws -> CatalogFeed
@@ -59,6 +60,7 @@ nonisolated struct RemoteCatalogRepository: CatalogRepository {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            AppLog.network.error("RemoteCatalogRepository \(url.path): transport error — \(error.localizedDescription)")
             // Offline / unreachable: fall back to whatever's cached.
             if !forceReload,
                let cached = URLCache.shared.cachedResponse(for: request)?.data,
@@ -68,11 +70,13 @@ nonisolated struct RemoteCatalogRepository: CatalogRepository {
             throw CatalogError.transport(error.localizedDescription)
         }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            AppLog.network.error("RemoteCatalogRepository \(url.path): HTTP \(http.statusCode)")
             throw CatalogError.badStatus(http.statusCode)
         }
         do {
             return try JSONDecoder.retroStacksFeed.decode(T.self, from: data)
         } catch {
+            AppLog.network.error("RemoteCatalogRepository \(url.path): decode failed — \(error)")
             throw CatalogError.decoding(String(describing: error))
         }
     }
