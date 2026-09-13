@@ -18,6 +18,14 @@ import Foundation
 /// Extend this file as the rest of `BACKLOG.md`'s Accessibility item gets
 /// picked up — same shape, more cases.
 enum AccessibilityID {
+    enum Sidebar {
+        /// Keyed by `AppSection.rawValue` — already a stable string ("dashboard",
+        /// "collection", …), not the row's position in the list.
+        static func item(_ section: AppSection) -> String {
+            "sidebar.\(section.rawValue)"
+        }
+    }
+
     enum Dashboard {
         static let ownedItemsTile = "dashboard.ownedItemsTile"
 

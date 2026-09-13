@@ -36,6 +36,7 @@ struct SidebarView: View {
         Label(section.title, systemImage: section.symbol)
             .badge(badge ?? 0)
             .tag(section)
+            .accessibilityIdentifier(AccessibilityID.Sidebar.item(section))
     }
 
     private var ownedCount: Int {
