@@ -29,9 +29,19 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 
 - ~~`PhotosPicker` → `CollectionItem.photoData`~~ — done: Photos section in the
   edit form (multi-select, capped, ImageIO-downscaled to 1600px JPEG).
-- **Barcode scan to add** (iOS `DataScannerViewController`). Needs an
-  `NSCameraUsageDescription` in the target's Info.plist (user has to add it) and
-  device testing — not doable headless.
+- ~~**Barcode scan to add**~~ — implemented 2026-09-14, once the user added
+  `NSCameraUsageDescription`: `BarcodeScannerView.swift`
+  (`DataScannerViewController` wrapped for SwiftUI, `#if os(iOS)` — VisionKit
+  has no macOS equivalent), reachable via a toolbar button in
+  `AddToCollectionFlow`. Scans EAN-13/EAN-8/UPC-E/Code-128, looks the payload
+  up against `CatalogItem.upc`, adds the match the same simple way every
+  other row in that sheet does (consistent with the rest of that flow, no new
+  default-value inconsistency). Guards on `DataScannerViewController
+  .isSupported`/`.isAvailable` with a real fallback message instead of
+  crashing when unsupported. **Not verified working** — the Simulator
+  reports `isSupported == false` (no camera), so this is build-verified and
+  code-reviewed against Apple's documented API only; needs a real device
+  test, which is on the user.
 - Multiple copies / variant handling surfaced in the UI (model already supports it).
 - ~~**CSV export**~~ — done: `CollectionCSV` + "Export as CSV…" in the Backup menu.
 - Per-item **price sparkline** + collection **value-over-time chart** — both need

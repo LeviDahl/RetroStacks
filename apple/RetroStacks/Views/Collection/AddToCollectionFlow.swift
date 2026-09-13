@@ -19,6 +19,9 @@ struct AddToCollectionFlow: View {
 
     @Query(sort: \Platform.generation) private var platforms: [Platform]
     @State private var searchText = ""
+    #if os(iOS)
+    @State private var showingScanner = false
+    #endif
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespaces).isEmpty
@@ -42,7 +45,21 @@ struct AddToCollectionFlow: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
+                #if os(iOS)
+                ToolbarItem {
+                    Button {
+                        showingScanner = true
+                    } label: {
+                        Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                    }
+                }
+                #endif
             }
+            #if os(iOS)
+            .sheet(isPresented: $showingScanner) {
+                BarcodeScanScreen(onFound: add)
+            }
+            #endif
         }
         .frame(minWidth: 460, minHeight: 560)
     }
