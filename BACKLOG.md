@@ -328,73 +328,66 @@ Instruments profiling has genuine wall-clock cost (this session's manual runs
 took 45–90s of recording plus build/export time), so it's a deliberate
 "run me" tool, not a be-run-on-every-commit unit test.
 
-## UX tap-friction audit (2026-09-13)
+## UX tap-friction audit (2026-09-13) — mostly implemented
 
 Full audit: every core action from Dashboard, `CollectionSection`,
 `SystemGamesList`, `QuickAddSheet`, `CollectionItemEditView`/`DetailView`,
 catalog browsing, sign-in, sync, export/import — counted taps end to end.
-Most core actions are already at or under 2 taps (adding an owned/wishlist
-item from any of the three entry points, bulk-add, the `More`-menu status
-picker). What's actually over budget, ranked by how much it matters:
+Most core actions were already at or under 2 taps (adding an owned/wishlist
+item from any of the three entry points, bulk-add). Findings and their fate:
 
-- **Changing condition or completeness on an existing item is 4 taps**
-  (Edit → tap the field row → tap the value → Save) — the one flagged by the
-  user's own example applies here too: `CollectionItemEditView` puts these in
-  plain `Form` `Picker`s that push to a separate list. The app already has
-  the *right* pattern next door: `CollectionItemDetailView`'s `More` menu
-  embeds a `Picker` for Status directly, auto-saving via `.onChange` — 2 taps,
-  no Edit/Save round trip. **Fix:** extend that same quick-picker pattern to
-  Condition and Completeness in the `More` menu. Takes the common case from 4
-  taps to 2 without touching the full edit form (still there for bulk/rare
-  fields).
-- **Deleting an item from the detail view is 3 taps** (More → Delete → confirm)
-  — keep the confirm (destructive, not reversible from this UI), but the menu
-  hop is pure overhead. **Fix:** a directly-tappable delete affordance that
-  still opens the same confirmation, cutting it to 2.
-- **Sign In costs 2 "reach the sheet" taps before the actual flow starts** —
-  it's nested inside the Dashboard's `View Options` menu (icon:
-  `slider.horizontal.3`, reads as a display-settings menu, not an account
-  one). **Fix:** a dedicated toolbar entry point (`person.crop.circle`).
-- **Import's success path ends on a plain acknowledgement alert** (Merge/
-  Replace → OK) — the Merge/Replace choice must stay a real decision, but the
-  final OK is just dismissing an FYI. **Fix:** auto-dismissing toast for
-  success, real blocking `alert` reserved for actual failures.
-- **Inconsistent safety, not friction:** swipe-to-remove (system drill-down
-  list, flat "All Games" list, macOS right-click) has **no confirmation at
-  all**, while the identical destructive action from the detail view's `More`
-  menu does. Not recommending removing the detail view's confirm — flagging
-  that the fast paths are arguably *too* fast for a hard-to-recover action. A
-  brief "Removed — Undo" toast on the swipe path would add a safety net
-  without adding a blocking tap.
-- **Hidden, not just compact:** on iOS, `PlatformCatalogRow`'s wishlist star
-  only renders once an item is *already* wishlisted (`hovering` is
-  macOS-only) — the only way to *add* a not-yet-wishlisted item to the
-  wishlist from the system drill-down list is an undiscoverable leading swipe.
-  Worth a persistent (if small) affordance on iOS too.
-- **Inconsistent defaults, not exactly friction:** adding an *owned* item
-  skips `QuickAddSheet` and silently defaults to Loose/Good in two places
-  (`CatalogItemDetailView`, `AddToCollectionFlow`) but goes through the sheet
-  in `SystemGamesList`. Fewer taps is good; worth deciding on purpose whether
-  that inconsistency (and the differing defaults it produces) is intended.
+- ~~**Changing condition or completeness on an existing item was 4 taps**~~
+  — done: `CollectionItemDetailView`'s toolbar menu (renamed "Quick Edit")
+  now embeds Condition and Completeness `Picker`s alongside the existing
+  Status one, each auto-saving via `.onChange` — 2 taps, no Edit/Save round
+  trip. Full edit form still there for bulk/rare fields.
+- ~~**Deleting an item from the detail view was 3 taps**~~ — done: Delete is
+  now its own toolbar button instead of nested in the menu; same
+  confirmation dialog, one fewer tap to reach it.
+- ~~**Sign In cost 2 "reach the sheet" taps**~~ — done: dedicated toolbar
+  entry point (`person.crop.circle`, becomes `.fill` + a menu once signed
+  in) instead of living inside "View Options."
+- ~~**Import/export success ended on a blocking OK-only alert**~~ — done:
+  new `Views/Components/Toast.swift`, an auto-dismissing bottom banner.
+  Real failures still get a blocking `alert`.
+- ~~**Swipe-to-remove had no confirmation, unlike the detail view's menu**~~
+  — done, via the same `Toast` with an "Undo" action instead of a blocking
+  confirmation (which would've defeated the point of a fast swipe) —
+  `CollectionSection`'s flat list and `SystemGamesList`'s drill-down both
+  show "Removed — Undo" now. Not touched: `SystemCatalogTile`'s macOS
+  right-click Remove (deliberate secondary action, not an accidental-swipe
+  risk the same way).
+- ~~**Hidden on iOS: the wishlist star only showed once already
+  wishlisted**~~ — done: persistent on iOS now; still hover-gated on macOS
+  (a real declutter there, not the only way in).
+- **Inconsistent defaults — not fixed, a product decision, not a friction
+  bug.** Adding an *owned* item skips `QuickAddSheet` and silently defaults
+  to Loose/Good in two places (`CatalogItemDetailView`, `AddToCollectionFlow`)
+  but goes through the sheet in `SystemGamesList`. Left alone deliberately —
+  "fixing" it either adds a tap somewhere or removes a capture step
+  somewhere else; worth a real decision, not a unilateral one.
 
-None of this is implemented yet — pure audit, no code changed. Highest-value
-first fix is the Condition/Completeness quick-picker, since it's the exact
-pattern the user hit adding a real item and the fix already exists elsewhere
-in the codebase to copy.
+## Catalog browsing at scale — done
 
-## Catalog browsing at scale
+**Implemented 2026-09-13.** Both catalog-browsing entry points
+(`AddToCollectionFlow`'s picker sheet, `CatalogSection`'s standalone Browse
+Catalog tab) now default to a system-first list — pick a platform, then
+search/filter within just that platform's titles — instead of one flat list
+of everything (~3,600 entries and growing). Typing into the search field is
+still a full-catalog, cross-platform escape hatch for "I know exactly what
+I'm looking for." `CatalogSection` reuses its existing `platformSlugFilter`
+for this (picking a platform just sets the same field the toolbar's Platform
+picker already used), so every existing filter/sort/ownership combination
+keeps working unchanged once a platform is chosen; a new "All Systems"
+toolbar button clears just that field. `CatalogPlatformRow` (icon, name,
+entry count) is shared between both entry points.
 
-Raised 2026-09-13: `AddToCollectionFlow`'s catalog picker (and `CatalogSection`
-generally) searches/lists the *entire* catalog flat, which won't hold up once
-it's tens of thousands of games — hunting by name across everything gets
-harder as the catalog grows, and it's already ~3,600 items. Likely direction:
-browse **by system first** (the same system-first pattern `CollectionSection`
-already uses for the owned collection — pick a platform, then search/scroll
-within just that platform's titles) rather than one flat searchable list.
-`SystemGamesList`'s `.all` scope already proves this shape works well for
-browsing a single platform's full catalog (search + kind/sort filter + A–Z
-scrubber). Worth doing before the catalog grows much further, since it's a
-navigation-model change, not a small tweak, and gets harder to retrofit later.
+Not done: hasn't been visually click-through tested (macOS UI-automation
+tooling was unreliable this session — see the `xcodebuild test` note
+elsewhere in this doc), only build-verified + code-reviewed against the same
+patterns already proven elsewhere (`CollectionSection`'s system-first list,
+`SystemGamesList`'s per-platform search). Worth a look next time the app is
+open.
 
 ## Code health & error analytics
 
