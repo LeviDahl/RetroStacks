@@ -78,6 +78,7 @@ struct CollectionItemDetailView: View {
                     size: 120, cornerRadius: 16,
                     contentMode: .fit
                 )
+                .accessibilityHidden(true) // decorative — the title text beside it says the same thing
                 if let attribution = item.catalogItem?.imageAttribution {
                     Text(attribution)
                         .font(.caption2)

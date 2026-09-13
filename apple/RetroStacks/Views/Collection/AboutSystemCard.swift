@@ -28,6 +28,7 @@ struct AboutSystemCard: View {
                     if let url = heroConsole?.imageURL {
                         ItemThumbnail(kind: .console, platformSymbol: platform.iconSystemName,
                                       imageURL: url, size: 78, cornerRadius: 14, contentMode: .fit)
+                            .accessibilityHidden(true) // decorative — the platform name is read separately below
                     } else {
                         Image(systemName: platform.iconSystemName)
                             .font(.system(size: 34))
@@ -35,6 +36,7 @@ struct AboutSystemCard: View {
                             .frame(width: 78, height: 78)
                             .background(.tint.opacity(0.12),
                                         in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .accessibilityHidden(true)
                     }
                 }
 

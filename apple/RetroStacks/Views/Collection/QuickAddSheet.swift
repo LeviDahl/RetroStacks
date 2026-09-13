@@ -29,6 +29,7 @@ struct QuickAddSheet: View {
                     imageURL: catalogItem.imageURL,
                     size: 52, cornerRadius: 10
                 )
+                .accessibilityHidden(true) // decorative — the title text beside it says the same thing
                 VStack(alignment: .leading, spacing: 2) {
                     Text(catalogItem.displayTitle).font(.headline).lineLimit(2)
                     Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)

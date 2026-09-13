@@ -18,6 +18,7 @@ struct CatalogPosterCard: View {
                 contentMode: .fit
             )
             .frame(maxWidth: .infinity)
+            .accessibilityHidden(true) // decorative — the title text below says the same thing
             .overlay(alignment: .topTrailing) {
                 ownershipBadge
                     .padding(6)
@@ -45,23 +46,25 @@ struct CatalogPosterCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private var ownershipBadge: some View {
         if item.isOwned {
-            badge(symbol: "checkmark.seal.fill", color: .green)
+            badge(symbol: "checkmark.seal.fill", color: .green, label: "Owned")
         } else if item.isWishlisted {
-            badge(symbol: "star.fill", color: .yellow)
+            badge(symbol: "star.fill", color: .yellow, label: "Wishlisted")
         }
     }
 
-    private func badge(symbol: String, color: Color) -> some View {
+    private func badge(symbol: String, color: Color, label: String) -> some View {
         Image(systemName: symbol)
             .font(.caption)
             .foregroundStyle(.white)
             .padding(5)
             .background(color, in: Circle())
+            .accessibilityLabel(label)
     }
 }
 

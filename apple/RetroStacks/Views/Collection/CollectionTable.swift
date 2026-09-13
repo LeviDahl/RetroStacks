@@ -21,6 +21,7 @@ struct CollectionTable: View {
                         imageURL: item.catalogItem?.imageURL,
                         size: 34, cornerRadius: 7
                     )
+                    .accessibilityHidden(true) // decorative — the title text beside it says the same thing
                     VStack(alignment: .leading, spacing: 1) {
                         Text(item.title).lineLimit(1)
                         if let genre = item.catalogItem?.genre {
