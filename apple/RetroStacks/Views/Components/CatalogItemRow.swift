@@ -13,6 +13,7 @@ struct CatalogItemRow: View {
                 imageName: item.imageName,
                 imageURL: item.imageURL
             )
+            .accessibilityHidden(true) // decorative — the title text beside it says the same thing
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.displayTitle)
@@ -43,15 +44,18 @@ struct CatalogItemRow: View {
                 HStack(spacing: 5) {
                     if item.isOwned {
                         Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                            .accessibilityLabel("Owned")
                     }
                     if item.isWishlisted {
                         Image(systemName: "star.fill").foregroundStyle(.yellow)
+                            .accessibilityLabel("Wishlisted")
                     }
                 }
                 .font(.caption)
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }
 

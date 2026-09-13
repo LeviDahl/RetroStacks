@@ -43,6 +43,12 @@ struct ConditionLabel: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .labelStyle(.titleAndIcon)
+            // In `compact` mode the title `Text` is omitted entirely (just the
+            // dot) — without this, VoiceOver gets nothing at all for condition,
+            // since a plain `Circle` carries no accessible text on its own.
+            // Set unconditionally (not just when compact) since it's the same
+            // text the visible title would show anyway.
+            .accessibilityLabel(condition.displayName)
         }
     }
 

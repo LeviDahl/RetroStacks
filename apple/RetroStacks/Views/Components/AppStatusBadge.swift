@@ -139,6 +139,8 @@ private struct IssueRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
+            .accessibilityHint(issue.title)
         }
         .padding(12)
     }

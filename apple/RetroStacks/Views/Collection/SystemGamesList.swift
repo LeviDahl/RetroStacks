@@ -582,6 +582,7 @@ struct CatalogRowContent: View {
                 imageURL: catalogItem.imageURL,
                 size: 48, cornerRadius: 10
             )
+            .accessibilityHidden(true) // decorative — the title text beside it says the same thing
             VStack(alignment: .leading, spacing: 3) {
                 Text(catalogItem.displayTitle)
                     .font(.body.weight(.medium))
@@ -632,6 +633,7 @@ struct PlatformCatalogRow: View {
                 }
                 .buttonStyle(.borderless)
                 .help(wishlisted ? "Remove from wishlist" : "Add to wishlist")
+                .accessibilityLabel(wishlisted ? "Remove from wishlist" : "Add to wishlist")
                 .transition(.opacity)
             }
 
@@ -666,8 +668,10 @@ struct PlatformCatalogRow: View {
                     Image(systemName: listStatus == .wishlist ? "star.fill" : "checkmark.seal.fill")
                         .font(.caption)
                         .foregroundStyle(listStatus == .wishlist ? .yellow : .green)
+                        .accessibilityLabel(listStatus == .wishlist ? "Wishlisted" : "Owned")
                 }
             }
+            .accessibilityElement(children: .combine)
         } else {
             Button(action: onAdd) {
                 Image(systemName: "plus.circle.fill")
@@ -677,6 +681,7 @@ struct PlatformCatalogRow: View {
             .buttonStyle(.borderless)
             .foregroundStyle(.tint)
             .help(listStatus == .wishlist ? "Add to wishlist" : "Add to collection")
+            .accessibilityLabel(listStatus == .wishlist ? "Add to wishlist" : "Add to collection")
         }
     }
 }

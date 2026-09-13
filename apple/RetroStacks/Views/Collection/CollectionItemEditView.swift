@@ -194,6 +194,7 @@ struct CollectionItemEditView: View {
             }
             .frame(width: 84, height: 84)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityLabel("Photo \(index + 1)")
 
             Button {
                 item.photoData.remove(at: index)
@@ -206,6 +207,7 @@ struct CollectionItemEditView: View {
             }
             .buttonStyle(.plain)
             .padding(3)
+            .accessibilityLabel("Remove photo \(index + 1)")
         }
     }
 

@@ -360,6 +360,8 @@ private struct FilterChip: View {
                 Image(systemName: "xmark.circle.fill")
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove filter")
+            .accessibilityHint(text)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)

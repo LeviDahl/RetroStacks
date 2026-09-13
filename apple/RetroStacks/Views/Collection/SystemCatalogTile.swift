@@ -65,6 +65,7 @@ struct SystemCatalogTile: View {
                     size: 128, cornerRadius: 12, contentMode: .fit
                 )
                 .frame(maxWidth: .infinity)
+                .accessibilityHidden(true) // decorative — the title text below says the same thing
 
                 if entry != nil {
                     Image(systemName: listStatus == .wishlist ? "star.fill" : "checkmark.seal.fill")
@@ -73,6 +74,7 @@ struct SystemCatalogTile: View {
                         .padding(5)
                         .background(listStatus == .wishlist ? Color.yellow : Color.green, in: Circle())
                         .padding(6)
+                        .accessibilityLabel(listStatus == .wishlist ? "Wishlisted" : "Owned")
                 }
             }
 
@@ -111,6 +113,9 @@ struct SystemCatalogTile: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.tint)
                 .help(listStatus == .wishlist ? "Add to wishlist" : "Add to collection")
+                // `.help()` is a hover tooltip — VoiceOver never reads it, so an
+                // icon-only button needs its own real label too.
+                .accessibilityLabel(listStatus == .wishlist ? "Add to wishlist" : "Add to collection")
 
                 if let value = catalogItem.headlineValue {
                     Text(Money.string(value))
@@ -128,6 +133,7 @@ struct SystemCatalogTile: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(wishlisted ? .yellow : .secondary)
                 .help(wishlisted ? "Remove from wishlist" : "Add to wishlist")
+                .accessibilityLabel(wishlisted ? "Remove from wishlist" : "Add to wishlist")
                 .transition(.opacity)
             }
         }

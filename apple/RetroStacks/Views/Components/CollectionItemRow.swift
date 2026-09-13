@@ -13,6 +13,7 @@ struct CollectionItemRow: View {
                 imageName: item.catalogItem?.imageName,
                 imageURL: item.catalogItem?.imageURL
             )
+            .accessibilityHidden(true) // decorative — the title text beside it says the same thing
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
@@ -54,6 +55,10 @@ struct CollectionItemRow: View {
             }
         }
         .padding(.vertical, 4)
+        // One coherent sentence per row instead of VoiceOver stopping on every
+        // Text/"·" separately — this is also what determines swipe order, and
+        // it already matches the visual reading order above.
+        .accessibilityElement(children: .combine)
     }
 }
 

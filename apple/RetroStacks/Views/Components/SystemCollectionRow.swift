@@ -21,6 +21,7 @@ struct SystemCollectionRow: View {
                 .fill(accent)
                 .frame(width: 4)
                 .frame(maxHeight: .infinity)
+                .accessibilityHidden(true) // decorative accent bar
 
             ItemThumbnail(
                 kind: .console,
@@ -30,6 +31,7 @@ struct SystemCollectionRow: View {
                 cornerRadius: 11,
                 contentMode: .fit
             )
+            .accessibilityHidden(true) // decorative — the name text beside it says the same thing
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(summary.platformName)
@@ -54,6 +56,7 @@ struct SystemCollectionRow: View {
                         .progressViewStyle(.linear)
                         .tint(accent)
                         .frame(maxWidth: 240)
+                        .accessibilityHidden(true) // redundant — the completion % Label above already says this
                 }
             }
 
@@ -62,6 +65,7 @@ struct SystemCollectionRow: View {
         .frame(minHeight: 54)
         .padding(.vertical, 6)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }
 

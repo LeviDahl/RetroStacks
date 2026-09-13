@@ -31,6 +31,7 @@ struct StatTile: View {
                     Image(systemName: "chevron.right")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true) // decorative affordance — the tile is already a button
                 }
             }
 
