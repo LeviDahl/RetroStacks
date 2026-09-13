@@ -1,5 +1,10 @@
 import XCTest
 
+// Not `@testable import RetroStacks` — same reason as `NavigationTests`: this
+// is a separate process that drives the app, it doesn't link against it.
+// These literals must match `AccessibilityID` in
+// RetroStacks/App/AccessibilityID.swift by hand.
+
 /// Drives the app for `Scripts/leak-check.sh` — see `BACKLOG.md`'s "Automated
 /// leak testing" section for the full plan this is phase 2 of.
 ///
@@ -42,7 +47,7 @@ final class AppWalkthroughTests: XCTestCase {
         app.radioButtons["By System"].tap()
 
         // Back to Dashboard, then into a system via the breakdown chart.
-        element(app, AccessibilityID.Sidebar.item(.dashboard)).tap()
+        element(app, "sidebar.dashboard").tap()
         XCTAssertTrue(app.windows["Dashboard"].waitForExistence(timeout: 5), "pass \(pass): sidebar -> Dashboard")
 
         element(app, "dashboard.breakdownRow.snes").tap()
@@ -59,13 +64,13 @@ final class AppWalkthroughTests: XCTestCase {
         }
 
         // Wishlist and Catalog, then back to Dashboard to close the loop.
-        element(app, AccessibilityID.Sidebar.item(.wishlist)).tap()
+        element(app, "sidebar.wishlist").tap()
         XCTAssertTrue(app.windows["Wishlist"].waitForExistence(timeout: 5), "pass \(pass): sidebar -> Wishlist")
 
-        element(app, AccessibilityID.Sidebar.item(.catalog)).tap()
+        element(app, "sidebar.catalog").tap()
         XCTAssertTrue(app.windows["Catalog"].waitForExistence(timeout: 5), "pass \(pass): sidebar -> Catalog")
 
-        element(app, AccessibilityID.Sidebar.item(.dashboard)).tap()
+        element(app, "sidebar.dashboard").tap()
         XCTAssertTrue(app.windows["Dashboard"].waitForExistence(timeout: 5), "pass \(pass): sidebar -> Dashboard (loop close)")
     }
 
