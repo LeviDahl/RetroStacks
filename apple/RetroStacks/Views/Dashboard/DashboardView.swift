@@ -12,6 +12,15 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var sync = CatalogSyncService.shared
     @State private var account = AccountService.shared
+    @State private var collectionSync = SyncCoordinator.shared
+    @State private var showingSignIn = false
+
+    /// `Font.system(size: 46, ...)` is a literal point size — it does **not**
+    /// grow with Dynamic Type on its own, unlike `.largeTitle`/`.title` text
+    /// styles. `@ScaledMetric` is the fix for "I want this exact point size at
+    /// the default text size, but it should still scale up at larger
+    /// accessibility sizes like everything else on the screen."
+    @ScaledMetric(relativeTo: .largeTitle) private var bigNumberSize: CGFloat = 46
 
     private var stats: CollectionStats {
         CollectionStatsBuilder.build(from: collectionItems)
@@ -23,6 +32,15 @@ struct DashboardView: View {
         case .synced(let date): "Catalog synced \(date.formatted(.relative(presentation: .named)))"
         case .failed: "Catalog sync failed — retry"
         case .idle: "Sync catalog now"
+        }
+    }
+
+    private var collectionSyncMenuLabel: String {
+        switch collectionSync.phase {
+        case .syncing: "Syncing collection…"
+        case .synced(let date): "Collection synced \(date.formatted(.relative(presentation: .named)))"
+        case .failed: "Collection sync failed — retry"
+        case .idle: "Sync collection now"
         }
     }
 
@@ -70,9 +88,28 @@ struct DashboardView: View {
                             Label(syncMenuLabel, systemImage: "arrow.triangle.2.circlepath")
                         }
                         .disabled(sync.phase == .syncing)
+                        if account.state.isSignedIn {
+                            Button {
+                                Task { await collectionSync.sync(into: modelContext) }
+                            } label: {
+                                Label(collectionSyncMenuLabel, systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            .disabled(collectionSync.phase == .syncing)
+                        }
                         Divider()
-                        Label(account.summary, systemImage: "person.crop.circle")
-                            .disabled(true)
+                        Button {
+                            showingSignIn = true
+                        } label: {
+                            Label(account.summary, systemImage: "person.crop.circle")
+                        }
+                        .accessibilityIdentifier(AccessibilityID.Account.signInRow)
+                        if account.state.isSignedIn {
+                            Button(role: .destructive) {
+                                account.signOut()
+                            } label: {
+                                Label("Sign Out", systemImage: "person.crop.circle.badge.xmark")
+                            }
+                        }
                     } label: {
                         Label("View Options", systemImage: "slider.horizontal.3")
                     }
@@ -83,6 +120,14 @@ struct DashboardView: View {
                     } label: {
                         Label("Browse Catalog", systemImage: "books.vertical")
                     }
+                }
+            }
+            .sheet(isPresented: $showingSignIn) { SignInSheet() }
+            .onChange(of: account.state) { _, newValue in
+                // Sign-in just completed — pull the collection down immediately
+                // rather than waiting for the next launch/foreground.
+                if newValue.isSignedIn {
+                    Task { await collectionSync.sync(into: modelContext) }
                 }
             }
         }
@@ -112,7 +157,7 @@ struct DashboardView: View {
     private func bigNumber(_ games: Int) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(games, format: .number)
-                .font(.system(size: 46, weight: .bold, design: .rounded))
+                .font(.system(size: bigNumberSize, weight: .bold, design: .rounded))
                 .contentTransition(.numericText())
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)

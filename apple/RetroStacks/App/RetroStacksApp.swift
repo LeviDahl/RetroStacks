@@ -64,6 +64,11 @@ struct RetroStacksApp: App {
                     guard !Self.isUITesting else { return }
                     await CatalogSyncService.shared.sync(into: container.mainContext)
                 }
+                .task {
+                    // No-ops while signed out — see `SyncCoordinator`.
+                    guard !Self.isUITesting else { return }
+                    await SyncCoordinator.shared.sync(into: container.mainContext)
+                }
         }
         .modelContainer(container)
         #if os(macOS)

@@ -1,8 +1,12 @@
 import Foundation
 
 /// Centralized, stable identifiers for `.accessibilityIdentifier(_:)` —
-/// consumed by `RetroStacksUITests` (via `@testable import`) and, eventually,
-/// VoiceOver tooling. Namespaced per feature folder, mirroring `Views/<Feature>/`.
+/// consumed by `RetroStacksUITests`, which hand-duplicates these string
+/// literals rather than importing this file (`@testable import` compiles in
+/// the UI test target but fails to *link* — it's a separate process with no
+/// `-bundle_loader`; see the header comment on `NavigationTests`). Keep both
+/// sides in sync by hand when a value here changes. Namespaced per feature
+/// folder, mirroring `Views/<Feature>/`.
 ///
 /// Two shapes:
 /// - **Static** ids for one-off chrome (`Dashboard.ownedItemsTile`).
@@ -32,5 +36,13 @@ enum AccessibilityID {
         static func breakdownRow(_ platformSlug: String) -> String {
             "dashboard.breakdownRow.\(platformSlug)"
         }
+    }
+
+    enum Account {
+        static let emailField = "account.emailField"
+        static let sendLinkButton = "account.sendLinkButton"
+        static let pastedLinkField = "account.pastedLinkField"
+        static let verifyButton = "account.verifyButton"
+        static let signInRow = "account.signInRow"
     }
 }

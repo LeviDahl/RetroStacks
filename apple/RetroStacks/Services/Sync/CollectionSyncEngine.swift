@@ -11,6 +11,21 @@ nonisolated struct CollectionChange: Sendable, Codable {
     var payload: CollectionArchive.Entry?
 }
 
+extension CollectionChange {
+    /// Always carries a full `payload` — a locally soft-deleted `CollectionItem`
+    /// still has every field, and the server row's `NOT NULL` columns need them
+    /// regardless of `deletedAt` (see `supabase/schema.sql`).
+    @MainActor
+    static func from(_ item: CollectionItem) -> CollectionChange {
+        CollectionChange(
+            exportID: item.resolvedExportID,
+            updatedAt: item.updatedAt,
+            deletedAt: item.deletedAt,
+            payload: CollectionArchive.Entry(item: item)
+        )
+    }
+}
+
 /// The seam a real backend (Supabase / a custom API) implements. No engine is
 /// connected yet — `Sync.engine` is `DisabledSyncEngine`.
 nonisolated protocol CollectionSyncEngine: Sendable {
@@ -48,7 +63,7 @@ nonisolated enum SyncError: Error, CustomStringConvertible {
     }
 }
 
-/// Single swap point. Phase 1 changes this to the Supabase engine.
+/// Single swap point.
 nonisolated enum Sync {
-    static let engine: any CollectionSyncEngine = DisabledSyncEngine()
+    static let engine: any CollectionSyncEngine = SupabaseCollectionSyncEngine()
 }

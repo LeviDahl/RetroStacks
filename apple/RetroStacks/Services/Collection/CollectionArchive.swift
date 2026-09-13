@@ -38,6 +38,101 @@ nonisolated struct CollectionArchive: Codable, Sendable {
         var dateAdded: Date
         var updatedAt: Date?          // absent in v1 archives
         var photosBase64: [String]
+
+        /// Explicit memberwise init — needed because `init(item:)` below is a
+        /// custom initializer, which suppresses Swift's synthesized one.
+        /// `SupabaseCollectionSyncEngine` uses this to rebuild an `Entry` from a
+        /// decoded server row (no `CollectionItem` on hand there).
+        init(
+            exportID: UUID, catalogSlug: String?, catalogName: String?, platformShortName: String?,
+            status: String, condition: String?, completeness: String?,
+            hasBox: Bool, hasManual: Bool, hasInserts: Bool, hasOriginalPackaging: Bool,
+            gradingCompany: String, gradeScore: Double?, pricePaid: Decimal?, dateAcquired: Date?,
+            acquisitionSource: String?, estimatedValueOverride: Decimal?, storageLocation: String?,
+            notes: String, playStatus: String?, dateAdded: Date, updatedAt: Date?, photosBase64: [String]
+        ) {
+            self.exportID = exportID
+            self.catalogSlug = catalogSlug
+            self.catalogName = catalogName
+            self.platformShortName = platformShortName
+            self.status = status
+            self.condition = condition
+            self.completeness = completeness
+            self.hasBox = hasBox
+            self.hasManual = hasManual
+            self.hasInserts = hasInserts
+            self.hasOriginalPackaging = hasOriginalPackaging
+            self.gradingCompany = gradingCompany
+            self.gradeScore = gradeScore
+            self.pricePaid = pricePaid
+            self.dateAcquired = dateAcquired
+            self.acquisitionSource = acquisitionSource
+            self.estimatedValueOverride = estimatedValueOverride
+            self.storageLocation = storageLocation
+            self.notes = notes
+            self.playStatus = playStatus
+            self.dateAdded = dateAdded
+            self.updatedAt = updatedAt
+            self.photosBase64 = photosBase64
+        }
+
+        /// Shared with `SyncCoordinator` — one mapping to maintain for both the
+        /// local JSON backup and the Supabase row shape.
+        @MainActor
+        init(item: CollectionItem) {
+            exportID = item.resolvedExportID
+            catalogSlug = item.catalogItem?.slug
+            catalogName = item.catalogItem?.displayTitle
+            platformShortName = item.catalogItem?.platformShortName
+            status = item.status.rawValue
+            condition = item.condition?.rawValue
+            completeness = item.completeness?.rawValue
+            hasBox = item.hasBox
+            hasManual = item.hasManual
+            hasInserts = item.hasInserts
+            hasOriginalPackaging = item.hasOriginalPackaging
+            gradingCompany = item.gradingCompany.rawValue
+            gradeScore = item.gradeScore
+            pricePaid = item.pricePaid
+            dateAcquired = item.dateAcquired
+            acquisitionSource = item.acquisitionSource?.rawValue
+            estimatedValueOverride = item.estimatedValueOverride
+            storageLocation = item.storageLocation
+            notes = item.notes
+            playStatus = item.playStatus?.rawValue
+            dateAdded = item.dateAdded
+            updatedAt = item.updatedAt
+            photosBase64 = item.photoData.map { $0.base64EncodedString() }
+        }
+
+        /// Writes every field onto `item` (linking `catalogItem` by slug) — the
+        /// inverse of the memberwise init above. Does **not** touch
+        /// `item.deletedAt`; callers decide tombstone handling themselves
+        /// (`CollectionArchive.restore` always clears it, `SyncCoordinator`
+        /// applies the incoming value).
+        @MainActor
+        func apply(to item: CollectionItem, catalogBySlug: [String: CatalogItem]) {
+            item.catalogItem = catalogSlug.flatMap { catalogBySlug[$0] }
+            item.status = CollectionStatus(rawValue: status) ?? .owned
+            item.condition = condition.flatMap(ConditionGrade.init(rawValue:))
+            item.completeness = completeness.flatMap(Completeness.init(rawValue:))
+            item.hasBox = hasBox
+            item.hasManual = hasManual
+            item.hasInserts = hasInserts
+            item.hasOriginalPackaging = hasOriginalPackaging
+            item.gradingCompany = GradingCompany(rawValue: gradingCompany) ?? .none
+            item.gradeScore = gradeScore
+            item.pricePaid = pricePaid
+            item.dateAcquired = dateAcquired
+            item.acquisitionSource = acquisitionSource.flatMap(AcquisitionSource.init(rawValue:))
+            item.estimatedValueOverride = estimatedValueOverride
+            item.storageLocation = storageLocation
+            item.notes = notes
+            item.playStatus = playStatus.flatMap(PlayStatus.init(rawValue:))
+            item.dateAdded = dateAdded
+            item.photoData = photosBase64.compactMap { Data(base64Encoded: $0) }
+            item.updatedAt = updatedAt ?? dateAdded
+        }
     }
 
     enum ImportMode { case merge, replace }
@@ -50,33 +145,7 @@ nonisolated struct CollectionArchive: Codable, Sendable {
             entries: items
                 .filter { !$0.isDeleted }
                 .sorted { $0.dateAdded < $1.dateAdded }
-                .map { item in
-                    Entry(
-                        exportID: item.resolvedExportID,
-                        catalogSlug: item.catalogItem?.slug,
-                        catalogName: item.catalogItem?.displayTitle,
-                        platformShortName: item.catalogItem?.platformShortName,
-                        status: item.status.rawValue,
-                        condition: item.condition?.rawValue,
-                        completeness: item.completeness?.rawValue,
-                        hasBox: item.hasBox,
-                        hasManual: item.hasManual,
-                        hasInserts: item.hasInserts,
-                        hasOriginalPackaging: item.hasOriginalPackaging,
-                        gradingCompany: item.gradingCompany.rawValue,
-                        gradeScore: item.gradeScore,
-                        pricePaid: item.pricePaid,
-                        dateAcquired: item.dateAcquired,
-                        acquisitionSource: item.acquisitionSource?.rawValue,
-                        estimatedValueOverride: item.estimatedValueOverride,
-                        storageLocation: item.storageLocation,
-                        notes: item.notes,
-                        playStatus: item.playStatus?.rawValue,
-                        dateAdded: item.dateAdded,
-                        updatedAt: item.updatedAt,
-                        photosBase64: item.photoData.map { $0.base64EncodedString() }
-                    )
-                }
+                .map(Entry.init(item:))
         )
     }
 
@@ -113,27 +182,8 @@ nonisolated struct CollectionArchive: Codable, Sendable {
                 inserted += 1
             }
 
-            item.catalogItem = entry.catalogSlug.flatMap { catalogBySlug[$0] }
-            item.status = CollectionStatus(rawValue: entry.status) ?? .owned
-            item.condition = entry.condition.flatMap(ConditionGrade.init(rawValue:))
-            item.completeness = entry.completeness.flatMap(Completeness.init(rawValue:))
-            item.hasBox = entry.hasBox
-            item.hasManual = entry.hasManual
-            item.hasInserts = entry.hasInserts
-            item.hasOriginalPackaging = entry.hasOriginalPackaging
-            item.gradingCompany = GradingCompany(rawValue: entry.gradingCompany) ?? .none
-            item.gradeScore = entry.gradeScore
-            item.pricePaid = entry.pricePaid
-            item.dateAcquired = entry.dateAcquired
-            item.acquisitionSource = entry.acquisitionSource.flatMap(AcquisitionSource.init(rawValue:))
-            item.estimatedValueOverride = entry.estimatedValueOverride
-            item.storageLocation = entry.storageLocation
-            item.notes = entry.notes
-            item.playStatus = entry.playStatus.flatMap(PlayStatus.init(rawValue:))
-            item.dateAdded = entry.dateAdded
-            item.photoData = entry.photosBase64.compactMap { Data(base64Encoded: $0) }
+            entry.apply(to: item, catalogBySlug: catalogBySlug)
             item.deletedAt = nil   // importing an entry means it's live
-            item.updatedAt = entry.updatedAt ?? entry.dateAdded
         }
 
         try context.save()

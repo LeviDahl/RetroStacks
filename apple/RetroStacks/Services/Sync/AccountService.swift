@@ -1,15 +1,20 @@
 import Foundation
 import Observation
 
-/// Account / auth state. The app is **local-first**: everything works while
-/// `state == .signedOut`, which is the only state today. A Supabase-backed
-/// implementation swaps in behind the same surface later (email magic-link —
-/// no Apple Developer account needed).
+/// Account / auth state, backed by Supabase Auth (GoTrue) over plain REST —
+/// see `SupabaseAuthClient`. The app is **local-first**: everything works
+/// while `state == .signedOut`; signing in only adds multi-device sync.
+///
+/// Sign-in is email magic-link with no custom URL scheme: the user pastes the
+/// link back into the app (`completeSignIn(pastedLink:)`) rather than the app
+/// catching a deep-link callback — that needs no Xcode target changes to ship.
 @MainActor
 @Observable
 final class AccountService {
     enum State: Equatable {
         case signedOut
+        case sendingLink
+        case awaitingLink(email: String)
         case signedIn(userID: String, email: String?)
 
         var isSignedIn: Bool {
@@ -24,34 +29,96 @@ final class AccountService {
 
     private(set) var state: State = .signedOut
 
-    /// Swap for `SupabaseAccountService()` (or similar) in Phase 1.
     static let shared = AccountService()
+
+    private let auth: SupabaseAuthClient
+    private let store: SupabaseSessionStore
+    private var pendingEmail: String?
+
+    init(auth: SupabaseAuthClient = SupabaseAuthClient(), store: SupabaseSessionStore = .shared) {
+        self.auth = auth
+        self.store = store
+        if let session = store.load() {
+            state = .signedIn(userID: session.userID.uuidString, email: session.email)
+        }
+    }
 
     var summary: String {
         switch state {
-        case .signedOut:
-            "Local only — not signed in"
-        case .signedIn(_, let email):
-            "Signed in as \(email ?? "your account")"
+        case .signedOut: "Local only — not signed in"
+        case .sendingLink: "Sending sign-in link…"
+        case .awaitingLink(let email): "Check \(email) for a sign-in link"
+        case .signedIn(_, let email): "Signed in as \(email ?? "your account")"
         }
     }
 
     func sendMagicLink(to email: String) async throws {
-        throw AccountError.notConfigured
+        state = .sendingLink
+        do {
+            try await auth.sendMagicLink(to: email)
+            pendingEmail = email
+            state = .awaitingLink(email: email)
+        } catch {
+            state = .signedOut
+            throw error
+        }
+    }
+
+    /// The user pastes the link they received. No `email` param needed here —
+    /// it's the one `sendMagicLink` just sent to.
+    func completeSignIn(pastedLink: String) async throws {
+        guard let email = pendingEmail else { throw AccountError.notConfigured }
+        let session = try await auth.completeSignIn(pastedLink: pastedLink, email: email)
+        store.save(session)
+        pendingEmail = nil
+        state = .signedIn(userID: session.userID.uuidString, email: session.email)
+        AppStatusCenter.shared.clear(.account)
+    }
+
+    func cancelSignIn() {
+        pendingEmail = nil
+        state = .signedOut
     }
 
     func signOut() {
+        if let session = store.load() {
+            Task { await auth.signOut(accessToken: session.accessToken) }
+        }
+        store.clear()
         state = .signedOut
     }
+
+    /// The bearer token for authenticated REST calls (`SupabaseCollectionSyncEngine`),
+    /// refreshing first if it's near expiry. Throws `.notSignedIn` when signed out.
+    func validAccessToken() async throws -> String {
+        guard var session = store.load() else { throw AccountError.notSignedIn }
+        if session.needsRefresh {
+            do {
+                session = try await auth.refresh(session.refreshToken)
+                store.save(session)
+                state = .signedIn(userID: session.userID.uuidString, email: session.email)
+            } catch {
+                // Refresh token itself is dead — the user has to sign in again.
+                store.clear()
+                state = .signedOut
+                throw AccountError.notSignedIn
+            }
+        }
+        return session.accessToken
+    }
+
+    var currentUserID: UUID? { store.load()?.userID }
 }
 
 nonisolated enum AccountError: Error, CustomStringConvertible {
     case notConfigured
+    case notSignedIn
     case network(String)
 
     var description: String {
         switch self {
         case .notConfigured: "Sign-in isn't set up yet."
+        case .notSignedIn: "Not signed in."
         case .network(let m): "Network error: \(m)"
         }
     }
