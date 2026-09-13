@@ -246,12 +246,14 @@ contrast from actual sampled/known sRGB values:
   a Dashboard bug — a design decision on how muted that should read, not
   something to change unilaterally.
 
-**Phase 6 (the automated gate) — done, as a ratchet.**
-`AccessibilityAuditTests.testDashboardAccessibilityAudit` now asserts
-`findings.count <= knownFindingBaseline` (10) instead of only logging —
-catches any *new* regression immediately without requiring the screen to be
-perfectly clean first (which Phase 5 hasn't happened yet). Lower the baseline
-as the remaining 10 get fixed for real.
+**Phase 6 (the automated gate) — done, as a ratchet, now on 4 screens.**
+Each `*AccessibilityAuditTests.test*AccessibilityAudit` (Dashboard,
+SystemGamesList, CollectionSection, CatalogSection — all in
+`NavigationTests.swift`) asserts `findings.count <= knownFindingBaseline`
+(10 / 52 / 26 / 11 respectively) instead of only logging — catches any *new*
+regression on any of the four immediately, without requiring the screens to
+be perfectly clean first (Phase 5 hasn't happened yet). Lower each baseline
+as its findings get fixed for real.
 
 **Phase 5 — reading order & real VoiceOver navigation. Not done.** Simulator
 access is authorized (one-time grant, confirmed persistent across sessions),
@@ -264,13 +266,63 @@ that way and read through it as a stand-in for a VoiceOver pass. Still do a
 real device VoiceOver pass before calling any screen actually done — that
 step is a device/OS interaction, not something to substitute away entirely.
 
-**Remaining screens** (same phase order, not yet touched): `AddToCollectionFlow`
-(new this session — the barcode scanner and system-first picker haven't had
-an accessibility pass yet), `CatalogSection`'s own chrome, and `SidebarView`
-(already has identifiers; check for icon-only spots once it grows
-badges/actions). And the audit above only ever exercised Dashboard — the
-same real-audit technique (not hand-guessing) should extend to
-`SystemGamesList`, `CollectionSection`, and `CatalogSection` next.
+**Phase 4, extended to 3 more screens — done 2026-09-13, none of the new
+findings fixed yet.** Same real-audit technique (`performAccessibilityAudit`
++ `.detailedDescription`, not hand-guessing), same ratchet pattern, now in
+`SystemGamesListAccessibilityAuditTests` / `CollectionSectionAccessibilityAuditTests`
+/ `CatalogSectionAccessibilityAuditTests` (`NavigationTests.swift`, alongside
+the original Dashboard one):
+
+- **SystemGamesList: 52 findings. CollectionSection: 26. CatalogSection: 11.**
+  All three are overwhelmingly the *same* systemic pattern Dashboard's audit
+  already named and deferred as a design decision — `.secondary` text at
+  `.caption`/`.caption2` size — just recurring at much higher volume because
+  these screens repeat it once per row/tile instead of Dashboard's few
+  summary numbers. This is now confirmed empirically across 4 screens, not a
+  Dashboard-only theory.
+- **One new, distinct lead worth a closer look**: `CompletenessBadge` /
+  `ConditionLabel` / `StatusBadge` (`Badges.swift`) render their accent color
+  as *text on that same color's own `opacity(0.18)` capsule background* — a
+  different contrast situation than the already-fixed page-background case.
+  Hand-computed WCAG for `CIB`'s badge (`.accentGreen` text on
+  `accentGreen.opacity(0.18)` over white): **4.84:1**, which clears the 4.5:1
+  floor for small text — yet the OS audit still called it a hard "Contrast
+  failed." Possible causes not chased down this pass: dark mode, a
+  non-pure-white real list-row background, or `.caption2.weight(.bold)`
+  rendering smaller than assumed. Needs the same real-screenshot-sampling
+  rigor as the original `.yellow` fix, not another guess.
+- **One CollectionSection oddity**: every row shows the same fields
+  (item count, %, $ amount) but only *one* row (Nintendo GameCube) hard-fails
+  contrast on them while the rest only soft-warn — possibly a
+  selection/hover-highlight background making an already-borderline color
+  actually fail there. Not investigated further this pass.
+- **Not an audit finding, but found via the same hierarchy-dump technique**:
+  on iOS-compact, navigating to `CatalogSection` never exposes "Catalog" as
+  the navigation bar's own accessible title (the bar's only child is a
+  blank-label `StaticText`) — `CollectionSection`'s title *does* expose
+  correctly. Likely cause: `CatalogSection` nests its own
+  `NavigationSplitView` inside `RootView`'s tab; `CollectionSection` doesn't.
+  Worth a real VoiceOver check on a real device before deciding whether this
+  needs a fix.
+
+`AddToCollectionFlow` (the barcode scanner and system-first picker haven't
+had an accessibility pass yet) and `SidebarView` (already has identifiers;
+check for icon-only spots once it grows badges/actions) are still untouched.
+
+**Also found while wiring the 3 new audits' navigation**: the *original*
+`NavigationTests`'s two tests and all of `AppWalkthroughTests` check
+`app.windows[title]` to confirm they landed on a screen — a macOS-only
+pattern (each pushed screen gets its own titled `NSWindow` there). Running
+them on the iOS Simulator destination for the first time in this session
+(previously only macOS-hosted, user's own Terminal — see "Automated leak
+testing" for why macOS-hosted `xcodebuild test` hangs in an automated
+session) fails both `NavigationTests` cases immediately: iOS never creates a
+second window, so the query never matches anything. The 3 new audit tests
+route around this with a small `waitForScreen`/`navigateToSection` helper
+pair (`#if os(macOS)` window title, `#else` navigation-bar title or tab bar)
+— worth backporting to `NavigationTests`'s original two tests and
+`AppWalkthroughTests` so this whole suite actually runs on both platforms
+instead of iOS silently red the moment anyone tries it there.
 
 ## Automated leak testing — exhaustive, unattended
 

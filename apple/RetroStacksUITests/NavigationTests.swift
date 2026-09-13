@@ -155,3 +155,181 @@ final class AccessibilityAuditTests: XCTestCase {
         )
     }
 }
+
+/// Waits for the screen titled `title` to be on screen. macOS's split layout
+/// gives pushed content its own titled `NSWindow` (`app.windows[title]`, the
+/// pattern the rest of this file and `AppWalkthroughTests` use) — but iOS's
+/// tab/stack layout (`RootView.tabLayout`, compact width) never creates a
+/// second window, so the navigation bar's own title is the closest
+/// equivalent there.
+@MainActor
+private func waitForScreen(_ title: String, in app: XCUIApplication, timeout: TimeInterval = 5) -> Bool {
+    #if os(macOS)
+    return app.windows[title].waitForExistence(timeout: timeout)
+    #else
+    return app.navigationBars[title].waitForExistence(timeout: timeout)
+    #endif
+}
+
+/// Taps into a top-level section. macOS/iPad-regular-width gets `SidebarView`
+/// (`sidebar.<AppSection rawValue>` identifiers); iPhone-compact-width gets
+/// `RootView.tabLayout`'s tab bar instead, labelled by `AppSection.tabTitle`
+/// — there's no shared identifier between the two, so the caller passes both.
+@MainActor
+private func navigateToSection(sidebarID: String, tabTitle: String, in app: XCUIApplication) {
+    #if os(macOS)
+    let sidebarItem = app.buttons[sidebarID]
+    XCTAssertTrue(sidebarItem.waitForExistence(timeout: 5), "expected a sidebar row for \(sidebarID)")
+    sidebarItem.tap()
+    #else
+    let tabItem = app.tabBars.buttons[tabTitle]
+    XCTAssertTrue(tabItem.waitForExistence(timeout: 5), "expected a \(tabTitle) tab")
+    tabItem.tap()
+    #endif
+}
+
+/// Shared by every `*AccessibilityAuditTests` class below — runs the audit
+/// against whatever's currently on screen, attaches a readable report, and
+/// hands back the findings for the caller to ratchet against its own
+/// `knownFindingBaseline`. See `AccessibilityAuditTests` (Dashboard, above)
+/// for why `.detailedDescription` + `.element` instead of just
+/// `.compactDescription`, and why this is a ratchet, not a zero-tolerance gate.
+@MainActor
+private func recordAccessibilityAudit(app: XCUIApplication, screenName: String, on testCase: XCTestCase) throws -> [String] {
+    var findings: [String] = []
+    try app.performAccessibilityAudit { issue in
+        let elementInfo = issue.element.map { "element: \($0.identifier.isEmpty ? $0.label : $0.identifier)" } ?? "element: <none>"
+        findings.append("[\(issue.auditType)] \(elementInfo)\n  \(issue.detailedDescription)")
+        return true // always "handled" at the API level — the caller's assertion is what actually gates this.
+    }
+
+    let report = findings.isEmpty
+        ? "No accessibility audit findings on \(screenName)."
+        : "\(findings.count) accessibility audit finding(s) on \(screenName):\n" + findings.joined(separator: "\n")
+    print(report)
+
+    let attachment = XCTAttachment(string: report)
+    attachment.name = "Accessibility Audit — \(screenName)"
+    attachment.lifetime = .keepAlways
+    testCase.add(attachment)
+
+    return findings
+}
+
+/// SystemGamesList, reached the same way `NavigationTests` reaches it: tap
+/// the SNES row in Dashboard's platform breakdown.
+///
+/// 2026-09-13: 52 findings, none fixed yet — see BACKLOG.md's Accessibility
+/// section for the breakdown (short version: the same `.secondary`+`.caption`
+/// pattern `AccessibilityAuditTests`'s doc comment already flagged as an
+/// app-wide styling decision, now confirmed to recur here at much higher
+/// volume because every game row repeats it, plus a `CompletenessBadge`
+/// tinted-capsule contrast question that needs real visual iteration, not
+/// guessed at blind).
+final class SystemGamesListAccessibilityAuditTests: XCTestCase {
+    static let knownFindingBaseline = 52
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testSystemGamesListAccessibilityAudit() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
+        app.launch()
+
+        let snesRow = app.buttons["dashboard.breakdownRow.snes"]
+        XCTAssertTrue(snesRow.waitForExistence(timeout: 5))
+        snesRow.tap()
+        XCTAssertTrue(waitForScreen("Super Nintendo Entertainment System", in: app))
+
+        let findings = try recordAccessibilityAudit(app: app, screenName: "SystemGamesList (SNES)", on: self)
+        XCTAssertLessThanOrEqual(
+            findings.count, Self.knownFindingBaseline,
+            "New accessibility finding(s) on SystemGamesList — see the attached report. "
+                + "If this is a real fix bringing the count down, lower knownFindingBaseline to match."
+        )
+    }
+}
+
+/// CollectionSection ("My Collection"), reached via the sidebar.
+///
+/// 2026-09-13: 26 findings, none fixed yet — same systemic `.secondary`/
+/// `.caption` pattern as `SystemGamesListAccessibilityAuditTests` (per-system
+/// summary rows: item counts, percentages, dollar amounts). One thing worth a
+/// closer look later: most rows only "not high enough unless font size is
+/// larger" (a soft warning), but one specific row (Nintendo GameCube) hard
+/// "Contrast failed" on the exact same fields — possibly a selection/hover
+/// highlight background making an otherwise-borderline color actually fail;
+/// not investigated further this pass.
+final class CollectionSectionAccessibilityAuditTests: XCTestCase {
+    static let knownFindingBaseline = 26
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testCollectionSectionAccessibilityAudit() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
+        app.launch()
+
+        navigateToSection(sidebarID: "sidebar.collection", tabTitle: "Collection", in: app)
+        XCTAssertTrue(waitForScreen("My Collection", in: app))
+
+        let findings = try recordAccessibilityAudit(app: app, screenName: "CollectionSection", on: self)
+        XCTAssertLessThanOrEqual(
+            findings.count, Self.knownFindingBaseline,
+            "New accessibility finding(s) on CollectionSection — see the attached report. "
+                + "If this is a real fix bringing the count down, lower knownFindingBaseline to match."
+        )
+    }
+}
+
+/// CatalogSection ("Catalog" — `navigationTitleText` overrides `AppSection`'s
+/// own "Browse Catalog" sidebar label when no platform filter is active).
+///
+/// 2026-09-13: 11 findings, none fixed yet — mostly the same systemic
+/// `.secondary` contrast pattern, at much lower volume here since this
+/// screen's default view is just a flat platform list, not per-item detail.
+/// Separately (not counted as an audit finding, `performAccessibilityAudit`
+/// doesn't catch it): navigating here on iOS-compact never exposes "Catalog"
+/// as the navigation bar's own accessible title — confirmed via a raw
+/// accessibility-hierarchy dump, the bar's only child is a blank-label
+/// `StaticText`. `CatalogSection` nests its own `NavigationSplitView` inside
+/// `RootView`'s tab; `CollectionSection` doesn't and its title *does* expose
+/// correctly, so the nesting is the likely cause. Worth a real VoiceOver
+/// check — logged in BACKLOG.md rather than guessed at here.
+final class CatalogSectionAccessibilityAuditTests: XCTestCase {
+    static let knownFindingBaseline = 11
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testCatalogSectionAccessibilityAudit() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
+        app.launch()
+
+        navigateToSection(sidebarID: "sidebar.catalog", tabTitle: "Catalog", in: app)
+        // Not `waitForScreen`: CatalogSection nests its own NavigationSplitView
+        // inside RootView's tab, and on iOS-compact that inner split view's
+        // collapsed NavigationStack never exposes "Catalog" as the navigation
+        // bar's accessible title (confirmed via the accessibility hierarchy
+        // dump — the bar's only child is a StaticText with a blank label).
+        // That's arguably its own accessibility finding, but out of scope
+        // here; a known platform row is a reliable proxy that we're on-screen.
+        XCTAssertTrue(app.buttons["Nintendo Entertainment System, 7 catalog entries"].waitForExistence(timeout: 5))
+
+        let findings = try recordAccessibilityAudit(app: app, screenName: "CatalogSection", on: self)
+        XCTAssertLessThanOrEqual(
+            findings.count, Self.knownFindingBaseline,
+            "New accessibility finding(s) on CatalogSection — see the attached report. "
+                + "If this is a real fix bringing the count down, lower knownFindingBaseline to match."
+        )
+    }
+}
