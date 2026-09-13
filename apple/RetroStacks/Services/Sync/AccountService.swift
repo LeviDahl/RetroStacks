@@ -38,6 +38,18 @@ final class AccountService {
     init(auth: SupabaseAuthClient = SupabaseAuthClient(), store: SupabaseSessionStore = .shared) {
         self.auth = auth
         self.store = store
+        // Keychain I/O deliberately NOT done inline here: `DashboardView` reads
+        // `AccountService.shared` from a `@State` initializer, which runs
+        // synchronously during that view's first render. A blocking
+        // `SecItemCopyMatching` call in `init()` delayed the window appearing
+        // at all under XCUITest hosting on macOS (found 2026-09-13 debugging
+        // 4 UI test failures whose accessibility-hierarchy dumps showed no
+        // app window ever rendered — only the menu bar). Deferring to a Task
+        // lets `init()` return immediately; `state` updates a moment later.
+        Task { await self.restoreSession() }
+    }
+
+    private func restoreSession() async {
         if let session = store.load() {
             state = .signedIn(userID: session.userID.uuidString, email: session.email)
         }
