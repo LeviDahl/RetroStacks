@@ -100,19 +100,57 @@ the URL + anon key (`Services/Sync/SupabaseConfig.swift`). Done:
   share one place to get it right. `CollectionArchiveTests.swift` locks the
   round trip down.
 
+**Found and fixed 2026-09-13 — two real bugs, not cosmetic:**
+- **`DashboardView` never rendered under XCUITest hosting on macOS.**
+  `AccountService.init()` did a blocking `SecItemCopyMatching` inline, and
+  `DashboardView` reads `AccountService.shared` from a `@State` initializer
+  (runs synchronously on the main thread during first render). Found by
+  pulling the accessibility-hierarchy dump of 4 failing UI tests via
+  `xcresulttool` — it showed only the macOS menu bar, no app window at all.
+  Fixed: the Keychain restore now happens in a `Task` kicked off from `init()`
+  instead of inline.
+- **`SupabaseSessionStore.save()` followed by `.load()` returned nil —
+  Keychain persistence was completely broken**, and `SupabaseCollectionRow`
+  (the actual sync wire format) had the identical bug, meaning `pull()` would
+  have thrown on every real server response (`user_id` is `NOT NULL`, present
+  on every row). Root cause: `JSONEncoder`/`Decoder.supabase`'s
+  `.convertToSnakeCase`/`.convertFromSnakeCase` is asymmetric for
+  acronym-cased fields — encoding `userID` → `"user_id"` is correct, but
+  decoding `"user_id"` back only naively capitalizes each segment, producing
+  `userId` (lowercase d) — a `keyNotFound` that a `try?` was silently
+  swallowing. Fixed with explicit `CodingKeys` + a new
+  `JSONEncoder`/`Decoder.exactKeys` (iso8601 dates, no key-conversion
+  strategy — deliberately never paired with the snake_case strategy, which
+  would fight it). `JSONEncoder`/`Decoder.supabase` stays as-is for GoTrue's
+  own auth responses (no acronym fields there). Caught by actually writing
+  the regression tests for the first bug (`AccountServiceTests`) — the
+  round-trip test failed immediately, for a completely different reason than
+  expected. New: `SupabaseCollectionRowTests` decodes a realistic PostgREST
+  payload directly, since `SyncCoordinatorTests`' fake engine never exercises
+  the real wire format.
+- **Every non-2xx HTTP response and non-`errSecSuccess` Keychain status now
+  gets logged** via `Services/AppLog.swift` (`os.Logger`, subsystem
+  `com.levidahlstrom.RetroStacks`) — `RemoteCatalogRepository`,
+  `SupabaseAuthClient`, `SupabaseCollectionSyncEngine`, and
+  `SupabaseSessionStore` all had failure paths that either swallowed the
+  status entirely or only surfaced a message the user might dismiss without
+  it going anywhere durable. This is the standing rule going forward for any
+  new API/Keychain call, not just these four.
+
 **Not done yet:**
 - **Photos.** `CollectionItem.photoData` still isn't synced — needs the
   Storage bucket upload (`collection-photos`, already created by `schema.sql`,
   path `<user_id>/<exportID>/<n>.jpg`) wired into `SupabaseCollectionSyncEngine`
   or a sibling type. Field sync (everything else) works without it, so this
   was left for a follow-up rather than blocking the rest.
-- **A live end-to-end test.** Everything above compiles and is unit-tested
-  against a fake engine, but nobody has actually sent an email, pasted a real
-  link back, or watched a real row land in the `collection_items` table yet —
-  see `supabase/README.md`'s original note about wanting a real round trip
-  before this touches anyone's collection. First real sign-in attempt should
-  happen with the user watching, in case GoTrue's actual link format or
-  `/verify` response shape differs from what the REST docs describe.
+- **A live end-to-end test.** Everything above compiles and is real-Keychain-
+  and real-wire-format-tested now, but nobody has actually sent an email,
+  pasted a real link back, or watched a real row land in the
+  `collection_items` table yet — see `supabase/README.md`'s original note
+  about wanting a real round trip before this touches anyone's collection.
+  First real sign-in attempt should happen with the user watching, in case
+  GoTrue's actual link format or `/verify` response shape differs from what
+  the REST docs describe.
 - Companion **website** on `retrostacks.com` — same schema, Supabase JS client;
   read-only mirror first, then editing.
 - Prune old tombstones after a confirmed successful sync.
@@ -168,19 +206,27 @@ but `.yellow` (the wishlist `StatusBadge`) is the one classic problem color for
 contrast and is worth an actual look with Xcode's contrast checker or
 `Accessibility Inspector.app` rather than guessing further from code.
 
-**Not done — genuinely needs a live VoiceOver pass, not more code-reading:**
-attempted to verify Phases 2–3 by actually inspecting the accessibility tree
-(the iOS Simulator tool's `inspect` action, a real stand-in for VoiceOver —
-see `Phase 5` below) but the simulator device isn't yet authorized for Claude
-to attach to in this environment ("the user has not granted Claude access to
-iPhone 17 Pro"); a macOS-hosted `xcodebuild test` run (which is how
-`AccessibilityAuditTests`/`NavigationTests` actually execute) currently hangs
-indefinitely in this environment too (see "Automated leak testing" section
-below — same root cause, `testmanagerd` never completing its handshake for a
-macOS test host). Tests **do** run and pass on the iOS Simulator destination
-(`-destination 'platform=iOS Simulator,...'`), so the code itself is verified
-by that path, but nobody has actually watched a real device/simulator
-announce these screens with VoiceOver toggled on yet.
+**Extended 2026-09-13** to the remaining thumbnail-bearing views:
+`CatalogPosterCard` (Browse Catalog grid), `CollectionTable` (macOS table
+row), and the detail-view headers (`CollectionItemDetailView`,
+`CatalogItemDetailView`, `AboutSystemCard`, `QuickAddSheet`) — same
+`.accessibilityHidden(true)` treatment for decorative thumbnails, plus
+`CatalogPosterCard`'s ownership badge and card grouping brought in line with
+the row components. A target-wide sweep for icon-only `Button`/`Menu`
+controls with no `.accessibilityLabel` now comes back completely empty.
+
+**Not done — genuinely needs a live VoiceOver pass, not more code-reading.**
+Simulator access is now authorized (one-time grant, confirmed persistent
+across sessions), so the `inspect` action (a real stand-in for VoiceOver —
+see Phase 5) is available going forward, though it returned "not available
+right now" both times it was tried this session — worth retrying, possibly
+just needs the app already running when called. `AccessibilityAuditTests`/
+`NavigationTests` (macOS-hosted UI tests) need the user's own interactive
+session to run at all (see "Automated leak testing" section — same
+constraint, not a bug). Unit-level coverage passes on the iOS Simulator
+destination, so the code itself is verified by that path, but nobody has
+actually watched a real device/simulator announce these screens with
+VoiceOver toggled on yet.
 
 **Phase 5 — reading order & real VoiceOver navigation.** Once the Simulator
 authorization above is granted (one-time: attach the simulator panel and click
@@ -197,11 +243,11 @@ left alone this pass since it needs the Phase 5 live pass first to know what
 "clean" actually looks like for a screen; tightening it now would either be a
 guess or lock in whatever the audit happens to currently report.
 
-**Remaining screens** (same phase order, not yet touched): `CatalogSection` /
-`CatalogItemRow` polish, detail/edit views (`CollectionItemDetailView`,
-`CatalogItemDetailView`, `QuickAddSheet`, `AddToCollectionFlow`), and
-`SidebarView` (already has identifiers from earlier this session; check for
-any remaining icon-only spots once the sidebar grows badges/actions).
+**Remaining screens** (same phase order, not yet touched): `AddToCollectionFlow`,
+`CatalogSection`'s own chrome (as opposed to `CatalogItemRow`/`CatalogPosterCard`,
+both now covered), and `SidebarView` (already has identifiers from earlier
+this session; check for any remaining icon-only spots once the sidebar grows
+badges/actions).
 
 ## Automated leak testing — exhaustive, unattended
 
@@ -258,26 +304,21 @@ Narrower than the ideal coverage described in earlier drafts of this plan
 run-it-at-all blocker below is cleared and there's a real trace to check
 widening against.
 
-**Currently blocked: `xcodebuild test` hangs indefinitely for this project on
-macOS in this environment**, discovered while adding unit tests for the
-Supabase sync work above. Every macOS-destination `xcodebuild ... test` (or
-`test-without-building`) invocation stalls forever at "Testing started
-completed" — 0% CPU, no test host process ever appears, reproducible across
-multiple clean attempts, survives killing a stale `testmanagerd`, and is
-identical whether or not the invocation was just rebuilt. The **same test
-target runs and passes cleanly** on an iOS Simulator destination
-(`-destination 'platform=iOS Simulator,...'`) — so this isn't a code problem,
-it's specific to macOS-hosted test execution (`RetroStacksTests`'/
-`RetroStacksUITests`' `TEST_HOST` launches the real signed `RetroStacks.app`
-as the actual test host on macOS) in this particular environment. Likely a
-permissions/session gap for whatever `testmanagerd` needs to inject into and
-control a macOS host app — possibly adjacent to the Screen Recording /
-Accessibility / Developer Tools permissions this session already had to sort
-out for `xctrace` and window-scoped screenshots earlier. **Needs the user**:
-either run `Scripts/leak-check.sh` (or plain `xcodebuild test -destination
-'platform=macOS'`) once locally in a normal Terminal/Xcode session to confirm
-it's environment-specific and not a real regression, or point at whatever
-permission macOS wants granted for automated macOS UI testing.
+**Resolved 2026-09-13, sort of: `xcodebuild test -destination 'platform=macOS'`
+needs an interactive, unlocked login session to run at all.** Every attempt
+from this automated/headless session hung indefinitely at "Testing started
+completed" (0% CPU, no test host ever appeared) — but the user ran the exact
+same command from their own Terminal and it completed in 86s. XCUITest on
+macOS needs to inject synthetic events into a real windowed host app, which
+needs an actual WindowServer session able to receive them; a background shell
+with no one logged in and looking at the screen apparently can't provide
+that (same underlying class of constraint as the Screen Recording/
+Accessibility/Developer Tools permissions from earlier this project — but
+this one isn't a one-time grant, it's "someone has to actually run it"). So:
+**this only ever needs to be run by the user, in an interactive session** —
+not a blocker to fix, just a fact about this tool. That run also surfaced 4
+real UI test failures, traced to a genuine bug (see "Multi-user" section
+above) and fixed.
 
 **Phase 3 — assert, don't just report.** Once the above is unblocked and the
 walkthrough's coverage is widened, this becomes a real regression gate
@@ -287,8 +328,123 @@ Instruments profiling has genuine wall-clock cost (this session's manual runs
 took 45–90s of recording plus build/export time), so it's a deliberate
 "run me" tool, not a be-run-on-every-commit unit test.
 
+## UX tap-friction audit (2026-09-13)
+
+Full audit: every core action from Dashboard, `CollectionSection`,
+`SystemGamesList`, `QuickAddSheet`, `CollectionItemEditView`/`DetailView`,
+catalog browsing, sign-in, sync, export/import — counted taps end to end.
+Most core actions are already at or under 2 taps (adding an owned/wishlist
+item from any of the three entry points, bulk-add, the `More`-menu status
+picker). What's actually over budget, ranked by how much it matters:
+
+- **Changing condition or completeness on an existing item is 4 taps**
+  (Edit → tap the field row → tap the value → Save) — the one flagged by the
+  user's own example applies here too: `CollectionItemEditView` puts these in
+  plain `Form` `Picker`s that push to a separate list. The app already has
+  the *right* pattern next door: `CollectionItemDetailView`'s `More` menu
+  embeds a `Picker` for Status directly, auto-saving via `.onChange` — 2 taps,
+  no Edit/Save round trip. **Fix:** extend that same quick-picker pattern to
+  Condition and Completeness in the `More` menu. Takes the common case from 4
+  taps to 2 without touching the full edit form (still there for bulk/rare
+  fields).
+- **Deleting an item from the detail view is 3 taps** (More → Delete → confirm)
+  — keep the confirm (destructive, not reversible from this UI), but the menu
+  hop is pure overhead. **Fix:** a directly-tappable delete affordance that
+  still opens the same confirmation, cutting it to 2.
+- **Sign In costs 2 "reach the sheet" taps before the actual flow starts** —
+  it's nested inside the Dashboard's `View Options` menu (icon:
+  `slider.horizontal.3`, reads as a display-settings menu, not an account
+  one). **Fix:** a dedicated toolbar entry point (`person.crop.circle`).
+- **Import's success path ends on a plain acknowledgement alert** (Merge/
+  Replace → OK) — the Merge/Replace choice must stay a real decision, but the
+  final OK is just dismissing an FYI. **Fix:** auto-dismissing toast for
+  success, real blocking `alert` reserved for actual failures.
+- **Inconsistent safety, not friction:** swipe-to-remove (system drill-down
+  list, flat "All Games" list, macOS right-click) has **no confirmation at
+  all**, while the identical destructive action from the detail view's `More`
+  menu does. Not recommending removing the detail view's confirm — flagging
+  that the fast paths are arguably *too* fast for a hard-to-recover action. A
+  brief "Removed — Undo" toast on the swipe path would add a safety net
+  without adding a blocking tap.
+- **Hidden, not just compact:** on iOS, `PlatformCatalogRow`'s wishlist star
+  only renders once an item is *already* wishlisted (`hovering` is
+  macOS-only) — the only way to *add* a not-yet-wishlisted item to the
+  wishlist from the system drill-down list is an undiscoverable leading swipe.
+  Worth a persistent (if small) affordance on iOS too.
+- **Inconsistent defaults, not exactly friction:** adding an *owned* item
+  skips `QuickAddSheet` and silently defaults to Loose/Good in two places
+  (`CatalogItemDetailView`, `AddToCollectionFlow`) but goes through the sheet
+  in `SystemGamesList`. Fewer taps is good; worth deciding on purpose whether
+  that inconsistency (and the differing defaults it produces) is intended.
+
+None of this is implemented yet — pure audit, no code changed. Highest-value
+first fix is the Condition/Completeness quick-picker, since it's the exact
+pattern the user hit adding a real item and the fix already exists elsewhere
+in the codebase to copy.
+
+## Catalog browsing at scale
+
+Raised 2026-09-13: `AddToCollectionFlow`'s catalog picker (and `CatalogSection`
+generally) searches/lists the *entire* catalog flat, which won't hold up once
+it's tens of thousands of games — hunting by name across everything gets
+harder as the catalog grows, and it's already ~3,600 items. Likely direction:
+browse **by system first** (the same system-first pattern `CollectionSection`
+already uses for the owned collection — pick a platform, then search/scroll
+within just that platform's titles) rather than one flat searchable list.
+`SystemGamesList`'s `.all` scope already proves this shape works well for
+browsing a single platform's full catalog (search + kind/sort filter + A–Z
+scrubber). Worth doing before the catalog grows much further, since it's a
+navigation-model change, not a small tweak, and gets harder to retrofit later.
+
+## Code health & error analytics
+
+Raised 2026-09-13, prompted by the `userID`/snake_case bug above slipping
+through undetected until a regression test happened to hit it. Concrete,
+sized-to-a-solo-project recommendations (no team, no budget for heavyweight
+tooling):
+
+- **The logging rule is now standing policy, not a one-off**: every non-2xx
+  API response and non-success Keychain/system-API status gets logged via
+  `AppLog` (`Services/AppLog.swift`), even when it's also surfaced to the UI
+  or rethrown. Apply this to any *new* external call as it's written, not
+  just the four fixed this session.
+- **`try?` is a code smell worth grepping for periodically** — it was the
+  single line that hid the `userID` bug for as long as it did. A `try?` is
+  legitimate when "this specific failure is fine to ignore" is a real,
+  intentional decision (documented inline); it's a bug waiting to be found
+  when it's really "I didn't want to handle this error." Worth a occasional
+  `grep -rn "try?" apple/RetroStacks` pass to confirm each one is still the
+  former.
+- **Xcode's own static analyzer** (Product → Analyze, or `xcodebuild analyze`)
+  catches a real class of bugs (retain cycles, unreachable code, misused
+  APIs) for zero setup cost — not currently run anywhere in this project's
+  workflow. Cheap to add as an occasional manual check before a release, or
+  wired into `Scripts/` alongside `leak-check.sh`.
+- **SwiftLint** (already referenced as a stub command in `CLAUDE.md` but not
+  actually installed/configured) would catch style-level smells (force
+  unwraps, long functions, unused code) automatically and cheaply — worth
+  actually setting up given the project explicitly mentions it as the intended
+  tool.
+- **Test coverage as a signal, not a target**: Xcode's built-in code coverage
+  report (`xcodebuild test -enableCodeCoverage YES`) would show which files
+  have zero test coverage at a glance — useful for spotting exactly the kind
+  of file (`SupabaseSessionStore`, `SupabaseCollectionRow`) that turned out to
+  hide a real bug specifically *because* nothing exercised it yet, without
+  chasing an arbitrary coverage percentage.
+- **What's deliberately not recommended**: a crash-reporting/analytics SDK
+  (Sentry, Firebase Crashlytics, etc.) — real value once this has real users,
+  but for a solo pre-release project it's a dependency and a privacy surface
+  for no current payoff. `AppStatusCenter` (user-facing) + `AppLog` (developer
+  log) already covers "know when something failed" at the current scale;
+  revisit if/when this ships to other people.
+
 ## Platform & polish
 
+- ~~App icon~~ — locked in 2026-09-13: NES/Genesis/N64-esque console trio,
+  blue/red palette, collector star badge. Placeholder-quality, not final —
+  user's own words: "we'll come up with something better later." Revisit
+  when there's appetite for a real design pass; not urgent, just no longer a
+  blank icon.
 - ~~Surface background API failures in the UI~~ — done: `AppStatusCenter` +
   corner `AppStatusBadge`. Wired for catalog sync + price refresh + collection
   sync (`SyncCoordinator` reports/clears `.collectionSync`, same pattern).
