@@ -151,10 +151,15 @@ nonisolated struct CollectionArchive: Codable, Sendable {
 
     // MARK: - Import
 
-    /// Returns (inserted, updated, deleted).
+    struct RestoreSummary {
+        var inserted: Int
+        var updated: Int
+        var deleted: Int
+    }
+
     @MainActor
     @discardableResult
-    func restore(into context: ModelContext, mode: ImportMode) throws -> (Int, Int, Int) {
+    func restore(into context: ModelContext, mode: ImportMode) throws -> RestoreSummary {
         let existing = try context.fetch(FetchDescriptor<CollectionItem>())
         var deleted = 0
 
@@ -187,7 +192,7 @@ nonisolated struct CollectionArchive: Codable, Sendable {
         }
 
         try context.save()
-        return (inserted, updated, deleted)
+        return RestoreSummary(inserted: inserted, updated: updated, deleted: deleted)
     }
 
     // MARK: - Codec

@@ -108,6 +108,8 @@ struct CatalogSeedTests {
         #expect(owned.completeness == .completeInBox)
         #expect(owned.pricePaid == 240)
         #expect(owned.playStatus == .completed)
+        // Adding days to a valid date always succeeds.
+        // swiftlint:disable:next force_unwrapping
         let expectedAdded = Calendar.current.date(byAdding: .day, value: -140, to: now)!
         #expect(abs(owned.dateAdded.timeIntervalSince(expectedAdded)) < 1)
     }

@@ -73,6 +73,8 @@ struct CatalogPosterCard: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try
     let items = try! container.mainContext.fetch(FetchDescriptor<CatalogItem>())
     ScrollView {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 16)], spacing: 16) {

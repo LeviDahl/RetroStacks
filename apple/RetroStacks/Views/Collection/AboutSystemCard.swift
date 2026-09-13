@@ -98,7 +98,11 @@ struct SystemFactTile: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try
     let platform = try! container.mainContext.fetch(FetchDescriptor<Platform>())
+        // "snes" is always seeded.
+        // swiftlint:disable:next force_unwrapping
         .first { $0.slug == "snes" }!
     ScrollView { AboutSystemCard(platform: platform).padding() }
         .modelContainer(container)

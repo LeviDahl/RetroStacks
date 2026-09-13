@@ -10,9 +10,9 @@ struct SystemCatalogTile: View {
     var catalogItem: CatalogItem
     var listStatus: CollectionStatus
     var onAdd: () -> Void
-    var onToggleWishlist: (() -> Void)? = nil
+    var onToggleWishlist: (() -> Void)?
     /// Right-click → Remove — the macOS-native equivalent of iOS's swipe action.
-    var onRemove: (() -> Void)? = nil
+    var onRemove: (() -> Void)?
 
     @State private var hovering = false
 
@@ -221,6 +221,8 @@ struct SelectableCatalogTile: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try
     let items = try! container.mainContext.fetch(FetchDescriptor<CatalogItem>())
     ScrollView {
         LazyVGrid(columns: LayoutMetrics.cardColumns(), spacing: LayoutMetrics.cardSpacing) {

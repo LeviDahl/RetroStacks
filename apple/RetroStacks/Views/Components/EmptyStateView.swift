@@ -4,8 +4,8 @@ struct EmptyStateView: View {
     var title: String
     var message: String
     var systemImage: String
-    var actionTitle: String? = nil
-    var action: (() -> Void)? = nil
+    var actionTitle: String?
+    var action: (() -> Void)?
 
     var body: some View {
         ContentUnavailableView {

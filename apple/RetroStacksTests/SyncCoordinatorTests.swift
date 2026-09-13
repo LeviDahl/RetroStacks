@@ -23,6 +23,8 @@ struct SyncCoordinatorTests {
     }
 
     private func freshDefaults() -> UserDefaults {
+        // A fresh UUID suite name is always valid.
+        // swiftlint:disable:next force_unwrapping
         UserDefaults(suiteName: "rs-syncc-tests-\(UUID().uuidString)")!
     }
 

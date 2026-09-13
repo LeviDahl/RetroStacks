@@ -64,6 +64,8 @@ struct CollectionItemRow: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try
     let items = try! container.mainContext.fetch(FetchDescriptor<CollectionItem>())
     List(items) { CollectionItemRow(item: $0) }
         .modelContainer(container)

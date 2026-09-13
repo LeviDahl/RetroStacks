@@ -16,6 +16,8 @@ enum SampleData {
     /// A fully populated in-memory container for previews and `#Preview` blocks.
     @MainActor
     static func previewContainer() -> ModelContainer {
+        // In-memory config with a fixed schema; can't fail.
+        // swiftlint:disable:next force_try
         let container = try! ModelContainer(
             for: Platform.self, CatalogItem.self, CollectionItem.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)

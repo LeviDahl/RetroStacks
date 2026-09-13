@@ -393,7 +393,7 @@ item from any of the three entry points, bulk-add). Findings and their fate:
 - ~~**Hidden on iOS: the wishlist star only showed once already
   wishlisted**~~ — done: persistent on iOS now; still hover-gated on macOS
   (a real declutter there, not the only way in).
-- ~~**Inconsistent defaults**~~ — decided 2026-09-14 (user's call: always show
+- ~~**Inconsistent defaults**~~ — decided 2026-09-13 (user's call: always show
   the picker): `CatalogItemDetailView` and `AddToCollectionFlow` (all three of
   its entry points — platform picker, flat search, barcode scanner, since
   they all funnel through one `add(_:)`) now route owned adds through
@@ -447,11 +447,35 @@ tooling):
   APIs) for zero setup cost — not currently run anywhere in this project's
   workflow. Cheap to add as an occasional manual check before a release, or
   wired into `Scripts/` alongside `leak-check.sh`.
-- **SwiftLint** (already referenced as a stub command in `CLAUDE.md` but not
-  actually installed/configured) would catch style-level smells (force
-  unwraps, long functions, unused code) automatically and cheaply — worth
-  actually setting up given the project explicitly mentions it as the intended
-  tool.
+- ~~**SwiftLint**~~ — done 2026-09-13: `.swiftlint.yml` (repo root) +
+  `Scripts/lint.sh` (`--fix` for auto-fixable violations, then report). Not
+  wired into an Xcode Build Phase or SPM plugin — both would mean editing
+  `project.pbxproj`/package deps, off-limits per `CLAUDE.md`'s guardrails —
+  so it's a manual/CI step for now. First real run: 120 violations, mostly
+  `identifier_name` noise on this codebase's short-closure-param idiom
+  (`{ m in ... }`) — tuned out via `min_length: 0`. `--fix` handled the
+  mechanical ones (trailing commas, redundant optional init) down to 60.
+  Every remaining `force_try`/`force_unwrapping` was reviewed by hand:
+  `#Preview`-only force-tries and safe-by-construction literals
+  (`URL(string: "https://...")!`, `Calendar.date(byAdding:)!` on a valid
+  date) got an inline `// swiftlint:disable:next` with a one-line reason;
+  the real ones — `URLComponents`/`.url` construction in
+  `SupabaseAuthClient`, `SupabaseCollectionSyncEngine`, and
+  `PriceChartingProvider` — were converted to `guard let ... else { throw }`
+  instead of just silencing the rule. Two 3-member tuples
+  (`DashboardView`'s `BreakdownRow`, `CollectionArchive.restore`'s
+  `RestoreSummary`) got named structs. Left alone, deliberately not
+  refactored blind under a lint pass: `cyclomatic_complexity` on
+  `CatalogBrowseViewModel.applyFilters`/`CatalogSeedStore`'s importer/
+  `PriceChartingProvider.priceReport` (the last grew from 10→12 by adding
+  the `guard let` above — an acceptable tradeoff for not crashing on a
+  malformed URL), `function_body_length` on `CatalogSyncService`, and
+  `file_length`/`type_body_length` on `SystemGamesList` (851 lines, grown
+  from the `PlatformDetailView` merge noted above — a real split candidate,
+  just not attempted blind under a lint pass). 6 warnings remain, 0
+  errors; `knownFindingBaseline`-style tracking isn't set up for lint the
+  way it is for the accessibility audit, so these are just visible in
+  `Scripts/lint.sh` output going forward.
 - **Test coverage as a signal, not a target**: Xcode's built-in code coverage
   report (`xcodebuild test -enableCodeCoverage YES`) would show which files
   have zero test coverage at a glance — useful for spotting exactly the kind

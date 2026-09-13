@@ -3,8 +3,8 @@ import SwiftData
 
 struct CatalogSection: View {
     /// Optional starting filter, e.g. when opened from a platform.
-    var initialPlatformSlug: String? = nil
-    var initialKind: ItemKind? = nil
+    var initialPlatformSlug: String?
+    var initialKind: ItemKind?
 
     @Query(sort: [SortDescriptor(\CatalogItem.name)]) private var allItems: [CatalogItem]
     @Query(sort: \Platform.generation) private var platforms: [Platform]

@@ -76,15 +76,45 @@ final class NavigationTests: XCTestCase {
     }
 }
 
-/// Not a regression test — a standing accessibility check, run every time this
-/// suite runs. Deliberately **non-failing for now**: the app currently has
-/// close to zero accessibility labels/identifiers (tracked in BACKLOG.md), so
-/// a hard-failing audit today would just permanently red the pipeline instead
-/// of being useful. The issue handler logs and attaches every finding instead
-/// of throwing. Once the accessibility-identifiers backlog item lands, tighten
-/// this: fail on `.sufficientElementDescription` / `.contrast` findings at
-/// minimum, and narrow or drop the always-true issueHandler.
+/// A **ratchet**, not a zero-tolerance gate: fails if Dashboard's finding
+/// count goes *above* `knownFindingBaseline`, but doesn't yet require zero.
+///
+/// 2026-09-13: this started at 13 findings, all logged+attached but never
+/// failing (the app had close to zero accessibility work done). Investigated
+/// every one with `.detailedDescription` (not just `.compactDescription`,
+/// which was too vague to act on — "[type] Contrast failed" with no element)
+/// and fixed what real evidence supported: two Dynamic-Type clipping issues
+/// (`StatTile`'s footnote had `.lineLimit(1)` with nothing to shrink it —
+/// added `.minimumScaleFactor`) and the `.green`/`.red`/`.yellow` semantic
+/// colors' well-documented WCAG light-mode contrast failure (see
+/// `Badges.swift`'s `Color.accentGold`/`.accentGreen`/`.accentRed` comment).
+/// That took it to 10. The remaining 10 split into two groups, left
+/// unresolved on purpose rather than guessed at further:
+/// - 3 hard "Contrast failed" findings, all inside `PlatformBreakdownCard`/
+///   `BreakdownBar` ("Breakdown by Platform", "$540", "SNES") — survived
+///   switching their text to explicit `.primary`, which rules out a simple
+///   wrong-color-choice explanation. Best-evidenced remaining theory:
+///   `.primary` text sitting close to a long, bright, saturated capsule bar
+///   (SNES has the longest bar in the sample data) genuinely washes out
+///   regardless of the text's own color — a structural/spacing question, not
+///   a colorimetric one, and needs a real visual iteration pass (screenshot,
+///   adjust, recheck) that wasn't practical blind this session.
+/// - 7 "nearly passed" warnings (`.secondary` text at `.caption` size —
+///   passes the 3:1 large-text/UI-component floor, not the full 4.5:1 for
+///   small normal text) — this is the *default* look of `.secondary` +
+///   `.caption` used throughout the whole app (StatTile titles/footnotes,
+///   and almost certainly the same combo elsewhere), not a Dashboard-only
+///   bug. Fixing it for real means a deliberate call on how muted "secondary"
+///   text should read app-wide — a design decision, not something to change
+///   unilaterally while chasing one screen's audit count.
+///
+/// Lower `knownFindingBaseline` as items above get fixed for real (verified,
+/// not guessed) — that's what keeps this a ratchet instead of a ceiling.
 final class AccessibilityAuditTests: XCTestCase {
+    /// Real, currently-known finding count for Dashboard — see the type doc
+    /// comment for exactly what these are and why they're not zero yet.
+    static let knownFindingBaseline = 10
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -99,8 +129,13 @@ final class AccessibilityAuditTests: XCTestCase {
 
         var findings: [String] = []
         try app.performAccessibilityAudit { issue in
-            findings.append("[\(issue.auditType)] \(issue.compactDescription)")
-            return true // handled — never fails this test; see the doc comment above.
+            // `.compactDescription` alone was just "[type] Contrast failed" —
+            // not enough to act on. `.detailedDescription` carries the actual
+            // ratio/colors for contrast issues and the frame for clipping;
+            // `.element`'s identifier/label says *what* failed.
+            let elementInfo = issue.element.map { "element: \($0.identifier.isEmpty ? $0.label : $0.identifier)" } ?? "element: <none>"
+            findings.append("[\(issue.auditType)] \(elementInfo)\n  \(issue.detailedDescription)")
+            return true // always "handled" at the API level — the assertion below is what actually gates this.
         }
 
         let report = findings.isEmpty
@@ -112,5 +147,11 @@ final class AccessibilityAuditTests: XCTestCase {
         attachment.name = "Accessibility Audit — Dashboard"
         attachment.lifetime = .keepAlways
         add(attachment)
+
+        XCTAssertLessThanOrEqual(
+            findings.count, Self.knownFindingBaseline,
+            "New accessibility finding(s) on Dashboard — see the attached report. "
+                + "If this is a real fix bringing the count down, lower knownFindingBaseline to match."
+        )
     }
 }

@@ -13,7 +13,7 @@ nonisolated enum CollectionCSV {
         "Grading Company", "Grade",
         "Price Paid", "Estimated Value", "Value Delta",
         "Date Acquired", "Acquired Via", "Storage Location",
-        "Play Status", "Date Added", "Notes",
+        "Play Status", "Date Added", "Notes"
     ]
 
     @MainActor
@@ -51,7 +51,7 @@ nonisolated enum CollectionCSV {
                 item.storageLocation ?? "",
                 item.playStatus?.displayName ?? "",
                 date(item.dateAdded),
-                item.notes,
+                item.notes
             ]))
         }
         return rows.joined(separator: "\r\n") + "\r\n"

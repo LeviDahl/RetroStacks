@@ -30,7 +30,7 @@ final class PricingService {
             RemotePricingProvider(),   // the RetroStacks data feed (price-guide.json)
             EbayBrowseProvider(),      // redundancy for common items
             GGDealsProvider(),         // digital/modern titles
-            SampleGuideProvider(),     // always-on offline fallback (cached/seed values)
+            SampleGuideProvider()     // always-on offline fallback (cached/seed values)
         ])
     }
 
@@ -96,11 +96,11 @@ final class PricingService {
     }
 
     func apply(_ guide: PriceGuide, to item: CatalogItem) {
-        if let v = guide.value(for: .loose)         { item.estimatedValueLoose = v }
-        if let v = guide.value(for: .completeInBox)  { item.estimatedValueComplete = v }
-        if let v = guide.value(for: .new)            { item.estimatedValueSealed = v }
-        if let v = guide.value(for: .graded)         { item.estimatedValueGraded = v }
-        if let vol = guide.salesVolumeYearly         { item.salesVolumeYearly = vol }
+        if let v = guide.value(for: .loose) { item.estimatedValueLoose = v }
+        if let v = guide.value(for: .completeInBox) { item.estimatedValueComplete = v }
+        if let v = guide.value(for: .new) { item.estimatedValueSealed = v }
+        if let v = guide.value(for: .graded) { item.estimatedValueGraded = v }
+        if let vol = guide.salesVolumeYearly { item.salesVolumeYearly = vol }
         item.priceGuideProviderID = guide.primaryProvider.rawValue
         item.priceGuideUpdatedAt = guide.asOf
     }

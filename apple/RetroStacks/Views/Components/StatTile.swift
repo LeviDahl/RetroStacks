@@ -5,10 +5,10 @@ struct StatTile: View {
     var value: String
     var systemImage: String
     var tint: Color = .accentColor
-    var footnote: String? = nil
+    var footnote: String?
     var footnoteColor: Color = .secondary
     /// When set, the whole tile becomes a button (e.g. "Owned Items" → My Collection).
-    var action: (() -> Void)? = nil
+    var action: (() -> Void)?
 
     var body: some View {
         if let action {
@@ -81,7 +81,10 @@ private struct TileButtonStyle: ButtonStyle {
 #Preview {
     LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
         StatTile(title: "Owned Items", value: "128", systemImage: "square.grid.2x2", tint: .indigo, footnote: "8 added this month")
-        StatTile(title: "Est. Value", value: "$4,210", systemImage: "chart.line.uptrend.xyaxis", tint: .green, footnote: "+$960 vs. invested", footnoteColor: .green)
+        StatTile(
+            title: "Est. Value", value: "$4,210", systemImage: "chart.line.uptrend.xyaxis",
+            tint: .green, footnote: "+$960 vs. invested", footnoteColor: .green
+        )
         StatTile(title: "Invested", value: "$3,250", systemImage: "creditcard", tint: .blue)
     }
     .padding()

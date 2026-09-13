@@ -18,7 +18,10 @@
 Utilize the following `XcodeBuildMCP` compatible tools. Do not guess `xcodebuild` flags.
 - **Build App**: `xcodebuild -scheme YourAppScheme -destination 'platform=iOS Simulator,name=iPhone 16' build`
 - **Run Tests**: `xcodebuild -scheme YourAppScheme -destination 'platform=iOS Simulator,name=iPhone 16' test`
-- **Lint Code**: `swift package plugin swiftlint` (or project-specific SwiftLint script)
+- **Lint Code**: `Scripts/lint.sh` (add `--fix` to auto-fix what's safe first). Config is
+  `.swiftlint.yml` at the repo root. Deliberately not an Xcode Build Phase or SPM
+  plugin — both would mean editing `project.pbxproj`/package deps, off-limits per
+  the guardrail above. Needs `brew install swiftlint` once.
 
 ## 📋 Code Conventions & Style Guide
 - **File Layout**: Every new view file MUST include a standard `#Preview` block at the bottom.

@@ -357,8 +357,7 @@ struct SystemGamesList: View {
                 listStatus: addStatus,
                 onAdd: { handleAdd(catalogItem, status: addStatus) },
                 onToggleWishlist: addStatus == .owned ? { toggleWishlist(catalogItem) } : nil,
-                onRemove: catalogItem.entry(for: addStatus).map { entry in
-                    { withAnimation { CollectionActions.remove(entry, in: modelContext) } }
+                onRemove: catalogItem.entry(for: addStatus).map { entry in { withAnimation { CollectionActions.remove(entry, in: modelContext) } }
                 }
             )
         }
@@ -627,7 +626,7 @@ struct PlatformCatalogRow: View {
     var catalogItem: CatalogItem
     var listStatus: CollectionStatus
     var onAdd: () -> Void
-    var onToggleWishlist: (() -> Void)? = nil
+    var onToggleWishlist: (() -> Void)?
 
     @State private var hovering = false
 
@@ -837,7 +836,11 @@ struct SystemSummaryStrip: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try
     let platform = try! container.mainContext.fetch(FetchDescriptor<Platform>())
+        // "snes" is always seeded.
+        // swiftlint:disable:next force_unwrapping
         .first { $0.slug == "snes" }!
     NavigationStack {
         SystemGamesList(platform: platform, mode: .collection)

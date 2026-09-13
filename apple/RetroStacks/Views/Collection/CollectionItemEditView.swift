@@ -232,6 +232,8 @@ struct CollectionItemEditView: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try force_unwrapping
     let item = try! container.mainContext.fetch(FetchDescriptor<CollectionItem>()).first!
     NavigationStack {
         CollectionItemEditView(item: item)

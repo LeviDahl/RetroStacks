@@ -71,6 +71,8 @@ struct SystemCollectionRow: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try
     let items = try! container.mainContext.fetch(FetchDescriptor<CollectionItem>())
     let summaries = CollectionStatsBuilder.systemSummaries(from: items, status: .owned)
     List(summaries) { SystemCollectionRow(summary: $0) }

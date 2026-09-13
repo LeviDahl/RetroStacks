@@ -86,7 +86,11 @@ struct QuickAddSheet: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try
     let item = try! container.mainContext.fetch(FetchDescriptor<CatalogItem>())
+        // Fixture data always has a game.
+        // swiftlint:disable:next force_unwrapping
         .first { $0.kind == .game }!
     Color.clear
         .sheet(isPresented: .constant(true)) {

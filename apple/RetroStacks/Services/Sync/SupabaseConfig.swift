@@ -8,6 +8,8 @@ import Foundation
 /// `schema.sql`) is what actually scopes access to `auth.uid()`, not secrecy of
 /// this key — that's the whole point of a publishable key.
 nonisolated enum SupabaseConfig {
+    // Fixed literal, always valid.
+    // swiftlint:disable:next force_unwrapping
     static let projectURL = URL(string: "https://vethkqrlcacmlffuzlnx.supabase.co")!
     static let anonKey = "sb_publishable_jJEKk7jnVq6rRjgwAP5yOQ_P3fi4WCz"
 

@@ -15,6 +15,8 @@ nonisolated struct PriceChartingProvider: PricingProvider {
 
     private let token: String?
     private let session: URLSession
+    // Fixed literal, always valid.
+    // swiftlint:disable:next force_unwrapping
     private let baseURL = URL(string: "https://www.pricecharting.com")!
 
     var isConfigured: Bool { !(token ?? "").isEmpty }
@@ -34,10 +36,12 @@ nonisolated struct PriceChartingProvider: PricingProvider {
     func priceReport(for query: PriceQuery) async throws -> ProviderPriceReport {
         guard let token, !token.isEmpty else { throw PricingProviderError.notConfigured }
 
-        var comps = URLComponents(
+        guard var comps = URLComponents(
             url: baseURL.appendingPathComponent("api/product"),
             resolvingAgainstBaseURL: false
-        )!
+        ) else {
+            throw PricingProviderError.transport("couldn't build request URL")
+        }
         var q = [URLQueryItem(name: "t", value: token)]
         if let pcID = query.knownProductIDs[PricingProviderID.priceCharting.rawValue] {
             q.append(URLQueryItem(name: "id", value: pcID))
@@ -47,10 +51,13 @@ nonisolated struct PriceChartingProvider: PricingProvider {
             q.append(URLQueryItem(name: "q", value: "\(query.title) \(query.platform)"))
         }
         comps.queryItems = q
+        guard let url = comps.url else {
+            throw PricingProviderError.transport("couldn't build request URL")
+        }
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await session.data(from: comps.url!)
+            (data, response) = try await session.data(from: url)
         } catch {
             throw PricingProviderError.transport(error.localizedDescription)
         }

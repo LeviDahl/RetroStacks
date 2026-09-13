@@ -298,6 +298,8 @@ private struct MarketValueCard: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try
     let all = try! container.mainContext.fetch(FetchDescriptor<CatalogItem>())
     let item = all.first { $0.slug == "snes-chrono-trigger" } ?? all[0]
     NavigationStack {

@@ -139,10 +139,15 @@ nonisolated struct SupabaseAuthClient: Sendable {
         accessToken: String? = nil,
         body: [String: Any]
     ) async throws -> Data {
-        var components = URLComponents(url: SupabaseConfig.authURL.appending(path: path), resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: SupabaseConfig.authURL.appending(path: path), resolvingAgainstBaseURL: false) else {
+            throw SupabaseAuthError.transport("couldn't build request URL for \(path)")
+        }
         if !query.isEmpty { components.queryItems = query }
 
-        var request = URLRequest(url: components.url!, timeoutInterval: 20)
+        guard let url = components.url else {
+            throw SupabaseAuthError.transport("couldn't build request URL for \(path)")
+        }
+        var request = URLRequest(url: url, timeoutInterval: 20)
         request.httpMethod = "POST"
         request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(accessToken ?? SupabaseConfig.anonKey)", forHTTPHeaderField: "Authorization")

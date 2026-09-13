@@ -8,7 +8,7 @@ enum PlatformPalette {
     /// Distinct, theme-adaptive hues. System colors so light/dark both read well.
     static let colors: [Color] = [
         .red, .orange, .yellow, .green, .mint,
-        .teal, .cyan, .blue, .indigo, .purple, .pink, .brown,
+        .teal, .cyan, .blue, .indigo, .purple, .pink, .brown
     ]
 
     static func color(for slug: String) -> Color {

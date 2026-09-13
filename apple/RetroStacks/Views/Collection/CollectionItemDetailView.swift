@@ -291,6 +291,8 @@ private struct ChecklistRow: View {
 
 #Preview {
     let container = SampleData.previewContainer()
+    // #Preview only, fixture data is always valid.
+    // swiftlint:disable:next force_try
     let all = try! container.mainContext.fetch(FetchDescriptor<CollectionItem>())
     let item = all.first { !$0.notes.isEmpty } ?? all[0]
     NavigationStack {

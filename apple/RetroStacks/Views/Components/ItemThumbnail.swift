@@ -12,9 +12,9 @@ import AppKit
 /// placeholder so lists and grids always read well, even offline or mid-load.
 struct ItemThumbnail: View {
     var kind: ItemKind
-    var platformSymbol: String? = nil
-    var imageName: String? = nil
-    var imageURL: URL? = nil
+    var platformSymbol: String?
+    var imageName: String?
+    var imageURL: URL?
     var size: CGFloat = 56
     var cornerRadius: CGFloat = 10
     /// `.fill` crops to the frame (good for small thumbnails); `.fit` shows the

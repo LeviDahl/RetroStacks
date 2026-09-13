@@ -279,6 +279,14 @@ private enum BreakdownMetric: String, CaseIterable, Identifiable {
     }
 }
 
+/// One row of `PlatformBreakdownCard`'s bar chart — a platform's summary, its
+/// bar fraction (0...1), and the trailing label text, sorted by the active metric.
+private struct BreakdownRow {
+    var summary: CollectionStats.SystemSummary
+    var fraction: Double
+    var label: String
+}
+
 private struct PlatformBreakdownCard: View {
     var summaries: [CollectionStats.SystemSummary]
     var platforms: [Platform]
@@ -291,27 +299,23 @@ private struct PlatformBreakdownCard: View {
         platforms.first { $0.slug == slug }
     }
 
-    /// (summary, bar fraction 0…1, trailing label), sorted by the active metric.
-    private var rows: [(summary: CollectionStats.SystemSummary, fraction: Double, label: String)] {
+    private var rows: [BreakdownRow] {
         switch metric {
         case .value:
             let amounts = summaries.map { NSDecimalNumber(decimal: $0.value).doubleValue }
             let maxV = max(amounts.max() ?? 1, 0.01)
             return zip(summaries, amounts)
-                .map { ($0, $1 / maxV, Money.string($0.value)) }
-                .sorted { $0.1 > $1.1 }
-                .map { (summary: $0.0, fraction: $0.1, label: $0.2) }
+                .map { BreakdownRow(summary: $0, fraction: $1 / maxV, label: Money.string($0.value)) }
+                .sorted { $0.fraction > $1.fraction }
         case .games:
             let maxC = Double(summaries.map(\.ownedItemCount).max() ?? 1)
             return summaries
-                .map { ($0, Double($0.ownedItemCount) / max(maxC, 1), "\($0.ownedItemCount)") }
-                .sorted { $0.1 > $1.1 }
-                .map { (summary: $0.0, fraction: $0.1, label: $0.2) }
+                .map { BreakdownRow(summary: $0, fraction: Double($0.ownedItemCount) / max(maxC, 1), label: "\($0.ownedItemCount)") }
+                .sorted { $0.fraction > $1.fraction }
         case .completion:
             return summaries
-                .map { ($0, $0.completionRatio, "\($0.completionPercent)%") }
-                .sorted { $0.1 > $1.1 }
-                .map { (summary: $0.0, fraction: $0.1, label: $0.2) }
+                .map { BreakdownRow(summary: $0, fraction: $0.completionRatio, label: "\($0.completionPercent)%") }
+                .sorted { $0.fraction > $1.fraction }
         }
     }
 

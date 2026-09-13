@@ -363,11 +363,11 @@ struct CollectionSection: View {
     private func runImport(_ archive: CollectionArchive, mode: CollectionArchive.ImportMode) {
         pendingImport = nil
         do {
-            let (inserted, updated, deleted) = try archive.restore(into: modelContext, mode: mode)
+            let summary = try archive.restore(into: modelContext, mode: mode)
             var parts: [String] = []
-            if inserted > 0 { parts.append("\(inserted) added") }
-            if updated > 0 { parts.append("\(updated) updated") }
-            if deleted > 0 { parts.append("\(deleted) removed") }
+            if summary.inserted > 0 { parts.append("\(summary.inserted) added") }
+            if summary.updated > 0 { parts.append("\(summary.updated) updated") }
+            if summary.deleted > 0 { parts.append("\(summary.deleted) removed") }
             successToast = parts.isEmpty ? "Nothing to import." : "Imported: " + parts.joined(separator: ", ") + "."
         } catch {
             errorMessage = "Import failed: \(error.localizedDescription)"

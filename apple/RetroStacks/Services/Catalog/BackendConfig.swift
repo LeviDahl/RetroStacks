@@ -11,6 +11,8 @@ import Foundation
 /// `levidahl.github.io`); the raw `https://levidahl.github.io/RetroStacks` still
 /// works and 301s here.
 nonisolated enum BackendConfig {
+    // Fixed literal, always valid.
+    // swiftlint:disable:next force_unwrapping
     static let feedBaseURL = URL(string: "https://data.retrostacks.com")!
 
     static var catalogURL: URL { feedBaseURL.appending(path: "v1/catalog.json") }
