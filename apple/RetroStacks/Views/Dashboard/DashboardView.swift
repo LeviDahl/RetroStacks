@@ -203,7 +203,7 @@ struct DashboardView: View {
                      systemImage: "chart.line.uptrend.xyaxis", tint: .green,
                      footnote: stats.totalInvested > 0
                         ? "\(Money.signedString(stats.netGain)) vs. invested" : nil,
-                     footnoteColor: stats.netGain < 0 ? .red : .green)
+                     footnoteColor: stats.netGain < 0 ? .accentRed : .accentGreen)
             StatTile(title: "Total Invested", value: Money.string(stats.totalInvested),
                      systemImage: "creditcard", tint: .blue)
             StatTile(title: "Wishlist", value: "\(stats.wishlistCount)",
@@ -319,6 +319,7 @@ private struct PlatformBreakdownCard: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Breakdown by Platform", systemImage: "chart.bar.xaxis")
                 .font(.headline)
+                .foregroundStyle(.primary)
 
             Picker("Metric", selection: $metricRaw) {
                 ForEach(BreakdownMetric.allCases) { Text($0.label).tag($0.rawValue) }
@@ -387,9 +388,14 @@ private struct BreakdownBar: View {
             }
             .frame(height: 15)
 
+            // .primary, not .secondary — the accessibility audit measured a
+            // real contrast failure here specifically for the longest bar's
+            // row (its value text sits right at the edge of a long, bright,
+            // saturated capsule fill); .primary is robust regardless of bar
+            // length or which platform happens to be longest.
             Text(valueText)
                 .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .frame(width: compact ? 64 : 78, alignment: .trailing)
 
             if let subText, !compact {
@@ -422,6 +428,7 @@ private struct BreakdownBar: View {
             )
             Text(shortName)
                 .font(.callout.weight(.medium))
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
         }

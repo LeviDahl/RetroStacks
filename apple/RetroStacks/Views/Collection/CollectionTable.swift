@@ -58,7 +58,7 @@ struct CollectionTable: View {
                 if let delta = item.valueDelta, delta != 0 {
                     Text(Money.signedString(delta))
                         .monospacedDigit()
-                        .foregroundStyle(delta < 0 ? .red : .green)
+                        .foregroundStyle(delta < 0 ? .accentRed : .accentGreen)
                 } else {
                     Text("—").foregroundStyle(.tertiary)
                 }

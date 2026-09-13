@@ -72,11 +72,17 @@ struct SystemCatalogTile: View {
                         .font(.caption)
                         .foregroundStyle(.white)
                         .padding(5)
-                        // Fixed dark gold, not `.accentGold` — a white icon
-                        // sits on top of this fill, so it needs to stay dark
-                        // in both appearances (see the .tint(...) comment in
-                        // SystemGamesList's swipe action for the same case).
-                        .background(listStatus == .wishlist ? Color(red: 0.471, green: 0.337, blue: 0.0) : Color.green, in: Circle())
+                        // Fixed dark gold/green, not the adaptive accent
+                        // colors — a white icon sits on top of this fill, so
+                        // it needs to stay dark in both appearances (see the
+                        // .tint(...) comment in SystemGamesList's swipe
+                        // action for the same case).
+                        .background(
+                            listStatus == .wishlist
+                                ? Color(red: 0.471, green: 0.337, blue: 0.0)
+                                : Color(red: 0.118, green: 0.431, blue: 0.184),
+                            in: Circle()
+                        )
                         .padding(6)
                         .accessibilityLabel(listStatus == .wishlist ? "Wishlisted" : "Owned")
                 }
@@ -170,8 +176,10 @@ struct SelectableCatalogTile: View {
                         .font(.callout)
                         .foregroundStyle(.white)
                         .padding(5)
+                        // Fixed dark green (white icon on top) — same
+                        // reasoning as the badge above.
                         .background(
-                            alreadyIn ? Color.green : picked ? Color.accentColor : Color.black.opacity(0.35),
+                            alreadyIn ? Color(red: 0.118, green: 0.431, blue: 0.184) : picked ? Color.accentColor : Color.black.opacity(0.35),
                             in: Circle()
                         )
                         .padding(6)

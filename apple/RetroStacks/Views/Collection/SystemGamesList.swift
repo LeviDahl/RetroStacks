@@ -705,7 +705,7 @@ struct PlatformCatalogRow: View {
                     CompletenessBadge(completeness: entry.completeness)
                     Image(systemName: listStatus == .wishlist ? "star.fill" : "checkmark.seal.fill")
                         .font(.caption)
-                        .foregroundStyle(listStatus == .wishlist ? .accentGold : .green)
+                        .foregroundStyle(listStatus == .wishlist ? .accentGold : .accentGreen)
                         .accessibilityLabel(listStatus == .wishlist ? "Wishlisted" : "Owned")
                 }
             }
@@ -738,7 +738,7 @@ struct SelectableCatalogRow: View {
                 Image(systemName: alreadyIn ? "checkmark.circle.fill"
                       : picked ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(alreadyIn ? .green : picked ? Color.accentColor : .secondary)
+                    .foregroundStyle(alreadyIn ? .accentGreen : picked ? Color.accentColor : .secondary)
                 CatalogRowContent(catalogItem: catalogItem)
                 Spacer(minLength: 8)
                 if alreadyIn {

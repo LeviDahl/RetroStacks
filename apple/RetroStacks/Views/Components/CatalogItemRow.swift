@@ -43,7 +43,7 @@ struct CatalogItemRow: View {
                 }
                 HStack(spacing: 5) {
                     if item.isOwned {
-                        Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                        Image(systemName: "checkmark.seal.fill").foregroundStyle(.accentGreen)
                             .accessibilityLabel("Owned")
                     }
                     if item.isWishlisted {

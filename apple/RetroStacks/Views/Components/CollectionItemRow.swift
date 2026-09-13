@@ -50,7 +50,7 @@ struct CollectionItemRow: View {
                 if let delta = item.valueDelta, delta != 0 {
                     Text(Money.signedString(delta))
                         .font(.caption2.weight(.medium))
-                        .foregroundStyle(delta < 0 ? .red : .green)
+                        .foregroundStyle(delta < 0 ? .accentRed : .accentGreen)
                 }
             }
         }

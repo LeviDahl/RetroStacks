@@ -133,7 +133,7 @@ struct CatalogItemDetailView: View {
             if let justAdded {
                 Label("Added to \(justAdded.displayName)", systemImage: "checkmark.circle.fill")
                     .font(.caption)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.accentGreen)
                     .transition(.opacity)
             }
             Spacer()

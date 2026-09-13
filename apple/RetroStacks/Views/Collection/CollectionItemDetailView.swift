@@ -148,7 +148,7 @@ struct CollectionItemDetailView: View {
             KeyValueRow("Estimated Value", Money.string(item.estimatedValue))
             if let delta = item.valueDelta, delta != 0 {
                 KeyValueRow("Gain / Loss", Money.signedString(delta),
-                            valueColor: delta < 0 ? .red : .green)
+                            valueColor: delta < 0 ? .accentRed : .accentGreen)
             }
             if let catalogItem = item.catalogItem {
                 Divider().padding(.vertical, 2)
@@ -281,7 +281,7 @@ private struct ChecklistRow: View {
     var body: some View {
         HStack {
             Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isOn ? .green : .secondary)
+                .foregroundStyle(isOn ? .accentGreen : .secondary)
             Text(label)
             Spacer()
         }

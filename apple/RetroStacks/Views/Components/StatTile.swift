@@ -42,10 +42,14 @@ struct StatTile: View {
                 .minimumScaleFactor(0.6)
 
             if let footnote {
+                // .minimumScaleFactor added 2026-09-13 — the accessibility
+                // audit flagged this as "may be clipped at larger Dynamic
+                // Type sizes" (lineLimit(1) with nothing to shrink it).
                 Text(footnote)
                     .font(.caption)
                     .foregroundStyle(footnoteColor)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

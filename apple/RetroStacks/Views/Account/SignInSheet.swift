@@ -25,7 +25,7 @@ struct SignInSheet: View {
                 }
                 if let errorMessage {
                     Section {
-                        Text(errorMessage).foregroundStyle(.red).font(.footnote)
+                        Text(errorMessage).foregroundStyle(.accentRed).font(.footnote)
                     }
                 }
             }

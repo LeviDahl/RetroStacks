@@ -1,21 +1,24 @@
 import SwiftUI
 
-// `Color.accentGold` is Xcode-generated from `Assets.xcassets/AccentGold.colorset`
-// (asset symbol generation, no manual extension needed/allowed — colliding
-// with one is a build error). Stand-in for `.yellow` wherever it's used as
-// *text or icon* color (condition/status dots, badges, wishlist stars)
-// rather than a purely decorative fill: a dark amber (#785600) in light
-// mode, the standard systemYellow dark value (#FFD60A) in dark mode.
+// `Color.accentGold`/`.accentGreen`/`.accentRed` are Xcode-generated from
+// `Assets.xcassets/Accent{Gold,Green,Red}.colorset` (asset symbol generation
+// — no manual extension needed/allowed, colliding with one is a build error).
+// Stand-ins for `.yellow`/`.green`/`.red` wherever used as *text or icon*
+// color (condition/status dots, badges, gain/loss figures) rather than a
+// purely decorative fill: a darker shade in light mode, the system color's
+// own dark-mode value in dark mode (unchanged there).
 //
-// Found 2026-09-13 doing the accessibility contrast pass: plain `.yellow`
-// text/icon on its usual pale-yellow wash background measured **~1.4:1** in
-// light mode (computed from the actual composited sRGB values, WCAG
-// relative-luminance formula) — badly under the 3:1 floor for UI components,
-// let alone 4.5:1 for text. `.yellow` in *dark* mode was already fine
-// (~6.1:1) — yellow-on-light is the classic WCAG failure case, dark mode
-// wasn't the problem. `#785600` gets back to ~5.3:1 in light mode while
-// staying legible as "gold" (not brown), and dark mode is untouched (still
-// systemYellow's own dark value).
+// Found 2026-09-13 doing the accessibility contrast pass — first on
+// `.yellow` (StatusBadge's wishlist case measured ~1.4:1 in light mode,
+// computed from the actual composited sRGB values via the WCAG
+// relative-luminance formula, badly under the 3:1 UI-component floor let
+// alone 4.5:1 for text), then confirmed by the OS's own
+// `performAccessibilityAudit()` catching `.green` failing too (StatTile's
+// "+$472 vs. invested" footnote). `.red` measured borderline (~3.55:1,
+// passes 3:1 but not 4.5:1) and got the same treatment for consistency,
+// since it's always paired with `.green` in gain/loss text. Dark mode was
+// fine for all three already — yellow/green/red-on-light is the classic WCAG
+// failure shape, not dark mode.
 
 /// Small pill used for completeness (CIB / LOOSE / SEALED …).
 struct CompletenessBadge: View {
@@ -35,7 +38,7 @@ struct CompletenessBadge: View {
     private var color: Color {
         switch completeness {
         case .sealed, .graded: .purple
-        case .completeInBox: .green
+        case .completeInBox: .accentGreen
         case .boxedNoManual: .blue
         case .loose: .secondary
         case .none: .secondary
@@ -71,11 +74,11 @@ struct ConditionLabel: View {
 
     private var color: Color {
         switch condition {
-        case .sealed, .mint: .green
+        case .sealed, .mint: .accentGreen
         case .veryGood: .mint
         case .good: .accentGold
         case .fair: .orange
-        case .poor: .red
+        case .poor: .accentRed
         case .none: .secondary
         }
     }
@@ -95,7 +98,7 @@ struct StatusBadge: View {
 
     private var color: Color {
         switch status {
-        case .owned: .green
+        case .owned: .accentGreen
         case .wishlist: .accentGold
         case .forSale: .blue
         case .forTrade: .purple
