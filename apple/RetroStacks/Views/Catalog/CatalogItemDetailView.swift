@@ -6,6 +6,12 @@ struct CatalogItemDetailView: View {
 
     @Environment(\.modelContext) private var modelContext
     @State private var justAdded: CollectionStatus?
+    /// Owned adds go through `QuickAddSheet` (completeness + condition)
+    /// instead of a silent Loose/Good default — matches `SystemGamesList`'s
+    /// `handleAdd`, so every "add as owned" path in the app behaves the same
+    /// way now (was an inconsistency: this screen and `AddToCollectionFlow`
+    /// used to add instantly while `SystemGamesList` asked first).
+    @State private var quickAddTarget: CatalogItem?
 
     /// Swap for an injected instance in tests; the shared one carries the cache.
     private let pricing = PricingService.shared
@@ -61,6 +67,18 @@ struct CatalogItemDetailView: View {
                 } label: {
                     Label("Add to Collection", systemImage: "plus")
                 }
+            }
+        }
+        .sheet(item: $quickAddTarget) { catalogItem in
+            QuickAddSheet(catalogItem: catalogItem) { completeness, condition in
+                withAnimation {
+                    _ = CollectionActions.add(
+                        catalogItem, status: .owned,
+                        completeness: completeness, condition: condition,
+                        in: modelContext
+                    )
+                }
+                showJustAdded(.owned)
             }
         }
     }
@@ -178,7 +196,15 @@ struct CatalogItemDetailView: View {
     }
 
     private func addEntry(status: CollectionStatus) {
-        CollectionActions.add(item, status: status, in: modelContext)
+        if status == .owned {
+            quickAddTarget = item
+        } else {
+            CollectionActions.add(item, status: status, in: modelContext)
+            showJustAdded(status)
+        }
+    }
+
+    private func showJustAdded(_ status: CollectionStatus) {
         withAnimation { justAdded = status }
         Task {
             try? await Task.sleep(for: .seconds(2))

@@ -393,12 +393,13 @@ item from any of the three entry points, bulk-add). Findings and their fate:
 - ~~**Hidden on iOS: the wishlist star only showed once already
   wishlisted**~~ — done: persistent on iOS now; still hover-gated on macOS
   (a real declutter there, not the only way in).
-- **Inconsistent defaults — not fixed, a product decision, not a friction
-  bug.** Adding an *owned* item skips `QuickAddSheet` and silently defaults
-  to Loose/Good in two places (`CatalogItemDetailView`, `AddToCollectionFlow`)
-  but goes through the sheet in `SystemGamesList`. Left alone deliberately —
-  "fixing" it either adds a tap somewhere or removes a capture step
-  somewhere else; worth a real decision, not a unilateral one.
+- ~~**Inconsistent defaults**~~ — decided 2026-09-14 (user's call: always show
+  the picker): `CatalogItemDetailView` and `AddToCollectionFlow` (all three of
+  its entry points — platform picker, flat search, barcode scanner, since
+  they all funnel through one `add(_:)`) now route owned adds through
+  `QuickAddSheet` too, matching `SystemGamesList`. Wishlist adds still skip
+  it everywhere (completeness/condition aren't meaningful for a wishlist
+  entry) — that part was never inconsistent.
 
 ## Catalog browsing at scale — done
 

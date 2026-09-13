@@ -22,6 +22,12 @@ struct AddToCollectionFlow: View {
     #if os(iOS)
     @State private var showingScanner = false
     #endif
+    /// Owned adds go through `QuickAddSheet` instead of a silent Loose/Good
+    /// default — matches `SystemGamesList`'s `handleAdd`, so this sheet's
+    /// three entry points (platform picker, flat search, barcode scanner —
+    /// all three funnel through `add(_:)` below) behave the same way as
+    /// every other "add as owned" path in the app now.
+    @State private var quickAddTarget: CatalogItem?
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespaces).isEmpty
@@ -60,6 +66,16 @@ struct AddToCollectionFlow: View {
                 BarcodeScanScreen(onFound: add)
             }
             #endif
+            .sheet(item: $quickAddTarget) { catalogItem in
+                QuickAddSheet(catalogItem: catalogItem) { completeness, condition in
+                    _ = CollectionActions.add(
+                        catalogItem, status: .owned,
+                        completeness: completeness, condition: condition,
+                        in: modelContext
+                    )
+                    dismiss()
+                }
+            }
         }
         .frame(minWidth: 460, minHeight: 560)
     }
@@ -76,8 +92,12 @@ struct AddToCollectionFlow: View {
     }
 
     private func add(_ item: CatalogItem) {
-        CollectionActions.add(item, status: defaultStatus, in: modelContext)
-        dismiss()
+        if defaultStatus == .owned {
+            quickAddTarget = item
+        } else {
+            CollectionActions.add(item, status: defaultStatus, in: modelContext)
+            dismiss()
+        }
     }
 }
 
