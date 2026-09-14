@@ -91,14 +91,23 @@ final class NavigationTests: XCTestCase {
 /// That took it to 10. The remaining 10 split into two groups, left
 /// unresolved on purpose rather than guessed at further:
 /// - 3 hard "Contrast failed" findings, all inside `PlatformBreakdownCard`/
-///   `BreakdownBar` ("Breakdown by Platform", "$540", "SNES") — survived
-///   switching their text to explicit `.primary`, which rules out a simple
-///   wrong-color-choice explanation. Best-evidenced remaining theory:
-///   `.primary` text sitting close to a long, bright, saturated capsule bar
-///   (SNES has the longest bar in the sample data) genuinely washes out
-///   regardless of the text's own color — a structural/spacing question, not
-///   a colorimetric one, and needs a real visual iteration pass (screenshot,
-///   adjust, recheck) that wasn't practical blind this session.
+///   `BreakdownBar` ("Breakdown by Platform", "$540", "SNES") — survived two
+///   real, verified attempts, not guesses:
+///   1. Switching their text to explicit `.primary` (still failed).
+///   2. 2026-09-14: found and fixed a genuine, separate bug where
+///      "Breakdown by Platform"'s `Label(...)` rendered visibly lighter than
+///      a plain `Text` at the same `.foregroundStyle(.primary)` — confirmed
+///      by sampling real screenshot pixels (darkest ink ~(95,95,95) before,
+///      ~(15,15,15), true near-black, after switching to a manual icon+text
+///      `HStack`). The audit's finding on this exact text **did not change**
+///      — still "Contrast failed" at genuinely near-black ink. That rules
+///      out literal rendered-pixel-color as the audit's actual mechanism
+///      here, which also means the old "bright bar washes out text" theory
+///      never actually explained it either (this header sits nowhere near a
+///      bar). Root cause still genuinely open — worth checking whether it's
+///      about `GeometryReader`-based custom controls specifically, or a
+///      larger-Dynamic-Type-size rendering the audit checks but a screenshot
+///      at the current size can't show.
 /// - 7 "nearly passed" warnings (`.secondary` text at `.caption` size —
 ///   passes the 3:1 large-text/UI-component floor, not the full 4.5:1 for
 ///   small normal text) — this is the *default* look of `.secondary` +

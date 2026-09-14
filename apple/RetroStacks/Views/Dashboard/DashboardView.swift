@@ -321,9 +321,28 @@ private struct PlatformBreakdownCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Breakdown by Platform", systemImage: "chart.bar.xaxis")
-                .font(.headline)
-                .foregroundStyle(.primary)
+            // Not `Label(...)`: found live 2026-09-14 that its title text
+            // rendered visibly lighter than a plain `Text` at the same
+            // `.foregroundStyle(.primary)` — sampled real screenshot pixels,
+            // darkest ink was ~(95,95,95), never true black, unlike every
+            // plain `Text` on this card. This manual icon+text HStack
+            // measures true near-black (~(15,15,15)), confirmed by the same
+            // pixel-sampling method. Kept even though it did NOT clear the
+            // OS audit's "Contrast failed" finding on this text (see
+            // AccessibilityAuditTests's doc comment) — it's still a real,
+            // separate rendering-correctness fix, and it ruled out the
+            // audit's actual mechanism being simple literal-color contrast
+            // (this and "$540"/"SNES" all render genuinely near-black and
+            // still fail), which the "bright bar washes out text" theory this
+            // comment used to have never actually explained either — this
+            // header sits nowhere near a bar. Root cause still open.
+            HStack(spacing: 6) {
+                Image(systemName: "chart.bar.xaxis")
+                    .accessibilityHidden(true) // decorative — Text carries the label, same as Label(...) would
+                Text("Breakdown by Platform")
+            }
+            .font(.headline)
+            .foregroundStyle(.primary)
 
             Picker("Metric", selection: $metricRaw) {
                 ForEach(BreakdownMetric.allCases) { Text($0.label).tag($0.rawValue) }

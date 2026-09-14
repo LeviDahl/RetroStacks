@@ -272,13 +272,30 @@ contrast from actual sampled/known sRGB values:
   `StatTile`'s clipping risk fixed with `.minimumScaleFactor`.
 - **Result: 13 → 10 findings.** Left unresolved on purpose (see
   `AccessibilityAuditTests`'s doc comment for the full reasoning): 3 hard
-  "Contrast failed" findings inside `BreakdownBar` that survived switching to
-  explicit `.primary` — best-evidenced theory is a saturated bar washing out
-  nearby text structurally, not a wrong-color-choice, and needs a real visual
-  iteration pass; and 7 "`.secondary` at `.caption` nearly passes" warnings,
+  "Contrast failed" findings inside `BreakdownBar` ("Breakdown by Platform",
+  "$540", "SNES"), and 7 "`.secondary` at `.caption` nearly passes" warnings,
   which is the *default look of `.secondary` text everywhere in the app*, not
   a Dashboard bug — a design decision on how muted that should read, not
-  something to change unilaterally.
+  something to change unilaterally (2026-09-14: this stayed a deliberate
+  decision — kept as-is, but centralized behind `Color.mutedText`/
+  `MutedTextStyle`, see the Muted-text entry below, so it's a one-line change
+  later instead of a re-audit).
+- **The 3 `BreakdownBar` contrast findings — real investigation, not fixed,
+  2026-09-14.** The old theory ("a saturated bar washes out nearby text")
+  never actually held up: "Breakdown by Platform" is the card's header, nowhere
+  near any bar, and failed too. Tested for real: sampled actual screenshot
+  pixels and found the header's `Label(...)` rendered its title visibly
+  lighter than a plain `Text` at the same `.foregroundStyle(.primary)`
+  (~(95,95,95), never true black) — a genuine, separate `Label`-rendering bug,
+  fixed by switching to a manual icon+`Text` `HStack` (verified back to true
+  near-black, ~(15,15,15), by the same pixel-sampling method). **The audit's
+  finding on that exact text did not change** — still "Contrast failed" at
+  genuinely near-black ink. That rules out literal rendered-pixel-color as
+  whatever the audit is actually checking here. Root cause is still open;
+  worth checking next whether it's specific to `GeometryReader`-based custom
+  controls, or tied to a larger-Dynamic-Type-size rendering a same-size
+  screenshot can't show. The `Label` fix was kept regardless — it's correct
+  on its own even though it didn't clear the audit finding.
 
 **Phase 6 (the automated gate) — done, as a ratchet, now on 4 screens.**
 Each `*AccessibilityAuditTests.test*AccessibilityAudit` (Dashboard,
