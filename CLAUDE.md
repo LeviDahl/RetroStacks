@@ -15,9 +15,13 @@
 3. **No old SwiftUI modifiers**: Keep UI code compatible with the latest SDKs (e.g., do not call `.background()` modifiers before a `.glassEffect()` hierarchy).
 
 ## 🛠️ Build, Test, & Simulator Commands
-Utilize the following `XcodeBuildMCP` compatible tools. Do not guess `xcodebuild` flags.
-- **Build App**: `xcodebuild -scheme YourAppScheme -destination 'platform=iOS Simulator,name=iPhone 16' build`
-- **Run Tests**: `xcodebuild -scheme YourAppScheme -destination 'platform=iOS Simulator,name=iPhone 16' test`
+- **Build App**: `xcodebuild -project apple/RetroStacks.xcodeproj -scheme RetroStacks -destination 'platform=iOS Simulator,name=iPhone 17' build`
+- **Run Tests**: `xcodebuild -project apple/RetroStacks.xcodeproj -scheme RetroStacks -destination 'platform=iOS Simulator,name=iPhone 17' test`
+- macOS-hosted UI tests (`-destination 'platform=macOS'`) need a real, unlocked
+  interactive login session to inject synthetic events — they hang
+  indefinitely in a headless/automated session. The iOS Simulator destination
+  has no such requirement and is reliable headless; prefer it for
+  `RetroStacksUITests` unless macOS-specific behavior is actually in question.
 - **Lint Code**: `Scripts/lint.sh` (add `--fix` to auto-fix what's safe first). Config is
   `.swiftlint.yml` at the repo root. Deliberately not an Xcode Build Phase or SPM
   plugin — both would mean editing `project.pbxproj`/package deps, off-limits per
@@ -50,10 +54,12 @@ Utilize the following `XcodeBuildMCP` compatible tools. Do not guess `xcodebuild
 - Launch UI tests with `-uiTesting` (`RetroStacksApp.isUITesting`) for a fresh
   in-memory store seeded from `SampleData` — deterministic, no real network
   sync, nothing left over between runs.
-- `AccessibilityAuditTests` runs `performAccessibilityAudit()` every UI-test
-  pass but doesn't fail on findings yet (the app has ~zero accessibility
-  coverage — see the Accessibility section of `BACKLOG.md`). Tighten it as
-  that backlog item lands; don't just delete it.
+- `*AccessibilityAuditTests` (`RetroStacksUITests/NavigationTests.swift`) run
+  `performAccessibilityAudit()` and **do** fail — as a ratchet against a
+  `knownFindingBaseline` per screen, not a zero-tolerance gate (the app isn't
+  fully clean yet). Lower a screen's baseline when you fix a real finding on
+  it; see the Accessibility section of `BACKLOG.md` for current counts and
+  what's already been investigated vs. still open.
 
 ## 🗂️ Backlog
 Enhancement ideas and deferred work live in [`BACKLOG.md`](BACKLOG.md). Add to it

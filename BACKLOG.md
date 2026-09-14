@@ -87,11 +87,13 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 - ~~Implement `api/build/pricing/pricecharting.mjs`~~ — done, but **dormant**:
   needs `PRICECHARTING_TOKEN` (paid) **and** `PRICECHARTING_ENABLE=1`, then fills
   in prices for un-priced games newest-first, `PRICECHARTING_MAX` calls/night.
-  Until the user enables it the ~3,500 imported games still show "no pricing yet".
+  Until the user enables it the ~13,150 imported games still show "no pricing yet".
   Still worth doing: the nightly CSV path (Legendary tier) instead of per-item.
-- **Bulk-sync perf** — first `CatalogSyncService` sync now inserts ~3,600 rows on
-  the main actor (chunked saves + `Task.yield` every 400, change-detection after).
-  If the catalog keeps growing, move `reconcile` to a background `ModelContext` /
+- **Bulk-sync perf** — first `CatalogSyncService` sync now inserts ~13,150 rows
+  (up from ~3,600 pre-IGDB) on the main actor (chunked saves + `Task.yield`
+  every 400, change-detection after). Worth actually re-measuring wall-clock
+  time on that first sync now that the catalog nearly quadrupled — if it's
+  no longer comfortable, move `reconcile` to a background `ModelContext` /
   `ModelActor`, or split the feed per-platform and sync lazily.
 - ~~Invert source of truth~~ — done: `api/data/curated.json` is authored
   directly, `api/build/sync-seed.mjs` → `Resources/CatalogSeed.json`, decoded by
@@ -512,7 +514,8 @@ item from any of the three entry points, bulk-add). Findings and their fate:
 (`AddToCollectionFlow`'s picker sheet, `CatalogSection`'s standalone Browse
 Catalog tab) now default to a system-first list — pick a platform, then
 search/filter within just that platform's titles — instead of one flat list
-of everything (~3,600 entries and growing). Typing into the search field is
+of everything (~3,600 entries when this was built, ~13,150 now that the
+disc-system catalogs landed — the design's payoff only grew). Typing into the search field is
 still a full-catalog, cross-platform escape hatch for "I know exactly what
 I'm looking for." `CatalogSection` reuses its existing `platformSlugFilter`
 for this (picking a platform just sets the same field the toolbar's Platform

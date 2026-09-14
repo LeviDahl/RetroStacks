@@ -34,19 +34,26 @@ data source  ──▶  build.mjs  ──▶  api/dist/            (gitignored; 
   `local-file.mjs` documents and the rest of the pipeline is unchanged.
 - **`api/build/ingest/libretro.mjs`** — pulls a US game catalog per platform from
   **libretro-database** (No-Intro / Redump lists + genre/year/publisher/developer
-  metadata) → `api/data/generated/<platform>.json`. Cartridge systems only for now
-  (NES, SNES, Genesis, N64, Game Boy, Atari 2600 — ~3,550 games); libretro-database
-  has no genre/year/publisher for disc systems, so those wait on IGDB.
+  metadata) → `api/data/generated/<platform>.json`. Cartridge systems only
+  (NES, SNES, Genesis, N64, Game Boy, Atari 2600); libretro-database has no
+  genre/year/publisher for disc systems, so those come from IGDB instead (below).
   Filters to licensed US releases (drops proto/beta/homebrew/multicart/re-release
   compilations; keeps only titles with metadata). Box art URLs point at the
   Libretro thumbnails CDN.
 - **`api/build/ingest/igdb.mjs`** — the same job from the **IGDB API** (Twitch),
-  which *does* have metadata + region-aware release dates for disc systems. Writes
-  the identical `generated/<platform>.json` shape. Needs `IGDB_CLIENT_ID` +
+  which *does* have metadata + region-aware release dates, used for the 4 disc
+  systems (PS1/PS2/Dreamcast/GameCube) and to re-enrich the 6 cartridge ones.
+  Writes the identical `generated/<platform>.json` shape. Needs `IGDB_CLIENT_ID` +
   `IGDB_CLIENT_SECRET` (free — an app at dev.twitch.tv); `--dry-run` prints the
   APICalypse queries without a token. **Not wired into CI** — IGDB's 4 req/sec cap
   makes a full pull minutes long, so run it by hand (or a weekly job), review the
   diff, commit the JSON. build.mjs only ever reads the committed files.
+  Two live-data gotchas worth knowing if this ever needs re-running from
+  scratch (both fixed 2026-09-14, but IGDB could change again): the API
+  silently omits `category` on ordinary games instead of sending `0`, and
+  `release_dates.region` is a dead, deprecated field — the live one is
+  `release_region`. Both are handled in the query/filter now, with the
+  reasoning in a code comment at each spot.
 - **`api/data/curated.json`** — the hand-authored set: prices, rich summaries,
   consoles + accessories, verified art. **This is the source of truth** — edit it
   directly. `node api/build/sync-seed.mjs` copies it into the app bundle as
@@ -90,9 +97,12 @@ doesn't change.
 HTTPS* in Settings → Pages once GitHub enables it.
 
 ## TODO
-- [ ] Grow the real catalog beyond the 6 cartridge systems — `ingest/igdb.mjs`
-      is ready; needs `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET`, then run it for the
-      disc systems (PS1/PS2/DC/GCN) and re-enrich the cartridge ones
+- [x] Grow the real catalog beyond the 6 cartridge systems — done 2026-09-14:
+      `ingest/igdb.mjs` ran for real, added PS1/PS2/Dreamcast/GameCube and
+      re-enriched the 6 cartridge systems. ~13,150 items total, verified via
+      the actual merged build output (zero duplicate slugs, zero orphaned
+      platform refs). See `BACKLOG.md`'s Data feed section for what that run
+      actually found and fixed.
 - [ ] Nightly PriceCharting CSV ingest (Legendary tier) instead of per-item calls
 - [ ] Implement a DB source (`sources/mysql.mjs` or `sources/supabase.mjs`) when the
       catalog outgrows a hand-maintained file
@@ -100,14 +110,17 @@ HTTPS* in Settings → Pages once GitHub enables it.
 ## Collection data (no iCloud)
 
 No Apple Developer account → no CloudKit / iCloud KVS / iCloud Documents.
-Current: **local JSON export/import** (`CollectionArchive` ⇄ `.json` via
-`fileExporter`/`fileImporter`, Merge or Replace). Backup + manual "sync" by
-putting the file in a folder Dropbox/Drive already syncs.
 
-Automatic multi-device sync, if wanted later, would be **Supabase** (Postgres +
-email/magic-link auth, no Apple account) or a tiny **Cloudflare Worker + token** —
-that's also where accounts/subscriptions would live for monetization (which
-itself needs the $99/yr Apple Developer Program, blocked for now).
+**Local-first, always**: JSON export/import (`CollectionArchive` ⇄ `.json` via
+`fileExporter`/`fileImporter`, Merge or Replace) works with no account,
+signed in or not — backup + manual "sync" by putting the file in a folder
+Dropbox/Drive already syncs.
+
+**Optional multi-device sync**: Supabase (Postgres + email/magic-link auth,
+no Apple account needed) — wired up, see [`../supabase/README.md`](../supabase/README.md).
+Signing in is opt-in; nothing about local-first behavior changes if you don't.
+That's also where accounts/subscriptions would live for monetization later
+(which itself needs the $99/yr Apple Developer Program, not pursued yet).
 
 ## Pricing (adapter layer — schema already lives in the app)
 

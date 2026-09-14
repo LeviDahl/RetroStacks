@@ -12,16 +12,19 @@ Everything below is relative to this `apple/` directory. Sources live in
 | Area | State |
 | --- | --- |
 | Data model (SwiftData) | ✅ `Platform`, `CatalogItem`, `CollectionItem` |
-| Seed catalog | ✅ 10 US platforms · ~66 curated entries — authored in `api/data/curated.json`, decoded from `Resources/CatalogSeed.json` by `CatalogSeedStore` |
+| Seed catalog | ✅ 10 US platforms · ~66 curated entries as the first-launch seed (`api/data/curated.json` → `Resources/CatalogSeed.json` via `CatalogSeedStore`); the full ~13,000-item catalog syncs in afterward from the live feed |
 | Dashboard | ✅ stats, value-by-platform, recent / most valuable |
 | My Collection | ✅ list (iOS) / sortable `Table` (macOS), filters, detail, edit form |
 | Wishlist | ✅ same surface, `.wishlist` status |
-| Catalog browser | ✅ poster grid (macOS) / list (iOS), filters, detail, "Add to Collection" |
-| System screen | ✅ `SystemGamesList` — one screen per platform: collapsible "About" mini-wiki, Owned/Wanted/Missing/All scope, kind + sort, quick-add modal, bulk add, wishlist toggle, A–Z scrubber |
+| Catalog browser | ✅ system-first (pick a platform, then browse/search within it) with a flat cross-platform search as the escape hatch; poster grid (macOS) / list (iOS), filters, detail, "Add to Collection" |
+| System screen | ✅ `SystemGamesList` — one screen per platform: collapsible "About" mini-wiki, Owned/Wanted/Missing/All scope, kind + sort, quick-add modal (completeness/condition), bulk add, wishlist toggle, A–Z scrubber |
+| Barcode scan | ✅ iOS only (`DataScannerViewController`/VisionKit) — matches a scanned UPC against the catalog; not verified on a real device yet (Simulator has no camera) |
 | Photos | ✅ `PhotosPicker` in the edit form (downscaled JPEG in `photoData`) |
 | Backup | ✅ JSON archive (round-trip) + CSV export |
-| Failure surfacing | ✅ `AppStatusCenter` + a corner `AppStatusBadge` — background failures (catalog sync, price refresh) show one small icon with detail + Retry; auto-clears on the next success |
-| Barcode scan, valuation API, EU/JP regions | ⛔️ stubbed in the model, no UI |
+| Multi-device sync | ✅ optional Supabase sign-in (email magic link, paste-back) syncs the collection across devices; local-first either way — see [`../supabase/README.md`](../supabase/README.md) |
+| Failure surfacing | ✅ `AppStatusCenter` + a corner `AppStatusBadge` — background failures (catalog sync, price refresh, collection sync) show one small icon with detail + Retry; auto-clears on the next success |
+| Accessibility | 🚧 in progress, driven by real `performAccessibilityAudit()` runs (not guesses) — see `BACKLOG.md`'s Accessibility section for current findings per screen |
+| Valuation API, EU/JP regions | ⛔️ `PriceChartingProvider` is mapping-complete but needs a paid token to activate; region switch is modeled but not wired to UI |
 
 ## Platform layout philosophy
 
@@ -41,20 +44,30 @@ iPhone (compact width) falls back to a `TabView`. iPad uses the split layout.
 apple/
 ├── RetroStacks.xcodeproj          Multiplatform App target (macOS / iPadOS / iOS)
 ├── RetroStacks/                   File System Synchronized group — all files below are in the target
-│   ├── Assets.xcassets           AppIcon + AccentColor (from the template)
-│   ├── App/                      App entry, RootView shell, sidebar, layout metrics, nav destinations
+│   ├── Assets.xcassets           AppIcon, AccentColor + semantic colors (AccentGold/Green/Red, MutedTextCompliant)
+│   ├── App/                      App entry, RootView shell (split/tab layout), sidebar, layout metrics,
+│   │                              accessibility identifiers, muted-text contrast switch, nav destinations
 │   ├── Models/                   SwiftData @Model types + Enums
 │   ├── ViewModels/               @Observable filter/sort state (CollectionList, CatalogBrowse)
 │   ├── Resources/                CatalogSeed.json (synced from api/data/curated.json) + SampleCollection.json
-│   ├── Services/                 CatalogSeedStore + SampleData (seed/preview), CollectionStats
-│   │   └── Pricing/              canonical price schema + provider adapters + PricingService
+│   ├── Services/                 CatalogSeedStore + SampleData (seed/preview), CollectionStats, AppLog,
+│   │                              AppStatusCenter
+│   │   ├── Catalog/               CatalogRepository + CatalogSyncService (feed fetch/upsert), BackendConfig
+│   │   ├── Collection/            CollectionArchive (JSON backup), CollectionCSV, CollectionActions, PhotoImport
+│   │   ├── Pricing/               canonical price schema + provider adapters + PricingService
+│   │   └── Sync/                  AccountService, Supabase auth/session/sync-engine, SyncCoordinator
 │   └── Views/
+│       ├── Account/               sign-in sheet (magic link)
 │       ├── Dashboard/
-│       ├── Collection/           section split, Table, detail, edit form, the per-system screen
-│       ├── Catalog/              section split, item detail
-│       └── Components/           thumbnails, badges, rows, cards, stat tiles, formatting
-├── RetroStacksTests/              CatalogSeedTests (+ Fixtures/) — the seed decode/insert path
-└── RetroStacksUITests/            (template stub)
+│       ├── Collection/            section split, Table, detail, edit form, the per-system screen,
+│       │                          add-to-collection flow, barcode scanner (iOS)
+│       ├── Catalog/               section split, item detail
+│       └── Components/            thumbnails, badges, rows, cards, stat tiles, toast, formatting
+├── RetroStacksTests/               seed decode/insert, Supabase session + wire-format round-trips,
+│                                    catalog sync, account-service init ordering, sync-coordinator merge logic
+└── RetroStacksUITests/             navigation regression coverage + a real, ratcheted accessibility audit
+                                     (Dashboard, SystemGamesList, CollectionSection, CatalogSection) + a
+                                     multi-pass app walkthrough (leak-testing groundwork)
 ```
 
 ## Building
@@ -150,10 +163,18 @@ Full source also type-checks under Swift 6 against the macOS 26 and iOS 26 SDKs.
   first-launch seed + offline fallback + previews.
 - ~~Add a `RemotePricingProvider`~~ — done, ahead of `SampleGuideProvider`.
 - ~~Add `PhotosPicker` binding to `CollectionItem.photoData`~~ — done.
-- Real box-art assets keyed by `CatalogItem.imageName`.
+- ~~Multi-device collection sync~~ — done: Supabase Auth + Postgres, see
+  [`../supabase/README.md`](../supabase/README.md). Not yet exercised with a
+  real live sign-in — that's the next thing to actually do, not build.
+- ~~Barcode scanning~~ — done (iOS/VisionKit); needs a real-device test, the
+  Simulator has no camera.
+- Real box-art assets keyed by `CatalogItem.imageName` (games currently use
+  Libretro's thumbnail CDN, consoles use hot-linked Wikimedia Commons photos).
 - Region switching for EU / JP (`Region` enum + `Platform.regionsAvailable` already model it).
 - Valuation history + charts (Swift Charts) on the collection detail — needs the
   feed to carry price history first.
+- Finish the accessibility pass (see `BACKLOG.md`) and a real device VoiceOver
+  check before calling any screen actually done.
 
 ## Rename history
 

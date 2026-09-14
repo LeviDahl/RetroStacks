@@ -1,7 +1,9 @@
 # Supabase (Phase 1 — multi-device collection sync)
 
-Not wired up yet. This is the plan + the schema, ready for when the project exists.
-See the root [`BACKLOG.md`](../BACKLOG.md#multi-user-phase-1) for how this fits
+**Wired up and live** (2026-09-12). This doc originally described the plan
+before the project existed; it now describes what's actually built. See the
+root [`BACKLOG.md`](../BACKLOG.md#multi-user-phase-1) for what's still
+pending (a real end-to-end sign-in test, Photos upload) and how this fits
 the rest of the roadmap.
 
 ## What this is for
@@ -18,55 +20,72 @@ condition, notes, photos) — never the reference catalog. The catalog stays the
 free static JSON feed at `data.retrostacks.com`; Supabase and that feed don't
 know about each other.
 
-## Setup (your side)
+## Setup (done — for reference)
 
-1. **Create a project** at [supabase.com](https://supabase.com) — free tier is
-   plenty for a solo user (500 MB DB, 1 GB storage, 50k monthly active users).
-2. **Run the schema**: Dashboard → SQL Editor → New query → paste all of
-   [`schema.sql`](schema.sql) → Run. Creates `collection_items` +
-   `collection_item_photos`, a private `collection-photos` storage bucket, and
-   RLS policies scoping every row/object to `auth.uid()`.
-3. **Turn on email auth** (usually on by default): Dashboard → Authentication →
-   Providers → Email. Magic link / OTP, not password — matches
-   `AccountService.sendMagicLink(to:)`'s existing shape.
-4. **Grab the project URL and anon (public) key**: Dashboard → Project Settings
-   → API. The anon key is safe to ship in the app — RLS is what actually
-   protects the data, not the key being secret.
-5. Hand those two values back and the client-side wiring (below) happens next.
+1. **Project created** at [supabase.com](https://supabase.com) — free tier
+   (500 MB DB, 1 GB storage, 50k monthly active users), plenty for a solo user.
+2. **Schema applied**: [`schema.sql`](schema.sql) run via Dashboard → SQL
+   Editor. Created `collection_items` + `collection_item_photos`, a private
+   `collection-photos` storage bucket, and RLS policies scoping every
+   row/object to `auth.uid()`.
+3. **Email auth on**: Dashboard → Authentication → Providers → Email. Magic
+   link, not password — matches `AccountService.sendMagicLink(to:)`.
+4. **Project URL + anon (public) key** are in `SupabaseConfig.swift` — the
+   anon key is safe to ship in the app, RLS is what actually protects the
+   data, not the key being secret.
 
-## What I'll build once the project exists
+## What's built
 
-Both seams already exist in the code, built during Phase 0 specifically so this
-would be a drop-in, not a redesign:
+Both seams below were built during Phase 0 (before the project existed)
+specifically so wiring in a real project would be a drop-in, not a redesign —
+and that's how it went:
 
-- **`AccountService`** (`Services/Sync/AccountService.swift`) — currently always
-  `.signedOut`; `sendMagicLink` throws `.notConfigured`. Gets real Supabase Auth
-  calls (REST, no SDK needed — `POST /auth/v1/otp` to send the link, a custom
-  URL scheme to catch the callback and exchange it for a session).
-- **`Sync.engine`** (`Services/Sync/CollectionSyncEngine.swift`) — one line,
-  `DisabledSyncEngine()` → `SupabaseCollectionSyncEngine()`. Implements
-  `pull(since:)` (`GET /rest/v1/collection_items?user_id=eq.…&updated_at=gt.…`)
-  and `push(_:)` (`POST .../collection_items` upsert), trading in
-  `CollectionChange` — which already reuses `CollectionArchive.Entry` as its row
+- **`AccountService`** (`Services/Sync/AccountService.swift`) — real Supabase
+  Auth calls over raw REST (no SDK, to avoid any Xcode project/package-manager
+  changes): `POST /auth/v1/otp` sends the magic link. The callback is **not**
+  a URL-scheme deep link — that would've meant an Info.plist/target change,
+  off-limits per `CLAUDE.md`'s guardrails — instead the user pastes the link
+  text back into the app (`SignInSheet`), and `SupabaseAuthClient` extracts
+  the token from it and exchanges it for a session via `/auth/v1/verify`.
+- **`Sync.engine`** (`Services/Sync/CollectionSyncEngine.swift`) — points at
+  `SupabaseCollectionSyncEngine()`. Implements `pull(since:)`
+  (`GET /rest/v1/collection_items?user_id=eq.…&updated_at=gt.…`) and
+  `push(_:)` (`POST .../collection_items` upsert), trading in
+  `CollectionChange` — which reuses `CollectionArchive.Entry` as its row
   shape, so there's one serialization to maintain, not two.
-- **A sync coordinator**: last-write-wins by `CollectionItem.updatedAt`
-  (already ticked by `touch()` on every local edit — see `CollectionItem.swift`),
-  tombstones (`deletedAt`) carry deletes both ways, runs on sign-in / app
-  foreground / a manual "Sync now".
-- **`AppStatusCenter.report(.collectionSync, …)`** — a failed push/pull shows in
-  the same corner badge as catalog sync, not a new UI pattern.
-- **Photos**: `CollectionItem.photoData` uploads to the `collection-photos`
-  bucket instead of inlining base64 (that's fine for the local JSON export, not
-  for a synced row) — path `<user_id>/<exportID>/<n>.jpg`, RLS'd by folder.
-- **Magic-link sign-in sheet** — email field, "Check your mail," deep-link
-  callback handling.
+  `DisabledSyncEngine` stays in the same file as the local-first fallback
+  shape and for tests that don't want real network/Keychain calls.
+- **`SyncCoordinator`**: last-write-wins by `CollectionItem.updatedAt`
+  (ticked by `touch()` on every local edit), tombstones (`deletedAt`) carry
+  deletes both ways, runs on sign-in / app foreground / a manual "Sync now".
+- **`AppStatusCenter.report(.collectionSync, …)`** — a failed push/pull shows
+  in the same corner badge as catalog sync, not a new UI pattern.
+- **Magic-link sign-in sheet** (`Views/Account/SignInSheet.swift`) — email
+  field, "Check your mail," a field to paste the link back in.
+- **Regression-tested**: `AccountServiceTests` (Keychain session round-trip —
+  this is what caught a real silent bug where session persistence was
+  completely broken, see `BACKLOG.md`), `SupabaseCollectionRowTests` (wire
+  format), `SyncCoordinatorTests` (merge logic). Not something to take on
+  faith — see `BACKLOG.md`'s Multi-user section for the actual bugs found
+  this way.
 
-**Why this waits for a live project:** auth flows and RLS policies are the kind
-of thing that's cheap to get subtly wrong and expensive to debug blind — I want
-to exercise a real magic-link round trip and a real `auth.uid()` against the
-policies above before it touches your collection, not guess at the REST
-response shapes from documentation. The schema and this plan are written now so
-setup → wiring is a short loop once you're ready, not a redesign.
+**Not done yet**: **Photos** — `CollectionItem.photoData` still doesn't sync;
+it needs the Storage bucket upload (`collection-photos`, already created by
+`schema.sql`, path `<user_id>/<exportID>/<n>.jpg`) wired into
+`SupabaseCollectionSyncEngine` or a sibling type. Every other field syncs
+without it. Also still pending: a real, live end-to-end sign-in test — send
+an actual email, paste an actual link back, watch a real row land in
+`collection_items`. Everything up to that point is real-Keychain and
+real-wire-format tested, but nobody has done the live round trip yet.
+
+**Why the live sign-in test still matters:** auth flows and RLS policies are
+the kind of thing that's cheap to get subtly wrong and expensive to debug
+blind. Everything that unit tests can cover (Keychain persistence, wire
+format, merge logic) already found and fixed one real bug this way — but a
+real magic-link round trip and a real `auth.uid()` against the RLS policies
+above needs an actual email sent and an actual link pasted back, not another
+guess at the REST response shape. That's the one remaining gap between
+"built and tested" and "trust it with your real collection."
 
 ## Later: `sources/supabase.mjs`
 
@@ -76,7 +95,7 @@ Separate from the above — a *build-time* option, not app-time. Right now
 outgrows hand-maintained JSON files, `api/build/sources/supabase.mjs` (skeleton
 already there) would let the *feed* be generated from a Supabase table instead —
 a completely separate concern from collection sync above, and not needed yet at
-~3,600 items.
+~13,000 items.
 
 ## Later: companion website
 
