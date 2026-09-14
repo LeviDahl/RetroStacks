@@ -25,7 +25,7 @@ struct CollectionTable: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(item.title).lineLimit(1)
                         if let genre = item.catalogItem?.genre {
-                            Text(genre).font(.caption2).foregroundStyle(.secondary)
+                            Text(genre).font(.caption2).foregroundStyle(.mutedText)
                         }
                     }
                 }
@@ -50,7 +50,7 @@ struct CollectionTable: View {
             TableColumn("Est. Value") { item in
                 Text(Money.string(item.estimatedValue))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.mutedText)
             }
             .width(min: 70, ideal: 90)
 
@@ -67,7 +67,7 @@ struct CollectionTable: View {
 
             TableColumn("Added") { item in
                 Text(item.dateAdded.mediumDateString)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.mutedText)
             }
             .width(min: 90, ideal: 120)
         }

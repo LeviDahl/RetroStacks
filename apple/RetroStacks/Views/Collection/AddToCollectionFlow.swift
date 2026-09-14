@@ -122,7 +122,7 @@ struct CatalogPlatformRow: View {
                 Text(platform.name).font(.body.weight(.medium)).lineLimit(1)
                 Text("\(platform.catalogItems.count) catalog \(platform.catalogItems.count == 1 ? "entry" : "entries")")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.mutedText)
             }
         }
         .padding(.vertical, 3)
@@ -164,7 +164,7 @@ private struct PlatformCatalogPicker: View {
                         CatalogItemRow(item: item, showPlatform: false)
                         if item.entry(for: status) != nil {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.mutedText)
                                 .accessibilityLabel(status == .wishlist ? "Already on wishlist" : "Already in collection")
                         }
                     }
@@ -227,7 +227,7 @@ private struct CatalogSearchResultsList: View {
                                 CatalogItemRow(item: item, showPlatform: false)
                                 if item.entry(for: status) != nil {
                                     Image(systemName: "checkmark")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.mutedText)
                                         .accessibilityLabel(status == .wishlist ? "Already on wishlist" : "Already in collection")
                                 }
                             }

@@ -42,7 +42,7 @@ struct AboutSystemCard: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text("\(platform.manufacturer) · \(platform.eraLabel)")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.callout).foregroundStyle(.mutedText)
                     if !platform.summary.isEmpty {
                         Text(platform.summary)
                             .font(.callout)
@@ -86,7 +86,7 @@ struct SystemFactTile: View {
     var value: String
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(label).font(.caption2).foregroundStyle(.mutedText)
             Text(value).font(.callout.weight(.semibold).monospacedDigit())
                 .lineLimit(1).minimumScaleFactor(0.7)
         }

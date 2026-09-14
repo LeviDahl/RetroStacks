@@ -34,12 +34,12 @@ struct CatalogPosterCard: View {
                 if let year = item.releaseYearNA { Text("·"); Text(String(year)) }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.mutedText)
 
             if let value = item.headlineValue {
                 Text(Money.string(value))
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.mutedText)
             }
         }
         .padding(12)

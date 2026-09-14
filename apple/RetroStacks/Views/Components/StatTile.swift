@@ -6,7 +6,7 @@ struct StatTile: View {
     var systemImage: String
     var tint: Color = .accentColor
     var footnote: String?
-    var footnoteColor: Color = .secondary
+    var footnoteColor: Color = .mutedText
     /// When set, the whole tile becomes a button (e.g. "Owned Items" → My Collection).
     var action: (() -> Void)?
 
@@ -24,7 +24,7 @@ struct StatTile: View {
             HStack {
                 Label(title, systemImage: systemImage)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.mutedText)
                     .labelStyle(.titleAndIcon)
                 if action != nil {
                     Spacer()

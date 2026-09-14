@@ -176,7 +176,7 @@ struct DashboardView: View {
                 .minimumScaleFactor(0.6)
             Text(games == 1 ? "game in your collection" : "games in your collection")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -188,7 +188,7 @@ struct DashboardView: View {
                 .lineLimit(1)
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
         }
     }
 
@@ -450,7 +450,7 @@ private struct MiniCollectionList: View {
         if items.isEmpty {
             Text(emptyText)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             VStack(spacing: 0) {

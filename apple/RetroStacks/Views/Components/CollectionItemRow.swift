@@ -30,7 +30,7 @@ struct CollectionItemRow: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
                 .lineLimit(1)
 
                 HStack(spacing: 6) {

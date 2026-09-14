@@ -69,7 +69,7 @@ private struct StatusPanel: View {
 
             if center.issues.isEmpty {
                 Text("All clear.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.mutedText)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
@@ -111,7 +111,7 @@ private struct IssueRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(issue.title).font(.callout.weight(.medium))
                 if let detail = issue.detail {
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                    Text(detail).font(.caption).foregroundStyle(.mutedText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: 10) {
@@ -136,7 +136,7 @@ private struct IssueRow: View {
                 center.dismiss(issue)
             } label: {
                 Image(systemName: "xmark").font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.mutedText)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss")

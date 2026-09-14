@@ -170,7 +170,7 @@ struct CollectionSection: View {
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.mutedText)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
         }
@@ -258,7 +258,7 @@ struct CollectionSection: View {
                 Spacer()
                 Text("\(flatItems.count) shown")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.mutedText)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)

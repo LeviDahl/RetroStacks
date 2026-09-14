@@ -104,7 +104,7 @@ struct CollectionItemDetailView: View {
                     }
                 }
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
 
                 HStack(spacing: 8) {
                     StatusBadge(status: item.status)
@@ -115,7 +115,7 @@ struct CollectionItemDetailView: View {
                 if let playStatus = item.playStatus, item.kind == .game {
                     Label(playStatus.displayName, systemImage: playStatus.symbol)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.mutedText)
                 }
             }
             Spacer()
@@ -242,7 +242,7 @@ struct DetailCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: systemImage)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
             VStack(alignment: .leading, spacing: 6) { content }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -267,7 +267,7 @@ struct KeyValueRow: View {
 
     var body: some View {
         HStack {
-            Text(key).foregroundStyle(.secondary)
+            Text(key).foregroundStyle(.mutedText)
             Spacer()
             Text(value).foregroundStyle(valueColor).multilineTextAlignment(.trailing)
         }

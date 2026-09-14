@@ -87,7 +87,7 @@ struct CollectionItemEditView: View {
                 }
                 if let ref = item.catalogItem?.referenceValue(for: item.completeness) {
                     Text("Catalog reference: \(Money.string(ref))")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(.mutedText)
                 }
             }
 
@@ -167,7 +167,7 @@ struct CollectionItemEditView: View {
             if importingPhotos {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Adding photos…").foregroundStyle(.secondary)
+                    Text("Adding photos…").foregroundStyle(.mutedText)
                 }
                 .font(.caption)
             }
@@ -189,7 +189,7 @@ struct CollectionItemEditView: View {
                     image.resizable().scaledToFill()
                 } else {
                     Rectangle().fill(.quaternary)
-                        .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
+                        .overlay { Image(systemName: "photo").foregroundStyle(.mutedText) }
                 }
             }
             .frame(width: 84, height: 84)

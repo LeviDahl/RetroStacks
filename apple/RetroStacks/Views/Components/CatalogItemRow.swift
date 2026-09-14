@@ -29,7 +29,7 @@ struct CatalogItemRow: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
                 .lineLimit(1)
             }
 
@@ -39,7 +39,7 @@ struct CatalogItemRow: View {
                 if let value = item.headlineValue {
                     Text(Money.string(value))
                         .font(.callout.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.mutedText)
                 }
                 HStack(spacing: 5) {
                     if item.isOwned {

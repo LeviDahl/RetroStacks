@@ -32,7 +32,7 @@ struct QuickAddSheet: View {
                 .accessibilityHidden(true) // decorative — the title text beside it says the same thing
                 VStack(alignment: .leading, spacing: 2) {
                     Text(catalogItem.displayTitle).font(.headline).lineLimit(2)
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(subtitle).font(.caption).foregroundStyle(.mutedText).lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }

@@ -99,7 +99,7 @@ struct SystemCatalogTile: View {
                 if let year = catalogItem.releaseYearNA { Text("·"); Text(String(year)) }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.mutedText)
             .lineLimit(1)
         }
     }
@@ -112,7 +112,7 @@ struct SystemCatalogTile: View {
                 if let value = entry.estimatedValue {
                     Text(Money.string(value))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.mutedText)
                 }
             } else {
                 Button(action: onAdd) {
@@ -130,7 +130,7 @@ struct SystemCatalogTile: View {
                 if let value = catalogItem.headlineValue {
                     Text(Money.string(value))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.mutedText)
                 }
             }
 
@@ -195,11 +195,11 @@ struct SelectableCatalogTile: View {
                     if let year = catalogItem.releaseYearNA { Text("·"); Text(String(year)) }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
                 .lineLimit(1)
 
                 if alreadyIn {
-                    Text("In list").font(.caption2).foregroundStyle(.secondary)
+                    Text("In list").font(.caption2).foregroundStyle(.mutedText)
                 }
             }
             .padding(12)

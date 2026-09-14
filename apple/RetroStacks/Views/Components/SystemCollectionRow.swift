@@ -46,7 +46,7 @@ struct SystemCollectionRow: View {
                     Label(Money.string(summary.value), systemImage: "banknote")
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
                 .labelStyle(.titleAndIcon)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)

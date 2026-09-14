@@ -40,8 +40,8 @@ struct CompletenessBadge: View {
         case .sealed, .graded: .purple
         case .completeInBox: .accentGreen
         case .boxedNoManual: .blue
-        case .loose: .secondary
-        case .none: .secondary
+        case .loose: .mutedText
+        case .none: .mutedText
         }
     }
 }
@@ -61,7 +61,7 @@ struct ConditionLabel: View {
                     .frame(width: 8, height: 8)
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.mutedText)
             .labelStyle(.titleAndIcon)
             // In `compact` mode the title `Text` is omitted entirely (just the
             // dot) — without this, VoiceOver gets nothing at all for condition,
@@ -111,7 +111,7 @@ struct KindTag: View {
     var body: some View {
         Label(kind.displayName, systemImage: kind.symbol)
             .font(.caption2.weight(.medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.mutedText)
     }
 }
 

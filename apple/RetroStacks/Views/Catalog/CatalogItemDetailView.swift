@@ -31,7 +31,7 @@ struct CatalogItemDetailView: View {
                 if !item.summary.isEmpty {
                     Text(item.summary)
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.mutedText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .readableContentColumn()
                 }
@@ -252,7 +252,7 @@ private struct MarketValueCard: View {
             if value(.loose) == nil && value(.completeInBox) == nil
                 && value(.new) == nil && value(.graded) == nil {
                 Text("No pricing yet for this item.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.callout).foregroundStyle(.mutedText)
             }
 
             Divider().padding(.vertical, 2)

@@ -299,7 +299,7 @@ struct SystemGamesList: View {
                 } else {
                     Text("\(shown.count) \(shown.count == 1 ? "title" : "titles")")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.mutedText)
 
                     LazyVGrid(columns: LayoutMetrics.cardColumns(), spacing: LayoutMetrics.cardSpacing) {
                         ForEach(shown) { catalogItem in
@@ -612,7 +612,7 @@ struct CatalogRowContent: View {
                     if let pub = catalogItem.manufacturerOrPublisher { Text("·"); Text(pub).lineLimit(1) }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.mutedText)
                 .lineLimit(1)
             }
         }
@@ -698,7 +698,7 @@ struct PlatformCatalogRow: View {
         if let entry {
             VStack(alignment: .trailing, spacing: 3) {
                 if let value = entry.estimatedValue {
-                    Text(Money.string(value)).font(.callout.weight(.semibold)).foregroundStyle(.secondary)
+                    Text(Money.string(value)).font(.callout.weight(.semibold)).foregroundStyle(.mutedText)
                 }
                 HStack(spacing: 5) {
                     CompletenessBadge(completeness: entry.completeness)
@@ -741,7 +741,7 @@ struct SelectableCatalogRow: View {
                 CatalogRowContent(catalogItem: catalogItem)
                 Spacer(minLength: 8)
                 if alreadyIn {
-                    Text("In list").font(.caption).foregroundStyle(.secondary)
+                    Text("In list").font(.caption).foregroundStyle(.mutedText)
                 }
             }
             .padding(.vertical, 3)
@@ -828,7 +828,7 @@ struct SystemSummaryStrip: View {
     private func metric(_ label: String, _ value: String) -> some View {
         VStack(spacing: 3) {
             Text(value).font(.headline.monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(label).font(.caption2).foregroundStyle(.mutedText)
         }
         .frame(maxWidth: .infinity)
     }
