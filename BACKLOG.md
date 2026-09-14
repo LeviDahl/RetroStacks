@@ -302,14 +302,15 @@ contrast from actual sampled/known sRGB values:
   screenshot can't show. The `Label` fix was kept regardless — it's correct
   on its own even though it didn't clear the audit finding.
 
-**Phase 6 (the automated gate) — done, as a ratchet, now on 4 screens.**
+**Phase 6 (the automated gate) — done, as a ratchet, now on 6 screens.**
 Each `*AccessibilityAuditTests.test*AccessibilityAudit` (Dashboard,
-SystemGamesList, CollectionSection, CatalogSection — all in
-`NavigationTests.swift`) asserts `findings.count <= knownFindingBaseline`
-(10 / 52 / 26 / 11 respectively) instead of only logging — catches any *new*
-regression on any of the four immediately, without requiring the screens to
-be perfectly clean first (Phase 5 hasn't happened yet). Lower each baseline
-as its findings get fixed for real.
+SystemGamesList, CollectionSection, CatalogSection, AddToCollectionFlow,
+SidebarView — all in `NavigationTests.swift`) asserts
+`findings.count <= knownFindingBaseline` (10 / 52 / 26 / 11 / 10 / 8
+respectively) instead of only logging — catches any *new* regression on any
+of the six immediately, without requiring the screens to be perfectly clean
+first (Phase 5 hasn't happened yet). Lower each baseline as its findings get
+fixed for real.
 
 **Phase 5 — reading order & real VoiceOver navigation. Not done.** Simulator
 access is authorized (one-time grant, confirmed persistent across sessions),
@@ -401,9 +402,44 @@ a control-state semantic, not muted text. Verified behavior-preserving:
 all 4 accessibility-audit ratchets (10/52/26/11) held exactly, since
 `.subtle` renders identically to bare `.secondary`.
 
-`AddToCollectionFlow` (the barcode scanner and system-first picker haven't
-had an accessibility pass yet) and `SidebarView` (already has identifiers;
-check for icon-only spots once it grows badges/actions) are still untouched.
+~~`AddToCollectionFlow` and `SidebarView` accessibility passes~~ — audited
+2026-09-14, both now on the same ratchet as the other 4 screens
+(`AddToCollectionFlowAccessibilityAuditTests` / `SidebarViewAccessibilityAuditTests`
+in `NavigationTests.swift`), nothing fixed yet:
+
+- **AddToCollectionFlow: 10 findings** (default platform-picker list only —
+  the barcode scanner and flat search-results list are separate sub-screens,
+  not covered by this pass). 8 are the same systemic `.mutedText`/`.caption`
+  pattern (`CatalogPlatformRow`'s "N catalog entries" subtitle) already
+  covered by the muted-text decision above. 1 is the toolbar "Done" button
+  flagged for Dynamic Type despite no font override — not chased, likely the
+  same audit-internal quirk as the `Label`/`NavigationLink` cases elsewhere.
+  1 is a genuine single-row outlier ("Sega Dreamcast" hard-fails contrast
+  while every other platform row doesn't) — same shape as
+  `CollectionSectionAccessibilityAuditTests`'s Nintendo GameCube anomaly, not
+  investigated further for the same reason (see below).
+- **SidebarView: 8 findings, and a real methodology finding.** Unlike every
+  other screen, `RootView.splitLayout` never shows the sidebar alone on a
+  regular-width destination — the detail pane (Dashboard by default) is
+  always on screen too, and `performAccessibilityAudit` audits everything
+  visible, not one view's subtree. A raw run came back with 67 findings,
+  overwhelmingly Dashboard content already tracked by its own baseline above
+  — counting those here too would double-count. The test now filters to just
+  the 4 `sidebar.<section>`-identified rows, giving 8 real findings: **every
+  one of the 4 rows** (not just an outlier) hard-fails both "Contrast failed"
+  and "may be clipped at larger Dynamic Type sizes". `row(_:badge:)` builds
+  each from a plain `Label(...)` inside a stock `List(selection:)` +
+  `.listStyle(.sidebar)` — about as default as SwiftUI gets, so this is
+  systemic across the whole screen, not a one-off. Worth a real look, but not
+  chased via pixel-sampling this pass: two separate investigations elsewhere
+  this session (`BreakdownBar`'s header, `Badges.swift`'s colors) already
+  showed this audit's "Contrast failed" doesn't reliably track actual
+  rendered pixel color, so a third blind attempt isn't a good use of time
+  without first understanding what the audit actually measures. Must be run
+  against a **regular-width** destination (e.g. `-destination 'platform=iOS
+  Simulator,name=iPad (A16)'`) — the standard iPhone 17 destination this
+  suite otherwise uses never mounts `SidebarView` at all (iOS-compact falls
+  back to `RootView.tabLayout`).
 
 ~~**`NavigationTests`'s original two cases were macOS-only**~~ — fixed
 2026-09-14. Both checked `app.windows[title]` to confirm they landed on a

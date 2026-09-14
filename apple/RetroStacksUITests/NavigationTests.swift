@@ -347,3 +347,128 @@ final class CatalogSectionAccessibilityAuditTests: XCTestCase {
         )
     }
 }
+
+/// `AddToCollectionFlow`, reached the same way a real user does: "Add Item" on
+/// the My Collection toolbar. Audited against the default platform-picker
+/// list (`platformList`) — the barcode scanner and the flat search-results
+/// list are separate sub-screens, not covered by this one audit pass.
+///
+/// 2026-09-14: 10 findings, none fixed yet:
+/// - 8 are the same systemic `.mutedText`/`.caption` contrast pattern already
+///   documented on Dashboard/SystemGamesList/CollectionSection/CatalogSection
+///   (`CatalogPlatformRow`'s "N catalog entries" subtitle) — a deliberate,
+///   already-centralized design decision (see `MutedTextStyle`), not new.
+/// - 1 is the toolbar "Done" button flagged for Dynamic Type ("User will not
+///   be able to change the font size…") — plain `Button("Done") { dismiss() }`
+///   with no explicit font override, so there's nothing obvious to fix; likely
+///   the same class of SwiftUI-internal audit quirk as the `Label` and
+///   `NavigationLink` cases elsewhere in this file, not chased further this
+///   pass.
+/// - 1 is a genuine outlier worth remembering: "Sega Dreamcast" (a plain
+///   `Text(platform.name)`, default `.primary` styling, no muted text
+///   involved) hard-"Contrast failed" while every other platform row didn't —
+///   same shape as `CollectionSectionAccessibilityAuditTests`'s single
+///   Nintendo GameCube anomaly. Not investigated further this pass for the
+///   same reason: two independent pixel-sampling investigations elsewhere
+///   this session (`BreakdownBar` header, badge colors) already showed the
+///   audit's "Contrast failed" doesn't reliably track actual rendered pixel
+///   color, so chasing one more single-row anomaly without new evidence isn't
+///   a good use of time.
+final class AddToCollectionFlowAccessibilityAuditTests: XCTestCase {
+    static let knownFindingBaseline = 10
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testAddToCollectionFlowAccessibilityAudit() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
+        app.launch()
+
+        navigateToSection(sidebarID: "sidebar.collection", tabTitle: "Collection", in: app)
+        XCTAssertTrue(waitForScreen("My Collection", in: app))
+
+        let addButton = app.buttons["Add Item"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        addButton.tap()
+
+        XCTAssertTrue(waitForScreen("Add to Collection", in: app))
+
+        let findings = try recordAccessibilityAudit(app: app, screenName: "AddToCollectionFlow", on: self)
+        XCTAssertLessThanOrEqual(
+            findings.count, Self.knownFindingBaseline,
+            "New accessibility finding(s) on AddToCollectionFlow — see the attached report. "
+                + "If this is a real fix bringing the count down, lower knownFindingBaseline to match."
+        )
+    }
+}
+
+/// `SidebarView` — macOS/iPad-regular-width only (`RootView.layout` falls back
+/// to `tabLayout` on iOS-compact, where this view never mounts at all). Must
+/// be run against a **regular-width** destination:
+/// `xcodebuild ... -destination 'platform=iOS Simulator,name=iPad (A16)' -only-testing:RetroStacksUITests/SidebarViewAccessibilityAuditTests test`
+/// — the standard iPhone 17 destination this suite otherwise uses is
+/// compact-width and will fail `waitForScreen` immediately since the sidebar
+/// never appears. (A real macOS run would also work in principle, but
+/// macOS-hosted XCUITest needs a real, unlocked interactive login session to
+/// inject synthetic events — it hangs indefinitely headless; the iPad
+/// Simulator destination has no such requirement.)
+///
+/// 2026-09-14: unlike every other screen in this file, `RootView.splitLayout`
+/// means the sidebar is *never* shown alone on a regular-width destination —
+/// whatever's in the detail pane (Dashboard, by default) is on screen at the
+/// same time, and `performAccessibilityAudit` audits everything currently
+/// visible, not one view's subtree. A first pass came back with 67 raw
+/// findings, the large majority Dashboard content ("GoldenEye 007", "N64",
+/// "Total Invested", …) already covered by `AccessibilityAuditTests`
+/// (Dashboard) above — counting those here too would double-count and drift
+/// out of sync with that screen's own baseline. Scoped down to just the 4
+/// `sidebar.<section>`-identified rows instead (filtering `findings` by
+/// element identifier below), which is the only part of the screen this class
+/// actually owns.
+///
+/// That gives **8 real, consistent findings**: every one of the 4 sidebar
+/// rows (Dashboard/Collection/Wishlist/Catalog) — not just the selected
+/// one — hard-fails both "Contrast failed" and "may be clipped at larger
+/// Dynamic Type sizes". `row(_:badge:)` builds each with a plain
+/// `Label(section.title, systemImage: section.symbol)` inside a stock
+/// `List(selection:)` + `.listStyle(.sidebar)` — about as default as SwiftUI
+/// gets, so unlike the single-row anomalies elsewhere in this file (Nintendo
+/// GameCube in `CollectionSectionAccessibilityAuditTests`, Sega Dreamcast in
+/// `AddToCollectionFlowAccessibilityAuditTests`) this is systemic across
+/// every row, not an outlier. Worth a real look later, but not chased via
+/// pixel-sampling this pass: two separate investigations elsewhere this
+/// session (`BreakdownBar`'s header, the badge colors in `Badges.swift`)
+/// already showed this audit's "Contrast failed" doesn't reliably track
+/// actual rendered pixel color, so a third blind attempt isn't a good use of
+/// time without first understanding what the audit actually measures.
+final class SidebarViewAccessibilityAuditTests: XCTestCase {
+    static let knownFindingBaseline = 8
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testSidebarViewAccessibilityAudit() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
+        app.launch()
+
+        XCTAssertTrue(waitForScreen("RetroStacks", in: app), "expected the sidebar's own nav title on a regular-width destination")
+
+        let allFindings = try recordAccessibilityAudit(app: app, screenName: "SidebarView", on: self)
+        // The detail pane (Dashboard by default) is on screen at the same time on a
+        // regular-width destination — scope to just the 4 `sidebar.*`-identified rows
+        // this screen actually owns, not the detail pane's own findings (already
+        // tracked separately by AccessibilityAuditTests, above).
+        let findings = allFindings.filter { $0.contains("element: sidebar.") }
+        XCTAssertLessThanOrEqual(
+            findings.count, Self.knownFindingBaseline,
+            "New accessibility finding(s) on SidebarView's own rows — see the attached report (full screen, filter for \"sidebar.\"). "
+                + "If this is a real fix bringing the count down, lower knownFindingBaseline to match."
+        )
+    }
+}
