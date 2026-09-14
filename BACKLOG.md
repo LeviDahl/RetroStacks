@@ -89,12 +89,17 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
   in prices for un-priced games newest-first, `PRICECHARTING_MAX` calls/night.
   Until the user enables it the ~13,150 imported games still show "no pricing yet".
   Still worth doing: the nightly CSV path (Legendary tier) instead of per-item.
-- **Bulk-sync perf** — first `CatalogSyncService` sync now inserts ~13,150 rows
-  (up from ~3,600 pre-IGDB) on the main actor (chunked saves + `Task.yield`
-  every 400, change-detection after). Worth actually re-measuring wall-clock
-  time on that first sync now that the catalog nearly quadrupled — if it's
-  no longer comfortable, move `reconcile` to a background `ModelContext` /
-  `ModelActor`, or split the feed per-platform and sync lazily.
+- ~~Bulk-sync perf~~ — re-measured 2026-09-14 against the real current feed
+  (`api/dist/v1/catalog.json`, 10 platforms, 13,185 items) with a scratch
+  `Testing` case decoding the feed and timing `CatalogSyncService.sync(into:)`
+  on a fresh on-disk `ModelContainer`: decode 0.11s, first sync (inserts) 5.3s,
+  no-op resync (nothing changed) 0.95s. First-launch sync is a noticeable but
+  acceptable one-time pause (~5s, main actor, `Task.yield` every 400 keeps the
+  UI responsive during it); every subsequent launch's no-op resync is under a
+  second. Not moving `reconcile` to a background `ModelContext`/`ModelActor`
+  for now — revisit only if the catalog grows enough to push first-sync past
+  ~10s, since that's the threshold where a one-time pause starts to feel
+  broken rather than a normal "importing catalog" moment.
 - ~~Invert source of truth~~ — done: `api/data/curated.json` is authored
   directly, `api/build/sync-seed.mjs` → `Resources/CatalogSeed.json`, decoded by
   `CatalogSeedStore` (covered by `RetroStacksTests/CatalogSeedTests`).
