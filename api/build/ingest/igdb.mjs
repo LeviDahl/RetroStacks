@@ -67,9 +67,14 @@ const gamesQuery = (platformId, afterId) =>
     "       genres.name, cover.image_id,",
     "       involved_companies.developer, involved_companies.publisher,",
     "       involved_companies.company.name,",
-    "       release_dates.region, release_dates.y, release_dates.platform;",
+    "       release_dates.release_region, release_dates.y, release_dates.platform;",
     `where platforms = (${platformId})`,
-    `  & category = ${MAIN_GAME}`,
+    // Confirmed live 2026-09-14: IGDB omits `category` from the response
+    // entirely (not `category: null` — the key is just absent) on ordinary
+    // games. Only DLC/expansion/bundle/etc. get an explicit non-zero value.
+    // Requiring `category = MAIN_GAME` alone matched ~0 games on every
+    // platform tested; `= null` is what actually catches the unset case.
+    `  & (category = ${MAIN_GAME} | category = null)`,
     "  & version_parent = null",
     `  & id > ${afterId};`,
     "sort id asc;",
@@ -104,10 +109,27 @@ for (const slug of wanted) {
   if (!cfg) { console.warn(`skip unknown platform: ${slug}`); continue; }
 
   const raw = await fetchAllGames(cfg.igdb);
+  if (raw.length === 0) {
+    // A real platform returning 0 IGDB rows is exactly what a bad/
+    // unauthorized token or misconfigured Twitch app looks like: the request
+    // still comes back 200 OK (no error to catch), just with an empty match.
+    // Refusing to write is what stops that from silently overwriting a
+    // previously-good generated/<slug>.json with an empty one.
+    throw new Error(
+      `${slug}: IGDB returned 0 games for platform ${cfg.igdb} — refusing to overwrite ` +
+        `generated/${slug}.json with empty data. This almost always means the token/app ` +
+        `isn't actually authorized against IGDB yet (Twitch app creation succeeding is not ` +
+        `the same as IGDB access being live) rather than a real "no games" result. Verify with ` +
+        `a raw curl call before re-running: curl -s -X POST https://api.igdb.com/v4/games ` +
+        `-H "Client-ID: $IGDB_CLIENT_ID" -H "Authorization: Bearer <token>" ` +
+        `-d "fields name; where platforms = (18); limit 5;"`,
+    );
+  }
   const items = raw
     .map((g) => toItem(slug, cfg, g))
     .filter(Boolean)
     .sort((a, b) => a.name.localeCompare(b.name));
+  deduplicateSlugs(items);
 
   const path = join(OUT, `${slug}.json`);
   writeFileSync(
@@ -173,17 +195,49 @@ async function fetchAllGames(platformId) {
 
 // --- mapping -------------------------------------------------------------
 
+// Found 2026-09-14: a small handful of IGDB entries per platform (distinct
+// igdbIDs — genuine near-duplicate catalog entries, or titles that only
+// differ by punctuation `slugify` strips, e.g. "Final Fantasy" vs.
+// "Final Fantasy ++" both -> `final-fantasy`) collide on slug. The app's own
+// seed loader (`CatalogSeedStore`) throws on a duplicate slug, so this has
+// to be resolved here rather than left for sync-seed.mjs to trip over later.
+// Appends `-<igdbID>` to *every* member of a colliding group (not just the
+// second one) so the result is stable across re-runs regardless of
+// insertion order.
+function deduplicateSlugs(items) {
+  const bySlug = new Map();
+  for (const item of items) {
+    if (!bySlug.has(item.slug)) bySlug.set(item.slug, []);
+    bySlug.get(item.slug).push(item);
+  }
+  for (const group of bySlug.values()) {
+    if (group.length < 2) continue;
+    for (const item of group) item.slug = `${item.slug}-${item.igdbID}`;
+  }
+}
+
 function toItem(platformSlug, cfg, g) {
   if (!g.name) return null;
 
   // US-first: keep games with a North-American (or Worldwide) release for this
   // platform. If IGDB has no per-region data at all, keep it and fall back to
   // the global first_release_date; if it has region data but none is NA, drop.
+  //
+  // Confirmed live 2026-09-14: `release_dates.region` is IGDB's old, DEPRECATED
+  // field — never populated anymore, silently returning nothing instead of
+  // erroring (queryable but dead). The real field is `release_region`, backed
+  // by the /v4/release_date_regions lookup table; it reuses the same integer
+  // ids the old `region` enum used (2 = north_america, 8 = worldwide — see
+  // NA_REGIONS above) plus two new ones (9 = korea, 10 = brazil) tacked on.
+  // `datesWithRegion` isolates entries that actually carry a value, so a game
+  // with genuinely no region data (still possible per-entry) falls through to
+  // "keep" rather than being wrongly treated as a confirmed non-NA release.
   const dates = (g.release_dates ?? []).filter(
     (d) => d.platform === cfg.igdb || d.platform == null,
   );
-  const naDates = dates.filter((d) => NA_REGIONS.has(d.region));
-  if (dates.length > 0 && naDates.length === 0) return null;
+  const datesWithRegion = dates.filter((d) => d.release_region != null);
+  const naDates = dates.filter((d) => NA_REGIONS.has(d.release_region));
+  if (datesWithRegion.length > 0 && naDates.length === 0) return null;
 
   const year =
     minYear(naDates) ??
@@ -218,10 +272,12 @@ function toItem(platformSlug, cfg, g) {
   };
 }
 
-const minYear = (ds) => {
+// Function declaration (not `const`), so it's hoisted — toItem calls this
+// from the top-level loop above, before this line runs.
+function minYear(ds) {
   const ys = ds.map((d) => d.y).filter((y) => Number.isFinite(y));
   return ys.length ? Math.min(...ys) : null;
-};
+}
 
 // Match ingest/libretro.mjs so slugs collide (curated/generated dedupe works).
 function cleanTitle(raw) {
@@ -237,12 +293,19 @@ function cleanTitle(raw) {
   return t.trim();
 }
 
-const slugify = (s) =>
-  s
+// Function declaration (not `const`), so it's hoisted — toItem calls this
+// from the top-level loop above, before this line runs.
+function slugify(s) {
+  return s
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "") // strip combining diacritics
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Function declaration (not `const`), so it's hoisted — igdbPost/fetchAllGames
+// call this before this line runs in the script's top-level execution order.
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
