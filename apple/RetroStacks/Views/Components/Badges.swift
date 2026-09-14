@@ -1,9 +1,9 @@
 import SwiftUI
 
-// `Color.accentGold`/`.accentGreen`/`.accentRed` are Xcode-generated from
-// `Assets.xcassets/Accent{Gold,Green,Red}.colorset` (asset symbol generation
-// — no manual extension needed/allowed, colliding with one is a build error).
-// Stand-ins for `.yellow`/`.green`/`.red` wherever used as *text or icon*
+// `Color.accent{Gold,Green,Red,Blue,Purple,Orange,Mint}` are Xcode-generated
+// from `Assets.xcassets/Accent*.colorset` (asset symbol generation — no
+// manual extension needed/allowed, colliding with one is a build error).
+// Stand-ins for the plain system colors wherever used as *text or icon*
 // color (condition/status dots, badges, gain/loss figures) rather than a
 // purely decorative fill: a darker shade in light mode, the system color's
 // own dark-mode value in dark mode (unchanged there).
@@ -19,6 +19,34 @@ import SwiftUI
 // since it's always paired with `.green` in gain/loss text. Dark mode was
 // fine for all three already — yellow/green/red-on-light is the classic WCAG
 // failure shape, not dark mode.
+//
+// Extended 2026-09-14: gold/green/red were tuned against the *page*
+// background, but badges render their color as text *on that same color's
+// own `.opacity(0.18)` capsule* — a harder, different contrast target.
+// Sampled real rendered pixels for every badge color against its own wash
+// (CompletenessBadge/StatusBadge's `.blue`/`.purple`, ConditionLabel's
+// `.orange`/`.mint` dots, and re-checked gold/green/red) and found *all
+// seven* fell short of 4.5:1 in that specific context — some badly (plain
+// `.orange`/`.mint` measured ~1.6-1.7:1). Retuned gold/green/red's light
+// value darker and added `AccentBlue`/`AccentPurple`/`AccentOrange`/
+// `AccentMint` the same way, all targeting ~5.2:1 against their own wash.
+//
+// The retuned colors are real, independent improvements (verified by
+// sampling actual rendered pixels post-fix, not just trusting the math) —
+// but re-running the OS audit afterward, "CIB" (`AccentGreen`, genuinely
+// darker now) is **still** flagged "Contrast failed", identical to what
+// happened with `PlatformBreakdownCard`'s header text (see
+// `AccessibilityAuditTests`'s doc comment): a verified, correctly-darker
+// color that the live audit doesn't register as fixed. Two independent
+// cases now, in unrelated visual contexts (plain background there, a
+// same-hue tinted wash here) — real evidence `performAccessibilityAudit()`'s
+// contrast check isn't simply measuring the current static-frame composited
+// pixel color the way a screenshot sample does. Kept these fixes regardless
+// (genuinely better contrast against the badge's own wash, verified by
+// pixel-sampling, is correct on its own merits) but stopped chasing exact
+// colorimetric values to satisfy this specific automated check — that needs
+// either Xcode's interactive Accessibility Inspector or a better
+// understanding of the audit's real algorithm, not more guessing.
 
 /// Small pill used for completeness (CIB / LOOSE / SEALED …).
 struct CompletenessBadge: View {
@@ -37,9 +65,9 @@ struct CompletenessBadge: View {
 
     private var color: Color {
         switch completeness {
-        case .sealed, .graded: .purple
+        case .sealed, .graded: .accentPurple
         case .completeInBox: .accentGreen
-        case .boxedNoManual: .blue
+        case .boxedNoManual: .accentBlue
         case .loose: .mutedText
         case .none: .mutedText
         }
@@ -75,9 +103,9 @@ struct ConditionLabel: View {
     private var color: Color {
         switch condition {
         case .sealed, .mint: .accentGreen
-        case .veryGood: .mint
+        case .veryGood: .accentMint
         case .good: .accentGold
-        case .fair: .orange
+        case .fair: .accentOrange
         case .poor: .accentRed
         case .none: .secondary
         }
@@ -100,8 +128,8 @@ struct StatusBadge: View {
         switch status {
         case .owned: .accentGreen
         case .wishlist: .accentGold
-        case .forSale: .blue
-        case .forTrade: .purple
+        case .forSale: .accentBlue
+        case .forTrade: .accentPurple
         }
     }
 }

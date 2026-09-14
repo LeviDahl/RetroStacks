@@ -331,17 +331,28 @@ the original Dashboard one):
   these screens repeat it once per row/tile instead of Dashboard's few
   summary numbers. This is now confirmed empirically across 4 screens, not a
   Dashboard-only theory.
-- **One new, distinct lead worth a closer look**: `CompletenessBadge` /
-  `ConditionLabel` / `StatusBadge` (`Badges.swift`) render their accent color
-  as *text on that same color's own `opacity(0.18)` capsule background* — a
-  different contrast situation than the already-fixed page-background case.
-  Hand-computed WCAG for `CIB`'s badge (`.accentGreen` text on
-  `accentGreen.opacity(0.18)` over white): **4.84:1**, which clears the 4.5:1
-  floor for small text — yet the OS audit still called it a hard "Contrast
-  failed." Possible causes not chased down this pass: dark mode, a
-  non-pure-white real list-row background, or `.caption2.weight(.bold)`
-  rendering smaller than assumed. Needs the same real-screenshot-sampling
-  rigor as the original `.yellow` fix, not another guess.
+- ~~`CompletenessBadge` / `ConditionLabel` / `StatusBadge` badge-wash
+  contrast~~ — investigated for real 2026-09-14 (see `Badges.swift`'s doc
+  comment for the full account). Confirmed live: badges render their color
+  as *text on that same color's own `.opacity(0.18)` capsule background* — a
+  genuinely different, harder target than the page-background case
+  gold/green/red were originally tuned for. Sampled real screenshot pixels
+  for all 7 badge colors against their own wash and found every one fell
+  short of 4.5:1, some badly (`.orange`/`.mint`, never adjusted before, measured
+  ~1.6-1.7:1). Retuned gold/green/red darker and added
+  `AccentBlue`/`AccentPurple`/`AccentOrange`/`AccentMint`, all targeting
+  ~5.2:1 against their own wash, verified by re-sampling actual rendered
+  pixels post-fix (not just trusting the math). **The OS audit's finding on
+  "CIB" didn't change even though the color measurably did** — same
+  unresolved-by-a-real-fix pattern as `BreakdownBar`'s header text below.
+  The color fixes are kept (genuinely better contrast, independently
+  verified) but this is now real evidence across *two* unrelated contexts
+  that `performAccessibilityAudit()`'s contrast check isn't simply measuring
+  the current static-frame composited pixel color — chasing exact
+  colorimetric values further isn't a reliable strategy without first
+  understanding what the audit actually checks (Xcode's interactive
+  Accessibility Inspector might show more than XCUITest's
+  `.detailedDescription` does).
 - **One CollectionSection oddity**: every row shows the same fields
   (item count, %, $ amount) but only *one* row (Nintendo GameCube) hard-fails
   contrast on them while the rest only soft-warn — possibly a
