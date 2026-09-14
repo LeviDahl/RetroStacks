@@ -49,9 +49,41 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
 
 ## Data feed & backend
 
-- **Disc-system catalogs** (PS1 / PS2 / Dreamcast / GameCube) —
-  `api/build/ingest/igdb.mjs` is written and handles them; blocked only on `IGDB_CLIENT_ID` /
-  `IGDB_CLIENT_SECRET`. Run it, review the diff, commit the generated JSON.
+- ~~**Disc-system catalogs**~~ (PS1 / PS2 / Dreamcast / GameCube) — done
+  2026-09-14: user registered a Twitch/IGDB app and ran `igdb.mjs` for real,
+  which surfaced (and got fixed) four real bugs the script had never actually
+  hit before, since it had never been run end-to-end against live IGDB data:
+  - `sleep`/`minYear`/`slugify` were `const` arrow functions declared near
+    the bottom of the file but called from code that runs at the top —
+    `ReferenceError: Cannot access 'sleep' before initialization` on the very
+    first call. `const` isn't hoisted; converted all three to `function`
+    declarations (which are).
+  - `category = 0` (intended: "main games only, exclude DLC/bundles/etc.")
+    matched ~0 games on every platform. Live IGDB responses omit `category`
+    entirely (not `category: null`) on ordinary games — confirmed by direct
+    `curl` against the API, not guessed. Fixed: `category = 0 | category = null`.
+  - Same shape, worse: `release_dates.region` — the field the US-first
+    filter relied on — is IGDB's old, silently-dead field, deprecated in
+    favor of `release_region` (confirmed via IGDB's own schema, which
+    documents the old field as `"DEPRECATED! Use release_region instead"`).
+    Querying the dead field meant *every* release-date row looked
+    region-less, and the original "no region data → keep" fallback let
+    everything through once the `category` bug above was fixed — 100% of
+    raw IGDB rows kept, no actual NA filtering happening. Fixed: query
+    `release_region` instead; verified via `/v4/release_date_regions` that
+    it reuses the old enum's ids (2 = north_america, 8 = worldwide) plus two
+    new ones, so `NA_REGIONS` itself didn't need to change.
+  - A small number of entries per platform (2-19) share a slug — distinct
+    IGDB ids, either genuine near-duplicate catalog entries or titles that
+    only differ by punctuation `slugify` strips (`"Final Fantasy"` vs.
+    `"Final Fantasy ++"`). `CatalogSeedStore` throws on a duplicate slug, so
+    added `deduplicateSlugs()`: appends `-<igdbID>` to every member of a
+    colliding group, deterministic across re-runs.
+  Final result: 13,154 items across all 10 platforms (6 re-enriched, 4 new),
+  zero duplicate slugs, zero empty names, zero orphaned platform references —
+  verified against the *actual* merged output (`node api/build/build.mjs`,
+  `sources/local-file.mjs`'s curated+generated merge), not just the
+  per-platform generated files in isolation.
 - ~~Implement `api/build/pricing/pricecharting.mjs`~~ — done, but **dormant**:
   needs `PRICECHARTING_TOKEN` (paid) **and** `PRICECHARTING_ENABLE=1`, then fills
   in prices for un-priced games newest-first, `PRICECHARTING_MAX` calls/night.
@@ -304,6 +336,27 @@ the original Dashboard one):
   `NavigationSplitView` inside `RootView`'s tab; `CollectionSection` doesn't.
   Worth a real VoiceOver check on a real device before deciding whether this
   needs a fix.
+
+**Muted-text contrast — made a decision, and centralized it, 2026-09-14.**
+User's call: keep the current subtler `.secondary` look for now rather than
+darkening it for compliance — but wanted a single, centralized place to flip
+later without hunting through screens, since the pattern above is now
+confirmed everywhere. Added `App/MutedTextStyle.swift`: a `MutedTextStyle`
+enum (`.subtle` / `.compliant`, `current` hardcoded to `.subtle`) plus
+`Color.mutedText` (declared as `extension ShapeStyle where Self == Color`,
+matching how SwiftUI defines its own `.secondary`/`.red`/etc. — a plain
+`Color` extension resolved in most call sites but not all of them, a real
+Swift inference gotcha worth remembering), backed by a new
+`MutedTextCompliant` colorset (hand-computed light-mode gray at ~4.94:1
+against white, comfortably over the 4.5:1 floor; dark-mode value is an
+*approximation* of system `secondaryLabel` dark, not sampled — re-verify
+before ever flipping `current` to `.compliant` for real). Every `.secondary`
+call site in `Views/` styling actual text (45 of them) now goes through
+`.mutedText` instead — icon/control-state tints (wishlist star, checkmark
+toggle "off" states) deliberately left as plain `.secondary`, since those are
+a control-state semantic, not muted text. Verified behavior-preserving:
+all 4 accessibility-audit ratchets (10/52/26/11) held exactly, since
+`.subtle` renders identically to bare `.secondary`.
 
 `AddToCollectionFlow` (the barcode scanner and system-first picker haven't
 had an accessibility pass yet) and `SidebarView` (already has identifiers;
