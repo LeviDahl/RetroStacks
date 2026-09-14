@@ -44,7 +44,8 @@ iPhone (compact width) falls back to a `TabView`. iPad uses the split layout.
 apple/
 ├── RetroStacks.xcodeproj          Multiplatform App target (macOS / iPadOS / iOS)
 ├── RetroStacks/                   File System Synchronized group — all files below are in the target
-│   ├── Assets.xcassets           AppIcon, AccentColor + semantic colors (AccentGold/Green/Red, MutedTextCompliant)
+│   ├── Assets.xcassets           AppIcon, AccentColor + semantic colors (AccentGold/Green/Red/Blue/Purple/Orange/Mint,
+│   │                              MutedTextCompliant)
 │   ├── App/                      App entry, RootView shell (split/tab layout), sidebar, layout metrics,
 │   │                              accessibility identifiers, muted-text contrast switch, nav destinations
 │   ├── Models/                   SwiftData @Model types + Enums
@@ -66,8 +67,9 @@ apple/
 ├── RetroStacksTests/               seed decode/insert, Supabase session + wire-format round-trips,
 │                                    catalog sync, account-service init ordering, sync-coordinator merge logic
 └── RetroStacksUITests/             navigation regression coverage + a real, ratcheted accessibility audit
-                                     (Dashboard, SystemGamesList, CollectionSection, CatalogSection) + a
-                                     multi-pass app walkthrough (leak-testing groundwork)
+                                     (Dashboard, SystemGamesList, CollectionSection, CatalogSection,
+                                     AddToCollectionFlow, SidebarView) + a multi-pass app walkthrough
+                                     (leak-testing groundwork)
 ```
 
 ## Building

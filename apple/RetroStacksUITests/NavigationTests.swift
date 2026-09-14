@@ -374,7 +374,7 @@ final class CatalogSectionAccessibilityAuditTests: XCTestCase {
 ///   audit's "Contrast failed" doesn't reliably track actual rendered pixel
 ///   color, so chasing one more single-row anomaly without new evidence isn't
 ///   a good use of time.
-final class AddToCollectionFlowAccessibilityAuditTests: XCTestCase {
+final class AddToCollectionAccessibilityAuditTests: XCTestCase {
     static let knownFindingBaseline = 10
 
     override func setUpWithError() throws {
@@ -437,7 +437,7 @@ final class AddToCollectionFlowAccessibilityAuditTests: XCTestCase {
 /// `List(selection:)` + `.listStyle(.sidebar)` — about as default as SwiftUI
 /// gets, so unlike the single-row anomalies elsewhere in this file (Nintendo
 /// GameCube in `CollectionSectionAccessibilityAuditTests`, Sega Dreamcast in
-/// `AddToCollectionFlowAccessibilityAuditTests`) this is systemic across
+/// `AddToCollectionAccessibilityAuditTests`) this is systemic across
 /// every row, not an outlier. Worth a real look later, but not chased via
 /// pixel-sampling this pass: two separate investigations elsewhere this
 /// session (`BreakdownBar`'s header, the badge colors in `Badges.swift`)

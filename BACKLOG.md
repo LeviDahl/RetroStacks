@@ -404,7 +404,7 @@ all 4 accessibility-audit ratchets (10/52/26/11) held exactly, since
 
 ~~`AddToCollectionFlow` and `SidebarView` accessibility passes~~ — audited
 2026-09-14, both now on the same ratchet as the other 4 screens
-(`AddToCollectionFlowAccessibilityAuditTests` / `SidebarViewAccessibilityAuditTests`
+(`AddToCollectionAccessibilityAuditTests` / `SidebarViewAccessibilityAuditTests`
 in `NavigationTests.swift`), nothing fixed yet:
 
 - **AddToCollectionFlow: 10 findings** (default platform-picker list only —
