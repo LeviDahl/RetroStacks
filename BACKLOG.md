@@ -400,20 +400,25 @@ all 4 accessibility-audit ratchets (10/52/26/11) held exactly, since
 had an accessibility pass yet) and `SidebarView` (already has identifiers;
 check for icon-only spots once it grows badges/actions) are still untouched.
 
-**Also found while wiring the 3 new audits' navigation**: the *original*
-`NavigationTests`'s two tests and all of `AppWalkthroughTests` check
-`app.windows[title]` to confirm they landed on a screen — a macOS-only
-pattern (each pushed screen gets its own titled `NSWindow` there). Running
-them on the iOS Simulator destination for the first time in this session
-(previously only macOS-hosted, user's own Terminal — see "Automated leak
-testing" for why macOS-hosted `xcodebuild test` hangs in an automated
-session) fails both `NavigationTests` cases immediately: iOS never creates a
-second window, so the query never matches anything. The 3 new audit tests
-route around this with a small `waitForScreen`/`navigateToSection` helper
-pair (`#if os(macOS)` window title, `#else` navigation-bar title or tab bar)
-— worth backporting to `NavigationTests`'s original two tests and
-`AppWalkthroughTests` so this whole suite actually runs on both platforms
-instead of iOS silently red the moment anyone tries it there.
+~~**`NavigationTests`'s original two cases were macOS-only**~~ — fixed
+2026-09-14. Both checked `app.windows[title]` to confirm they landed on a
+screen — a macOS-only pattern (each pushed screen gets its own titled
+`NSWindow` there). Running them on the iOS Simulator destination for the
+first time this session (previously only macOS-hosted, user's own Terminal —
+see "Automated leak testing" for why macOS-hosted `xcodebuild test` hangs in
+an automated session) failed both cases immediately: iOS never creates a
+second window, so the query never matched anything. Swapped in the same
+`waitForScreen` helper the 3 newer audit tests already use (`#if os(macOS)`
+window title, `#else` navigation-bar title) — verified passing on iOS for
+real, not assumed.
+
+`AppWalkthroughTests` deliberately left as-is (still macOS-only,
+`app.windows[title]` + sidebar-identifier navigation): it exists specifically
+to drive `Scripts/leak-check.sh`'s `xctrace`/Instruments Leaks-attach
+workflow, which is itself a macOS-specific tool — backporting its navigation
+to iOS wouldn't make the thing it's *for* any more cross-platform, so it
+wasn't worth the bigger refactor (tab-bar navigation fallback for every
+sidebar-identifier tap) that would need.
 
 ## Automated leak testing — exhaustive, unattended
 

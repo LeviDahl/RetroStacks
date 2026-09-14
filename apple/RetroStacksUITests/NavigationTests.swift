@@ -50,14 +50,20 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(snesRow.waitForExistence(timeout: 5), "expected a SNES row in the platform breakdown")
         snesRow.tap()
 
-        // The window's own title (from SystemGamesList's .navigationTitle) is
+        // The screen's own title (from SystemGamesList's .navigationTitle) is
         // what a real user actually sees, and — unlike an arbitrary label —
         // isn't sensitive to which accessibility role SwiftUI happens to
         // expose a given control as (a DisclosureTriangle for "About SNES"
         // here, a RadioButton for "By System" below; discovered by reading the
         // XCUITest failure's attached accessibility-hierarchy dump).
-        let systemWindow = app.windows["Super Nintendo Entertainment System"]
-        XCTAssertTrue(systemWindow.waitForExistence(timeout: 5),
+        //
+        // `waitForScreen`, not `app.windows[title]` directly: macOS's split
+        // layout gives pushed content its own titled NSWindow, but iOS's
+        // tab/stack layout never creates a second window — confirmed 2026-09-14
+        // running this exact test on iOS for the first time, where the bare
+        // `app.windows[title]` form failed outright. See `waitForScreen`'s doc
+        // comment (below, shared with the *AccessibilityAuditTests classes).
+        XCTAssertTrue(waitForScreen("Super Nintendo Entertainment System", in: app),
                       "tapping the SNES breakdown row should open the SNES system screen")
     }
 
@@ -70,8 +76,7 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(ownedItems.waitForExistence(timeout: 5))
         ownedItems.tap()
 
-        let collectionWindow = app.windows["My Collection"]
-        XCTAssertTrue(collectionWindow.waitForExistence(timeout: 5),
+        XCTAssertTrue(waitForScreen("My Collection", in: app),
                       "tapping Owned Items should switch to My Collection")
     }
 }
