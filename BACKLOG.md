@@ -358,14 +358,22 @@ the original Dashboard one):
   contrast on them while the rest only soft-warn — possibly a
   selection/hover-highlight background making an already-borderline color
   actually fail there. Not investigated further this pass.
-- **Not an audit finding, but found via the same hierarchy-dump technique**:
-  on iOS-compact, navigating to `CatalogSection` never exposes "Catalog" as
-  the navigation bar's own accessible title (the bar's only child is a
-  blank-label `StaticText`) — `CollectionSection`'s title *does* expose
-  correctly. Likely cause: `CatalogSection` nests its own
-  `NavigationSplitView` inside `RootView`'s tab; `CollectionSection` doesn't.
-  Worth a real VoiceOver check on a real device before deciding whether this
-  needs a fix.
+- ~~`CatalogSection`'s missing accessible nav title on iOS-compact~~ — fixed
+  2026-09-14, and this one's root cause was real and findable (unlike the two
+  contrast mysteries above): `CatalogSection.body` applied `.navigationTitle`
+  to the *outer* `NavigationSplitView`, not to the visible column. On
+  iOS-compact, where the split view collapses to one column, a title on the
+  outer container never propagates to whichever column is actually shown —
+  `CollectionSection`'s plain `NavigationStack` never had this problem since
+  there's no collapse behavior to lose the title across. Moved
+  `.navigationTitle` (and `.searchable`/`.toolbar`, which belong with it)
+  onto `contentColumn` directly. Verified for real, not assumed: the UI test
+  that used to need a content-based workaround
+  (`CatalogSectionAccessibilityAuditTests`) now passes with the same
+  `waitForScreen("Catalog", in: app)` check every other screen uses. Still
+  worth a real VoiceOver check on a real device before calling this screen
+  fully done — this fixes what the accessibility tree reports, not a
+  substitute for hearing it.
 
 **Muted-text contrast — made a decision, and centralized it, 2026-09-14.**
 User's call: keep the current subtler `.secondary` look for now rather than

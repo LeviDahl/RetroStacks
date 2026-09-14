@@ -303,14 +303,21 @@ final class CollectionSectionAccessibilityAuditTests: XCTestCase {
 /// 2026-09-13: 11 findings, none fixed yet — mostly the same systemic
 /// `.secondary` contrast pattern, at much lower volume here since this
 /// screen's default view is just a flat platform list, not per-item detail.
-/// Separately (not counted as an audit finding, `performAccessibilityAudit`
-/// doesn't catch it): navigating here on iOS-compact never exposes "Catalog"
-/// as the navigation bar's own accessible title — confirmed via a raw
-/// accessibility-hierarchy dump, the bar's only child is a blank-label
-/// `StaticText`. `CatalogSection` nests its own `NavigationSplitView` inside
-/// `RootView`'s tab; `CollectionSection` doesn't and its title *does* expose
-/// correctly, so the nesting is the likely cause. Worth a real VoiceOver
-/// check — logged in BACKLOG.md rather than guessed at here.
+///
+/// 2026-09-14: fixed a real, separate bug found via the hierarchy-dump
+/// technique (not an audit finding — `performAccessibilityAudit` doesn't
+/// catch missing nav titles): navigating here on iOS-compact never exposed
+/// "Catalog" as the navigation bar's own accessible title (the bar's only
+/// child was a blank-label `StaticText`). Root cause: `CatalogSection.body`
+/// applied `.navigationTitle` to the *outer* `NavigationSplitView`, not to
+/// the visible column — on iOS-compact, where the split view collapses to a
+/// single column, a title on the outer container never propagates to
+/// whichever column is actually shown. `CollectionSection`'s plain
+/// `NavigationStack` never had this problem since there's no collapse
+/// behavior to lose the title across. Fixed by moving `.navigationTitle` (and
+/// `.searchable`/`.toolbar`, which belong with it) onto `contentColumn`
+/// directly. Verified for real: `waitForScreen("Catalog", in: app)` below now
+/// passes, where it used to need a content-based workaround.
 final class CatalogSectionAccessibilityAuditTests: XCTestCase {
     static let knownFindingBaseline = 11
 
@@ -325,14 +332,7 @@ final class CatalogSectionAccessibilityAuditTests: XCTestCase {
         app.launch()
 
         navigateToSection(sidebarID: "sidebar.catalog", tabTitle: "Catalog", in: app)
-        // Not `waitForScreen`: CatalogSection nests its own NavigationSplitView
-        // inside RootView's tab, and on iOS-compact that inner split view's
-        // collapsed NavigationStack never exposes "Catalog" as the navigation
-        // bar's accessible title (confirmed via the accessibility hierarchy
-        // dump — the bar's only child is a StaticText with a blank label).
-        // That's arguably its own accessibility finding, but out of scope
-        // here; a known platform row is a reliable proxy that we're on-screen.
-        XCTAssertTrue(app.buttons["Nintendo Entertainment System, 7 catalog entries"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForScreen("Catalog", in: app))
 
         let findings = try recordAccessibilityAudit(app: app, screenName: "CatalogSection", on: self)
         XCTAssertLessThanOrEqual(

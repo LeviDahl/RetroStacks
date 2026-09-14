@@ -26,8 +26,23 @@ struct CatalogSection: View {
 
     var body: some View {
         NavigationSplitView {
+            // `.navigationTitle` lives here, not on the outer NavigationSplitView:
+            // found live 2026-09-14 that on iOS-compact, where the split view
+            // collapses to a single column, a title set on the *outer*
+            // NavigationSplitView never reaches the navigation bar (confirmed via
+            // a raw accessibility-hierarchy dump — the bar's only child was a
+            // blank-label StaticText). `CollectionSection`'s plain NavigationStack
+            // doesn't have this problem since there's no collapse behavior to lose
+            // the title across. Setting it on the visible *column* instead is what
+            // actually propagates in both the collapsed and split layouts.
             contentColumn
                 .navigationSplitViewColumnWidth(min: 360, ideal: 560, max: 900)
+                .navigationTitle(navigationTitleText)
+                .searchable(
+                    text: $viewModel.searchText,
+                    prompt: viewModel.platformSlugFilter == nil ? "Search the whole catalog" : "Search \(navigationTitleText)"
+                )
+                .toolbar { toolbarContent }
         } detail: {
             Group {
                 if let selectedItem {
@@ -42,12 +57,6 @@ struct CatalogSection: View {
             }
             .appNavigationDestinations()
         }
-        .navigationTitle(navigationTitleText)
-        .searchable(
-            text: $viewModel.searchText,
-            prompt: viewModel.platformSlugFilter == nil ? "Search the whole catalog" : "Search \(navigationTitleText)"
-        )
-        .toolbar { toolbarContent }
         .onAppear {
             if let initialPlatformSlug { viewModel.platformSlugFilter = initialPlatformSlug }
             if let initialKind { viewModel.kindFilter = initialKind }
