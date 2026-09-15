@@ -111,7 +111,7 @@ final class CatalogSyncService {
         for fi in feed.items {
             processed += 1
             if processed % 400 == 0 {
-                if context.hasChanges { try? context.save() }
+                if context.hasChanges { context.saveLoggingErrors() }
                 await Task.yield()
             }
             let kind = ItemKind(rawValue: fi.kind) ?? .game

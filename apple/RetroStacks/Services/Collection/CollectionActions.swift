@@ -26,13 +26,13 @@ enum CollectionActions {
             playStatus: catalogItem.kind == .game && owned ? .backlog : nil
         )
         context.insert(entry)
-        try? context.save()
+        context.saveLoggingErrors()
         return entry
     }
 
     /// Soft-delete (tombstone) a collection entry so the removal can sync later.
     static func remove(_ item: CollectionItem, in context: ModelContext) {
         item.markDeleted()
-        try? context.save()
+        context.saveLoggingErrors()
     }
 }

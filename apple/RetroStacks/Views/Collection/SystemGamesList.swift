@@ -203,7 +203,7 @@ struct SystemGamesList: View {
             guard let entry else { return }
             entry.deletedAt = nil
             entry.touch()
-            try? modelContext.save()
+            modelContext.saveLoggingErrors()
         }
     }
 

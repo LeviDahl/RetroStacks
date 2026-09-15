@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import os
 
 /// Structured logging, viewable in Console.app / `xcrun simctl spawn <device>
@@ -16,4 +17,24 @@ nonisolated enum AppLog {
     static let network = Logger(subsystem: "com.levidahlstrom.RetroStacks", category: "network")
     static let sync = Logger(subsystem: "com.levidahlstrom.RetroStacks", category: "sync")
     static let auth = Logger(subsystem: "com.levidahlstrom.RetroStacks", category: "auth")
+    static let persistence = Logger(subsystem: "com.levidahlstrom.RetroStacks", category: "persistence")
+}
+
+extension ModelContext {
+    /// Saves and logs failures instead of the plain `try? save()` that was
+    /// spread across every collection add/edit/delete call site — the same
+    /// silent-failure shape `AppLog`'s own header warns about, just never
+    /// applied to local SwiftData writes. A disk-full, migration, or
+    /// constraint error at these call sites previously vanished with nothing
+    /// to show for it, at exactly the write paths a real user hits
+    /// constantly. Not `throws` — callers weren't handling the error before
+    /// either, so this keeps every call site's behavior identical and only
+    /// adds the log record.
+    func saveLoggingErrors() {
+        do {
+            try save()
+        } catch {
+            AppLog.persistence.error("modelContext.save() failed: \(error, privacy: .public)")
+        }
+    }
 }

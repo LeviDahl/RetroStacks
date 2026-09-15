@@ -196,7 +196,7 @@ nonisolated enum CatalogSeedStore {
             insertSampleCollection(sampleCollection, itemsBySlug: itemsBySlug, into: context, now: now)
         }
 
-        try? context.save()
+        context.saveLoggingErrors()
     }
 
     @MainActor
@@ -269,6 +269,6 @@ nonisolated enum CatalogSeedStore {
                 entry.exportID = UUID()
             }
         }
-        if context.hasChanges { try? context.save() }
+        if context.hasChanges { context.saveLoggingErrors() }
     }
 }

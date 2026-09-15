@@ -65,7 +65,7 @@ struct CollectionItemDetailView: View {
         .confirmationDialog("Delete this item?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 item.markDeleted()
-                try? modelContext.save()
+                modelContext.saveLoggingErrors()
                 dismiss()
             }
         }
@@ -202,7 +202,7 @@ struct CollectionItemDetailView: View {
         Picker("Status", selection: $item.status) {
             ForEach(CollectionStatus.allCases) { Label($0.displayName, systemImage: $0.symbol).tag($0) }
         }
-        .onChange(of: item.status) { item.touch(); try? modelContext.save() }
+        .onChange(of: item.status) { item.touch(); modelContext.saveLoggingErrors() }
     }
 
     /// Same shape as `statusMenu` — was previously only reachable through the
@@ -216,7 +216,7 @@ struct CollectionItemDetailView: View {
         )) {
             ForEach(ConditionGrade.allCases) { Text($0.displayName).tag($0) }
         }
-        .onChange(of: item.condition) { item.touch(); try? modelContext.save() }
+        .onChange(of: item.condition) { item.touch(); modelContext.saveLoggingErrors() }
     }
 
     @ViewBuilder
@@ -227,7 +227,7 @@ struct CollectionItemDetailView: View {
         )) {
             ForEach(Completeness.allCases) { Text($0.displayName).tag($0) }
         }
-        .onChange(of: item.completeness) { item.touch(); try? modelContext.save() }
+        .onChange(of: item.completeness) { item.touch(); modelContext.saveLoggingErrors() }
     }
 }
 

@@ -128,7 +128,7 @@ struct CollectionItemEditView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     if modelContext.hasChanges { item.touch() }
-                    try? modelContext.save()
+                    modelContext.saveLoggingErrors()
                     dismiss()
                 }
             }

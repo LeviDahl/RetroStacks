@@ -78,7 +78,7 @@ final class PricingService {
     func refresh(_ item: CatalogItem, in context: ModelContext) async -> PriceGuide {
         let guide = await priceGuide(for: item, forceRefresh: true)
         apply(guide, to: item)
-        try? context.save()
+        context.saveLoggingErrors()
 
         // We expected a live provider to answer but fell back to the built-in
         // guide — surface it instead of silently showing stale numbers.
