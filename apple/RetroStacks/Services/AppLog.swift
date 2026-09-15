@@ -30,11 +30,31 @@ extension ModelContext {
     /// constantly. Not `throws` — callers weren't handling the error before
     /// either, so this keeps every call site's behavior identical and only
     /// adds the log record.
-    func saveLoggingErrors() {
+    ///
+    /// `reportingAs`: pass an `AppStatusCenter.Source` to also surface a
+    /// failure as a visible badge, not just a log line — reserved for
+    /// user-initiated writes (adding/editing/removing a collection item)
+    /// where staying silent would leave someone wondering whether their tap
+    /// actually did anything. Left `nil` (the default) for background writes
+    /// — catalog sync, pricing refresh, seed store — that already have their
+    /// own more specific reporting, so they don't get double-counted under a
+    /// generic "Save" badge.
+    @discardableResult
+    func saveLoggingErrors(reportingAs source: AppStatusCenter.Source? = nil) -> Bool {
         do {
             try save()
+            if let source { AppStatusCenter.shared.clear(source) }
+            return true
         } catch {
             AppLog.persistence.error("modelContext.save() failed: \(error, privacy: .public)")
+            if let source {
+                AppStatusCenter.shared.report(
+                    source, severity: .error,
+                    title: "Couldn't save your change",
+                    detail: error.localizedDescription
+                )
+            }
+            return false
         }
     }
 }

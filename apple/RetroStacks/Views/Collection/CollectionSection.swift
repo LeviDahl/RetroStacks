@@ -333,13 +333,13 @@ struct CollectionSection: View {
     private func delete(_ item: CollectionItem) {
         let title = item.title
         item.markDeleted()
-        modelContext.saveLoggingErrors()
+        modelContext.saveLoggingErrors(reportingAs: .localSave)
         successToast = "Removed \(title)"
         toastUndo = { [weak item] in
             guard let item else { return }
             item.deletedAt = nil
             item.touch()
-            modelContext.saveLoggingErrors()
+            modelContext.saveLoggingErrors(reportingAs: .localSave)
         }
     }
 

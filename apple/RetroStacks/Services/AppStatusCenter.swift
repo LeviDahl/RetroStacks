@@ -32,6 +32,14 @@ final class AppStatusCenter {
     /// One slot per source of trouble.
     enum Source: String, CaseIterable {
         case catalogSync, pricing, collectionSync, account
+        /// A local SwiftData `save()` failing on a user-initiated collection
+        /// edit (add/remove/status change) — distinct from `collectionSync`,
+        /// which is the *remote* Supabase sync. Added 2026-09-15 alongside
+        /// `ModelContext.saveLoggingErrors()` (`AppLog.swift`): that helper
+        /// already logs every save failure, but a disk-full/migration/
+        /// constraint error happening live while someone is actually adding
+        /// items deserves more than a Console.app entry they'll never see.
+        case localSave
 
         var label: String {
             switch self {
@@ -39,6 +47,7 @@ final class AppStatusCenter {
             case .pricing: "Pricing"
             case .collectionSync: "Collection sync"
             case .account: "Account"
+            case .localSave: "Save"
             }
         }
     }
