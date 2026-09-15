@@ -151,16 +151,21 @@ struct CollectionItemEditView: View {
                 }
             }
 
+            // Computed outside the trailing closure: PhotosPicker's `label`
+            // closure isn't main-actor-isolated like an ordinary SwiftUI
+            // view-builder closure, so referencing the main-actor-isolated
+            // `item` property directly inside it fails strict concurrency
+            // checking ("Main actor-isolated property 'item' can not be
+            // referenced from a Sendable closure"). A local `String` capture
+            // sidesteps that — Strings are Sendable, no isolation to cross.
+            let addPhotosLabel = item.photoData.isEmpty ? "Add Photos" : "Add More Photos"
             PhotosPicker(
                 selection: $photoPicks,
                 maxSelectionCount: max(1, PhotoImport.maxPhotosPerItem - item.photoData.count),
                 matching: .images,
                 photoLibrary: .shared()
             ) {
-                Label(
-                    item.photoData.isEmpty ? "Add Photos" : "Add More Photos",
-                    systemImage: "photo.badge.plus"
-                )
+                Label(addPhotosLabel, systemImage: "photo.badge.plus")
             }
             .disabled(importingPhotos || item.photoData.count >= PhotoImport.maxPhotosPerItem)
 
