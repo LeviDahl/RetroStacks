@@ -216,6 +216,16 @@ the URL + anon key (`Services/Sync/SupabaseConfig.swift`). Done:
   Confirmed working directly against the live server via `curl` — still need
   to confirm the fix through the actual app UI, and watch a real row land in
   `collection_items` via `SyncCoordinator`, both next.
+- ~~**First-time "confirm your email" UX.**~~ Resolved 2026-09-16, and kept
+  Confirm Email *on* deliberately (real proof of inbox ownership, a
+  conscious choice over disabling it for convenience). Turned out to need no
+  new code path at all: the confirm-signup email is the same `/verify` link
+  shape as a magic link (`type=signup` vs `type=magiclink`), and
+  `completeSignIn` already handles either generically once `token_hash` was
+  fixed — confirmed live via `curl` (HTTP 200, account confirmed and signed
+  in in one paste). Only real gap was `SignInSheet`'s copy assuming "a
+  sign-in link" unconditionally; updated to say the first email may read
+  "Confirm your signup" instead, and that it works the same way.
 - Companion **website** on `retrostacks.com` — same schema, Supabase JS client;
   read-only mirror first, then editing.
 - Prune old tombstones after a confirmed successful sync.
