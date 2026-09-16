@@ -76,11 +76,12 @@ final class AccountService {
         }
     }
 
-    /// The user pastes the link they received. No `email` param needed here —
-    /// it's the one `sendMagicLink` just sent to.
+    /// The user pastes the link they received. `pendingEmail` is only for this
+    /// type's own UI state ("awaiting a link sent to X") — GoTrue's
+    /// `token_hash` verification doesn't take (or want) an email at all.
     func completeSignIn(pastedLink: String) async throws {
-        guard let email = pendingEmail else { throw AccountError.notConfigured }
-        let session = try await auth.completeSignIn(pastedLink: pastedLink, email: email)
+        guard pendingEmail != nil else { throw AccountError.notConfigured }
+        let session = try await auth.completeSignIn(pastedLink: pastedLink)
         store.save(session)
         pendingEmail = nil
         state = .signedIn(userID: session.userID.uuidString, email: session.email)

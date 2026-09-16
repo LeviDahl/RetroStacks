@@ -70,17 +70,29 @@ nonisolated struct SupabaseAuthClient: Sendable {
     }
 
     /// The user copies the sign-in link from their email (without opening it)
-    /// and pastes it in. GoTrue's link is its own verify endpoint with `token`
-    /// (or, on newer projects, `token_hash`) and `type` query params — this
-    /// extracts those and calls `/verify` directly, so nothing ever has to
-    /// open the link in a browser or catch a deep-link callback.
-    func completeSignIn(pastedLink: String, email: String) async throws -> SupabaseSession {
+    /// and pastes it in. GoTrue's link carries a `token` query param that —
+    /// despite the name — is a `token_hash`: a one-way hash of the real OTP,
+    /// bound server-side to a specific user. Verifying it needs *only*
+    /// `type` + `token_hash` in the POST body; no `email`.
+    ///
+    /// Found live 2026-09-16, the hard way: this used to POST
+    /// `{type, token, email}` (the shape for a *typed-in* numeric OTP code,
+    /// a completely different verification mode) instead of
+    /// `{type, token_hash}`. GoTrue's own validation error on a mixed
+    /// request ("Only the token_hash and type should be provided") is what
+    /// gave this away — confirmed by a raw `curl` against the real server
+    /// with a fresh token, bypassing the app entirely. Every failure up to
+    /// that point looked identical ("Token has expired or is invalid") no
+    /// matter the actual cause, which is what made this take two days
+    /// instead of two minutes: wrong-shaped requests and genuinely-expired
+    /// tokens are indistinguishable from GoTrue's error message alone.
+    func completeSignIn(pastedLink: String) async throws -> SupabaseSession {
         guard let (token, type) = Self.extractToken(from: pastedLink) else {
             throw SupabaseAuthError.noPastedLink
         }
         let data = try await send(
             path: "verify",
-            body: ["type": type, "token": token, "email": email]
+            body: ["type": type, "token_hash": token]
         )
         return try Self.session(from: data)
     }
