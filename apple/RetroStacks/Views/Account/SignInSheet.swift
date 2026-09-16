@@ -4,6 +4,16 @@ import SwiftUI
 /// `AccountService.State`: send the link, then paste it back — no custom URL
 /// scheme, so nothing about the Xcode target had to change to ship this (see
 /// `SupabaseAuthClient`). Dismisses itself once signed in.
+///
+/// Deliberately kept "Confirm email" enabled server-side (Supabase Dashboard
+/// → Authentication → Providers → Email) rather than turning it off for
+/// convenience — real proof of inbox ownership before an account is usable.
+/// The one thing that took real live-testing to confirm (2026-09-16): a
+/// first-time address gets GoTrue's "Confirm your signup" email instead of a
+/// magic-link one, but it's the *same* `/verify` link shape underneath
+/// (`type=signup` vs `type=magiclink`), and `completeSignIn` already handles
+/// either generically — so the existing paste-back flow needed no new code
+/// path, just copy in `linkSection` that says so.
 struct SignInSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var account = AccountService.shared
@@ -70,7 +80,7 @@ struct SignInSheet: View {
 
     private func linkSection(sentTo: String) -> some View {
         Section {
-            Text("Check \(sentTo) for a sign-in link.")
+            Text("Check \(sentTo) for an email from us.")
             TextField("Paste the link here", text: $pastedLink)
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
@@ -85,7 +95,13 @@ struct SignInSheet: View {
             .disabled(pastedLink.trimmingCharacters(in: .whitespaces).isEmpty || working)
             .accessibilityIdentifier(AccessibilityID.Account.verifyButton)
         } footer: {
-            Text("Copy the link from the email — you don’t need to open it — and paste it above.")
+            // First-time addresses get GoTrue's "Confirm your signup" email
+            // instead of a "magic link" one — same underlying verify link
+            // either way (completeSignIn doesn't care which `type` it is),
+            // but worth saying so nobody assumes the wrong email arrived.
+            Text("The first time, it may say “Confirm your signup” instead of "
+                + "“sign in” — that's normal, and works exactly the same way. "
+                + "Copy the link from the email — you don’t need to open it — and paste it above.")
         }
     }
 
