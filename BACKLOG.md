@@ -199,14 +199,23 @@ the URL + anon key (`Services/Sync/SupabaseConfig.swift`). Done:
   path `<user_id>/<exportID>/<n>.jpg`) wired into `SupabaseCollectionSyncEngine`
   or a sibling type. Field sync (everything else) works without it, so this
   was left for a follow-up rather than blocking the rest.
-- **A live end-to-end test.** Everything above compiles and is real-Keychain-
-  and real-wire-format-tested now, but nobody has actually sent an email,
-  pasted a real link back, or watched a real row land in the
-  `collection_items` table yet — see `supabase/README.md`'s original note
-  about wanting a real round trip before this touches anyone's collection.
-  First real sign-in attempt should happen with the user watching, in case
-  GoTrue's actual link format or `/verify` response shape differs from what
-  the REST docs describe.
+- ~~**A live end-to-end test.**~~ Done 2026-09-15/16 — and it was worth
+  doing exactly for the reason this item predicted: the REST docs didn't
+  match reality. Found a real, previously-invisible bug: `completeSignIn`
+  posted `{type, token, email}` to `/verify` (the shape for a *typed-in*
+  numeric OTP) instead of `{type, token_hash}` (what email-link verification
+  actually needs). Every attempt failed with the identical "Token has
+  expired or is invalid," whether the token was 24 hours stale or 3 seconds
+  fresh — which sent two days of live debugging chasing real-but-irrelevant
+  leads (an email forwarder, the built-in sender's 2/hour rate limit, the
+  `localhost:3000` Site URL default, even an unrelated Supabase maintenance
+  window) before a raw `curl` with the corrected body against a fresh token
+  returned an actual session. Fixed in `SupabaseAuthClient.swift` (commit
+  `3f7ba7c` has the full account); see
+  `RetroStacksTests/SupabaseAuthClientTests.swift` for the regression test.
+  Confirmed working directly against the live server via `curl` — still need
+  to confirm the fix through the actual app UI, and watch a real row land in
+  `collection_items` via `SyncCoordinator`, both next.
 - Companion **website** on `retrostacks.com` — same schema, Supabase JS client;
   read-only mirror first, then editing.
 - Prune old tombstones after a confirmed successful sync.
