@@ -60,6 +60,45 @@ nonisolated struct SupabaseCollectionRow: Codable {
         case deletedAt = "deleted_at"
     }
 
+    /// Explicit, not synthesized: found live 2026-09-16 that Swift's
+    /// synthesized `Encodable` uses `encodeIfPresent` for every `Optional`
+    /// property, which *omits the key entirely* when the value is nil
+    /// instead of writing `null`. Harmless for a single object, but `push`
+    /// POSTs an *array* of these for a bulk insert, and PostgREST requires
+    /// every object in that array to have the exact same key set
+    /// (`PGRST102: "All object keys must match"`) — two rows with different
+    /// nil/non-nil optional fields (e.g. one has `price_paid`, another
+    /// doesn't) produced different shapes and broke every real sync. Calling
+    /// plain `encode(forKey:)` on each `Optional` property instead writes
+    /// `null` for nil, keeping every row's key set identical. Decoding
+    /// (`pull`) doesn't have this problem — only encoding an array does —
+    /// so the synthesized `init(from:)` is untouched.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(userID, forKey: .userID)
+        try container.encode(catalogSlug, forKey: .catalogSlug)
+        try container.encode(status, forKey: .status)
+        try container.encode(condition, forKey: .condition)
+        try container.encode(completeness, forKey: .completeness)
+        try container.encode(hasBox, forKey: .hasBox)
+        try container.encode(hasManual, forKey: .hasManual)
+        try container.encode(hasInserts, forKey: .hasInserts)
+        try container.encode(hasOriginalPackaging, forKey: .hasOriginalPackaging)
+        try container.encode(gradingCompany, forKey: .gradingCompany)
+        try container.encode(gradeScore, forKey: .gradeScore)
+        try container.encode(pricePaid, forKey: .pricePaid)
+        try container.encode(dateAcquired, forKey: .dateAcquired)
+        try container.encode(acquisitionSource, forKey: .acquisitionSource)
+        try container.encode(estimatedValueOverride, forKey: .estimatedValueOverride)
+        try container.encode(storageLocation, forKey: .storageLocation)
+        try container.encode(notes, forKey: .notes)
+        try container.encode(playStatus, forKey: .playStatus)
+        try container.encode(dateAdded, forKey: .dateAdded)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(deletedAt, forKey: .deletedAt)
+    }
+
     init(change: CollectionChange, userID: UUID) {
         let entry = change.payload
         self.id = change.exportID
@@ -220,7 +259,12 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            AppLog.network.error("SupabaseCollectionSyncEngine \(method, privacy: .public) \(path, privacy: .public): transport error — \(error.localizedDescription, privacy: .public)")
+            AppLog.network.error(
+                """
+                SupabaseCollectionSyncEngine \(method, privacy: .public) \(path, privacy: .public): \
+                transport error — \(error.localizedDescription, privacy: .public)
+                """
+            )
             throw SyncError.transport(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else {
@@ -229,7 +273,12 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
         }
         guard (200..<300).contains(http.statusCode) else {
             let message = String(data: data, encoding: .utf8) ?? "status \(http.statusCode)"
-            AppLog.network.error("SupabaseCollectionSyncEngine \(method, privacy: .public) \(path, privacy: .public): HTTP \(http.statusCode, privacy: .public) — \(message, privacy: .public)")
+            AppLog.network.error(
+                """
+                SupabaseCollectionSyncEngine \(method, privacy: .public) \(path, privacy: .public): \
+                HTTP \(http.statusCode, privacy: .public) — \(message, privacy: .public)
+                """
+            )
             throw SyncError.transport(message)
         }
         return data

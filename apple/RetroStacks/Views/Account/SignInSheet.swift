@@ -80,7 +80,14 @@ struct SignInSheet: View {
 
     private func linkSection(sentTo: String) -> some View {
         Section {
-            Text("Check \(sentTo) for an email from us.")
+            // The "first time, it may say Confirm your signup" caveat leads
+            // here, before the paste field — it's only useful set as an
+            // expectation before someone goes looking in their inbox, not as
+            // a trailing footnote after they've already found and pasted it.
+            // Same underlying /verify link either way (completeSignIn
+            // doesn't care which `type` it is).
+            Text("Check \(sentTo) for an email from us — the first time, it may say "
+                + "“Confirm your signup” instead of “sign in.” Both work the same way.")
             TextField("Paste the link here", text: $pastedLink)
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
@@ -95,13 +102,7 @@ struct SignInSheet: View {
             .disabled(pastedLink.trimmingCharacters(in: .whitespaces).isEmpty || working)
             .accessibilityIdentifier(AccessibilityID.Account.verifyButton)
         } footer: {
-            // First-time addresses get GoTrue's "Confirm your signup" email
-            // instead of a "magic link" one — same underlying verify link
-            // either way (completeSignIn doesn't care which `type` it is),
-            // but worth saying so nobody assumes the wrong email arrived.
-            Text("The first time, it may say “Confirm your signup” instead of "
-                + "“sign in” — that's normal, and works exactly the same way. "
-                + "Copy the link from the email — you don’t need to open it — and paste it above.")
+            Text("Copy the link from the email — you don’t need to open it — and paste it above.")
         }
     }
 
