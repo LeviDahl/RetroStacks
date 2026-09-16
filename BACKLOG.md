@@ -213,9 +213,41 @@ the URL + anon key (`Services/Sync/SupabaseConfig.swift`). Done:
   returned an actual session. Fixed in `SupabaseAuthClient.swift` (commit
   `3f7ba7c` has the full account); see
   `RetroStacksTests/SupabaseAuthClientTests.swift` for the regression test.
-  Confirmed working directly against the live server via `curl` — still need
-  to confirm the fix through the actual app UI, and watch a real row land in
-  `collection_items` via `SyncCoordinator`, both next.
+
+  Confirming it through the real app UI surfaced three more real bugs, each
+  found and fixed the same live way — no guessing, every one reproduced,
+  diagnosed, and re-verified against the real server before moving on:
+  - **PGRST102 "All object keys must match"** on the first real bulk push —
+    `SupabaseCollectionRow` relied on Swift's synthesized `Encodable`, which
+    omits a key entirely for a nil `Optional` instead of writing `null`, so
+    two rows with different populated fields produced JSON objects with
+    different key sets. Fixed with an explicit `encode(to:)`
+    (`SupabaseCollectionSyncEngine.swift`, commit `3be8116`).
+  - **Keychain session silently never persisted** — `SupabaseSessionStore
+    .save()` gave up without telling its caller when `SecItemUpdate` failed
+    on an existing item whose ACL belonged to a different code signature (no
+    Apple Developer account here, so every Xcode rebuild re-signs locally
+    and can invalidate the previous build's Keychain ACL — `errSecAuthFailed`
+    /-25293). `AccountService` showed "signed in" from the in-memory session
+    alone, then every sync call failed `.notSignedIn` the moment anything did
+    a fresh Keychain read. Fixed by falling back to delete-then-add, which
+    always gets a fresh ACL (`SupabaseSession.swift`, commit `4eb7923`).
+  - **`42501`, RLS correctly rejecting a push** — not a bug, but real and
+    worth recording: today's testing signed into three different Supabase
+    accounts (`locdawg18@gmail.com`, a `+test2` alias, then `levidahlstrom
+    @gmail.com`) against the same on-device collection with stable local
+    IDs. Once rows existed under one account, syncing the same IDs while
+    signed in as another correctly hit `auth.uid() = user_id`'s `USING`
+    check. Resolved for this testing session with
+    `truncate table public.collection_items, public.collection_item_photos;`
+    — not a real multi-account collision an actual single-account user would
+    ever hit.
+
+  **Confirmed end to end for real** 2026-09-16: signed in through the actual
+  app UI, ran a real sync, and independently verified in the Supabase Table
+  Editor — 13 real rows under the right `user_id`, correct catalog slugs and
+  status/condition/completeness. The whole pipeline (auth → Keychain →
+  encode → RLS → land in the table) is proven working, not assumed.
 - ~~**First-time "confirm your email" UX.**~~ Resolved 2026-09-16, and kept
   Confirm Email *on* deliberately (real proof of inbox ownership, a
   conscious choice over disabling it for convenience). Turned out to need no
