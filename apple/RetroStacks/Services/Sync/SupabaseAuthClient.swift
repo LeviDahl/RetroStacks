@@ -159,16 +159,23 @@ nonisolated struct SupabaseAuthClient: Sendable {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            AppLog.network.error("SupabaseAuthClient \(path): transport error — \(error.localizedDescription)")
+            AppLog.network.error("SupabaseAuthClient \(path, privacy: .public): transport error — \(error.localizedDescription, privacy: .public)")
             throw SupabaseAuthError.transport(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else {
-            AppLog.network.error("SupabaseAuthClient \(path): no HTTP response")
+            AppLog.network.error("SupabaseAuthClient \(path, privacy: .public): no HTTP response")
             throw SupabaseAuthError.transport("no HTTP response")
         }
         guard (200..<300).contains(http.statusCode) else {
             let message = (try? JSONDecoder().decode(GoTrueErrorBody.self, from: data))?.text
-            AppLog.auth.error("SupabaseAuthClient \(path): HTTP \(http.statusCode) — \(message ?? "no message")")
+            // `privacy: .public` on all three: an HTTP status, an endpoint path
+            // ("otp"/"verify"/"token"), and GoTrue's own error text are
+            // diagnostic, not personal data — os.Logger redacts interpolated
+            // values by default, which was silently hiding the actual failure
+            // reason from `log stream` during the very first live sign-in test.
+            AppLog.auth.error(
+                "SupabaseAuthClient \(path, privacy: .public): HTTP \(http.statusCode, privacy: .public) — \(message ?? "no message", privacy: .public)"
+            )
             throw SupabaseAuthError.badStatus(http.statusCode, message)
         }
         return data

@@ -43,6 +43,13 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
   code-reviewed against Apple's documented API only; needs a real device
   test, which is on the user.
 - Multiple copies / variant handling surfaced in the UI (model already supports it).
+- **Partial box/manual state.** `CollectionItem.hasBox`/`.hasManual` (and
+  `.hasInserts`/`.hasOriginalPackaging`) are plain booleans today — no way to
+  note "have it, but it's not complete" (a manual missing pages, a box
+  without flaps/inserts, only some of the original pieces). A simple
+  checkbox/button per field to flag "incomplete/partial" alongside the
+  existing yes/no would cover this without a bigger redesign of the
+  completeness model.
 - ~~**CSV export**~~ — done: `CollectionCSV` + "Export as CSV…" in the Backup menu.
 - Per-item **price sparkline** + collection **value-over-time chart** — both need
   the feed to carry price history / periodic snapshots.

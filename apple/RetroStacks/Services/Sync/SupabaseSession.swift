@@ -41,7 +41,7 @@ nonisolated final class SupabaseSessionStore: Sendable {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess else {
             if status != errSecItemNotFound {
-                AppLog.sync.error("SupabaseSessionStore.load: SecItemCopyMatching failed, status \(status)")
+                AppLog.sync.error("SupabaseSessionStore.load: SecItemCopyMatching failed, status \(status, privacy: .public)")
             }
             return nil
         }
@@ -52,7 +52,7 @@ nonisolated final class SupabaseSessionStore: Sendable {
         do {
             return try JSONDecoder.exactKeys.decode(SupabaseSession.self, from: data)
         } catch {
-            AppLog.sync.error("SupabaseSessionStore.load: decode failed — \(error)")
+            AppLog.sync.error("SupabaseSessionStore.load: decode failed — \(String(describing: error), privacy: .public)")
             return nil
         }
     }
@@ -62,7 +62,7 @@ nonisolated final class SupabaseSessionStore: Sendable {
         do {
             data = try JSONEncoder.exactKeys.encode(session)
         } catch {
-            AppLog.sync.error("SupabaseSessionStore.save: encode failed — \(error)")
+            AppLog.sync.error("SupabaseSessionStore.save: encode failed — \(String(describing: error), privacy: .public)")
             return
         }
         let query = baseQuery
@@ -70,7 +70,7 @@ nonisolated final class SupabaseSessionStore: Sendable {
         if existsStatus == errSecSuccess {
             let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
             if updateStatus != errSecSuccess {
-                AppLog.sync.error("SupabaseSessionStore.save: SecItemUpdate failed, status \(updateStatus)")
+                AppLog.sync.error("SupabaseSessionStore.save: SecItemUpdate failed, status \(updateStatus, privacy: .public)")
             }
         } else {
             var addQuery = query
@@ -78,7 +78,7 @@ nonisolated final class SupabaseSessionStore: Sendable {
             addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
             let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
             if addStatus != errSecSuccess {
-                AppLog.sync.error("SupabaseSessionStore.save: SecItemAdd failed, status \(addStatus)")
+                AppLog.sync.error("SupabaseSessionStore.save: SecItemAdd failed, status \(addStatus, privacy: .public)")
             }
         }
     }
@@ -86,7 +86,7 @@ nonisolated final class SupabaseSessionStore: Sendable {
     func clear() {
         let status = SecItemDelete(baseQuery as CFDictionary)
         if status != errSecSuccess && status != errSecItemNotFound {
-            AppLog.sync.error("SupabaseSessionStore.clear: SecItemDelete failed, status \(status)")
+            AppLog.sync.error("SupabaseSessionStore.clear: SecItemDelete failed, status \(status, privacy: .public)")
         }
     }
 

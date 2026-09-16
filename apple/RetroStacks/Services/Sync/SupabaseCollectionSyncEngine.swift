@@ -151,7 +151,7 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
             let rows = try JSONDecoder.exactKeys.decode([SupabaseCollectionRow].self, from: data)
             return rows.map(\.asChange)
         } catch {
-            AppLog.sync.error("SupabaseCollectionSyncEngine.pull: decode failed — \(error)")
+            AppLog.sync.error("SupabaseCollectionSyncEngine.pull: decode failed — \(String(describing: error), privacy: .public)")
             throw SyncError.transport("bad response: \(error)")
         }
     }
@@ -168,7 +168,7 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
         do {
             body = try JSONEncoder.exactKeys.encode(rows)
         } catch {
-            AppLog.sync.error("SupabaseCollectionSyncEngine.push: encode failed — \(error)")
+            AppLog.sync.error("SupabaseCollectionSyncEngine.push: encode failed — \(String(describing: error), privacy: .public)")
             throw SyncError.transport("couldn't encode changes: \(error)")
         }
 
@@ -184,7 +184,7 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
             let responseRows = try JSONDecoder.exactKeys.decode([SupabaseCollectionRow].self, from: data)
             return responseRows.map(\.asChange)
         } catch {
-            AppLog.sync.error("SupabaseCollectionSyncEngine.push: decode failed — \(error)")
+            AppLog.sync.error("SupabaseCollectionSyncEngine.push: decode failed — \(String(describing: error), privacy: .public)")
             throw SyncError.transport("bad response: \(error)")
         }
     }
@@ -220,16 +220,16 @@ nonisolated struct SupabaseCollectionSyncEngine: CollectionSyncEngine {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            AppLog.network.error("SupabaseCollectionSyncEngine \(method) \(path): transport error — \(error.localizedDescription)")
+            AppLog.network.error("SupabaseCollectionSyncEngine \(method, privacy: .public) \(path, privacy: .public): transport error — \(error.localizedDescription, privacy: .public)")
             throw SyncError.transport(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else {
-            AppLog.network.error("SupabaseCollectionSyncEngine \(method) \(path): no HTTP response")
+            AppLog.network.error("SupabaseCollectionSyncEngine \(method, privacy: .public) \(path, privacy: .public): no HTTP response")
             throw SyncError.transport("no HTTP response")
         }
         guard (200..<300).contains(http.statusCode) else {
             let message = String(data: data, encoding: .utf8) ?? "status \(http.statusCode)"
-            AppLog.network.error("SupabaseCollectionSyncEngine \(method) \(path): HTTP \(http.statusCode) — \(message)")
+            AppLog.network.error("SupabaseCollectionSyncEngine \(method, privacy: .public) \(path, privacy: .public): HTTP \(http.statusCode, privacy: .public) — \(message, privacy: .public)")
             throw SyncError.transport(message)
         }
         return data
