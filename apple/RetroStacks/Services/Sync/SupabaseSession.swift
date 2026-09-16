@@ -71,15 +71,35 @@ nonisolated final class SupabaseSessionStore: Sendable {
             let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
             if updateStatus != errSecSuccess {
                 AppLog.sync.error("SupabaseSessionStore.save: SecItemUpdate failed, status \(updateStatus, privacy: .public)")
+                // Found live 2026-09-16: an existing item whose ACL no longer
+                // matches the current process's code signature (e.g. a
+                // locally ad-hoc-signed build that gets a new signature on
+                // every rebuild — no Apple Developer account here, see
+                // CLAUDE.md) fails `SecItemUpdate` with `errSecAuthFailed`
+                // (-25293) and *stays stuck that way forever* — every future
+                // sign-in would silently fail to persist, while the caller
+                // (which never checked this return value) went on to set
+                // `.signedIn` anyway, leaving a real, working in-memory
+                // session that vanished on the next launch and made every
+                // sync call `.notSignedIn`. Recover by deleting the
+                // unreadable item and adding fresh — a fresh `SecItemAdd`
+                // gets a brand-new ACL bound to *this* process, so it always
+                // succeeds regardless of what signed the previous one.
+                addFreshItem(data: data, query: query)
             }
         } else {
-            var addQuery = query
-            addQuery[kSecValueData as String] = data
-            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-            if addStatus != errSecSuccess {
-                AppLog.sync.error("SupabaseSessionStore.save: SecItemAdd failed, status \(addStatus, privacy: .public)")
-            }
+            addFreshItem(data: data, query: query)
+        }
+    }
+
+    private func addFreshItem(data: Data, query: [String: Any]) {
+        SecItemDelete(query as CFDictionary) // best-effort; ignore status, SecItemAdd below is the real signal
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        if addStatus != errSecSuccess {
+            AppLog.sync.error("SupabaseSessionStore.save: SecItemAdd failed, status \(addStatus, privacy: .public)")
         }
     }
 

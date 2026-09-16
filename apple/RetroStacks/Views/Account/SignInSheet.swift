@@ -55,6 +55,12 @@ struct SignInSheet: View {
                 if newValue.isSignedIn { dismiss() }
             }
         }
+        // Every other sheet in the app sets a minimum size explicitly
+        // (AddToCollectionFlow, CollectionItemEditView, …) — this one never
+        // did, so macOS shrank it to its content's bare minimum, which read
+        // fine with the old one-line copy but clipped badly once
+        // `linkSection`'s explanatory text got longer.
+        .frame(minWidth: 420, minHeight: 300)
     }
 
     private var emailSection: some View {
@@ -85,9 +91,14 @@ struct SignInSheet: View {
             // expectation before someone goes looking in their inbox, not as
             // a trailing footnote after they've already found and pasted it.
             // Same underlying /verify link either way (completeSignIn
-            // doesn't care which `type` it is).
-            Text("Check \(sentTo) for an email from us — the first time, it may say "
-                + "“Confirm your signup” instead of “sign in.” Both work the same way.")
+            // doesn't care which `type` it is). Two separate Text views, not
+            // one long sentence — each becomes its own row with natural
+            // spacing, instead of a single dense wrapped paragraph.
+            Text("Check \(sentTo) for an email from us.")
+            Text("The first time, it may say “Confirm your signup” instead of "
+                + "“sign in.” Both work the same way.")
+                .font(.footnote)
+                .foregroundStyle(.mutedText)
             TextField("Paste the link here", text: $pastedLink)
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
