@@ -38,7 +38,11 @@ struct RetroStacksApp: App {
             )
             self.container = container
             // `App.init()` runs on the main actor, so the seed is safe here.
-            SampleData.seedIfNeeded(container.mainContext)
+            // Sample *collection* data only for -uiTesting — existing tests
+            // assert against its known, stable content (e.g. SNES rows in
+            // NavigationTests). A real install gets the catalog only, no
+            // demo "owned" games standing in for the user's actual collection.
+            SampleData.seedIfNeeded(container.mainContext, includeSampleCollection: Self.isUITesting)
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
