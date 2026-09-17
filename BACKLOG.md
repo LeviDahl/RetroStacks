@@ -890,3 +890,60 @@ tooling):
 - EU / JP region switch (`Region` already modeled).
 - Revisit the `GeometryReader` breakdown bar if the `_NSDetectedLayoutRecursion`
   log ever turns into visible jank.
+
+## Real-usage feedback, round 2 (2026-09-17, first pass testing Phase 4)
+
+- ~~**`CatalogSection.items` recomputed on every body pass.**~~ Fixed. Same
+  bug class as `SystemGamesList.cachedCatalog` above, just missed when
+  `CatalogSection` was built: `viewModel.apply(to: allItems)` filters/sorts
+  up to ~13,150 items as a plain computed property, and `allItems` is an
+  unscoped `@Query`, so any `CatalogItem` change anywhere re-triggers it.
+  Cached in `@State`, refreshed via `.task(id:)` on real filter/sort/search
+  changes, seeded synchronously in `.onAppear` too (avoids a one-frame
+  "No Matches" flash when arriving with a platform already picked, e.g. from
+  Dashboard's breakdown row).
+- **Sidebar navigation lag (~2s per click, macOS) — partially investigated,
+  not fully explained.** Measured for real rather than guessed: a scratch
+  test opened the actual on-disk dev store (13k+ `CatalogItem` rows) fresh
+  and timed `context.fetch` for `CatalogItem`/`Platform`/`CollectionItem`
+  plus touching every item's `.platform` relationship — **under 1 second
+  total**, so the raw fetch isn't the ~2s cost by itself. Leading
+  hypothesis, not yet confirmed: `RootView.sectionView`'s `switch` returns a
+  different concrete view type per `AppSection` case, so every sidebar
+  click fully tears down and reconstructs whichever screen you're
+  leaving/entering — no `@Query`/`@State` survives across a switch, all of
+  it re-runs from scratch every time, on every destination (matches the
+  report that it's not just Catalog that's slow). A real fix would mean
+  keeping all section views alive simultaneously (e.g. a `ZStack` +
+  `.hidden()`/opacity instead of a destructive `switch`) rather than
+  rebuilding on every click — a real architecture change with a real
+  tradeoff (filters/scroll position would then persist across tab switches
+  instead of always starting fresh), so not done without discussing it
+  first. The `CatalogSection.items` fix above is real and worth keeping
+  regardless, but shouldn't be assumed to be the whole story here.
+- ~~**macOS Browse Catalog toolbar: "+"/Kind picker/Filter menu visibly
+  clipped.**~~ Attempted fix, **not yet visually confirmed** — no safe way
+  to screenshot the live macOS app from this session (screen capture here
+  is restricted to app-window-only, declined rather than risk a repeat of
+  the earlier full-desktop-capture near-miss logged elsewhere in this
+  project's history), so this was diagnosed from a user-provided screenshot
+  and code reading only. Three bare `ToolbarItem`s (`Button` + `Picker` +
+  `Menu`) regrouped into one explicit `ToolbarItemGroup`, since macOS's
+  automatic glass-capsule grouping across dissimilar adjacent controls is
+  the likeliest cause — no `.clipped()`/fixed-height modifier found
+  anywhere in the toolbar's own code to explain it directly. Needs a real
+  look after rebuilding.
+- ~~**"Add a custom entry" only reachable from Browse Catalog, not from "Add
+  to Collection."**~~ Fixed. The user's own framing: this flow is exactly
+  the moment someone realizes the catalog is missing something, so it
+  should offer to create it right there, not just on the standalone browse
+  screen. `CustomCatalogItemSheet` gained `initialName` (prefills from
+  whatever was already typed into the search field) and `onCreated`
+  (fires after a successful save) so `AddToCollectionFlow` can chain
+  straight into its own existing `add(_:)` — the same `QuickAddSheet`-or-
+  direct-add path every other catalog item in this flow already goes
+  through, so creating a custom entry here actually adds it to the
+  collection/wishlist, not just creates it. A "Can't find it? Add a Custom
+  Entry" row sits at the bottom of the platform-browse list, and the search
+  results list shows a stronger "No matches — Add '\<query\>' as a Custom
+  Entry" variant when nothing matched.

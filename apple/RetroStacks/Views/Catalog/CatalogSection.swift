@@ -14,7 +14,25 @@ struct CatalogSection: View {
     @State private var account = AccountService.shared
     @State private var isShowingCustomEntrySheet = false
 
-    private var items: [CatalogItem] { viewModel.apply(to: allItems) }
+    /// `viewModel.apply(to: allItems)` filters/sorts up to ~13,150 items —
+    /// same bug class as `SystemGamesList.cachedCatalog` (see its doc
+    /// comment): as a plain computed property this re-ran on *every* body
+    /// evaluation, including ones with nothing to do with this screen's own
+    /// filters (`allItems` is an unscoped `@Query`, so any `CatalogItem`
+    /// change anywhere fires it). Cached here, refreshed only via
+    /// `.task(id:)` on real filter/sort/search changes. Same accepted
+    /// tradeoff as `SystemGamesList`: `ownershipFilter` won't live-reorder
+    /// as collection entries change elsewhere — it re-filters on the next
+    /// real dependency change instead of watching `CollectionItem` too.
+    @State private var cachedItems: [CatalogItem] = []
+
+    private var itemsCacheKey: String {
+        "\(viewModel.kindFilter?.rawValue ?? "-")|\(viewModel.platformSlugFilter ?? "-")|"
+            + "\(viewModel.generationFilter.map(String.init) ?? "-")|\(viewModel.ownershipFilter.rawValue)|"
+            + "\(viewModel.searchText)|\(viewModel.sortField.rawValue)|\(viewModel.sortAscending)"
+    }
+
+    private var items: [CatalogItem] { cachedItems }
     private var selectedItem: CatalogItem? {
         guard let selectedID else { return nil }
         return allItems.first { $0.persistentModelID == selectedID }
@@ -45,6 +63,7 @@ struct CatalogSection: View {
                     prompt: viewModel.platformSlugFilter == nil ? "Search the whole catalog" : "Search \(navigationTitleText)"
                 )
                 .toolbar { toolbarContent }
+                .task(id: itemsCacheKey) { cachedItems = viewModel.apply(to: allItems) }
                 .sheet(isPresented: $isShowingCustomEntrySheet) {
                     CustomCatalogItemSheet(initialPlatformSlug: viewModel.platformSlugFilter)
                 }
@@ -65,6 +84,11 @@ struct CatalogSection: View {
         .onAppear {
             if let initialPlatformSlug { viewModel.platformSlugFilter = initialPlatformSlug }
             if let initialKind { viewModel.kindFilter = initialKind }
+            // Seed synchronously, same frame as the filters above — arriving
+            // here already filtered (e.g. a platform tapped from Dashboard)
+            // would otherwise show a one-frame "No Matches" flash before
+            // `.task(id:)` catches up (it starts a beat after `onAppear`).
+            cachedItems = viewModel.apply(to: allItems)
         }
     }
 
@@ -139,19 +163,6 @@ struct CatalogSection: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem {
-            Button {
-                isShowingCustomEntrySheet = true
-            } label: {
-                Label("Add Custom Entry", systemImage: "plus")
-            }
-            .disabled(!account.state.isSignedIn)
-            .help(
-                account.state.isSignedIn
-                    ? "Add a game the catalog is missing, or a bootleg/variant just for you."
-                    : "Sign in to add a custom catalog entry."
-            )
-        }
         if viewModel.platformSlugFilter != nil {
             ToolbarItem(placement: .cancellationAction) {
                 Button {
@@ -162,14 +173,29 @@ struct CatalogSection: View {
                 }
             }
         }
-        ToolbarItem {
+        // Grouped explicitly (not three bare `ToolbarItem`s) so macOS lays
+        // these out as one coherent control cluster instead of improvising a
+        // shared glass capsule around whatever happens to be adjacent — found
+        // live 2026-09-17: three separate `ToolbarItem`s here rendered with
+        // their tops visibly clipped inside a shared pill background.
+        ToolbarItemGroup {
+            Button {
+                isShowingCustomEntrySheet = true
+            } label: {
+                Label("Add Custom Entry", systemImage: "plus")
+            }
+            .labelStyle(.iconOnly)
+            .disabled(!account.state.isSignedIn)
+            .help(
+                account.state.isSignedIn
+                    ? "Add a game the catalog is missing, or a bootleg/variant just for you."
+                    : "Sign in to add a custom catalog entry."
+            )
             Picker("Kind", selection: $viewModel.kindFilter) {
                 Text("All").tag(ItemKind?.none)
                 ForEach(ItemKind.allCases) { Label($0.pluralName, systemImage: $0.symbol).tag(ItemKind?.some($0)) }
             }
             .pickerStyle(.menu)
-        }
-        ToolbarItem {
             Menu {
                 Picker("Platform", selection: $viewModel.platformSlugFilter) {
                     Text("All Platforms").tag(String?.none)

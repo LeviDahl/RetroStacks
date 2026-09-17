@@ -19,6 +19,8 @@ struct AddToCollectionFlow: View {
 
     @Query(sort: \Platform.generation) private var platforms: [Platform]
     @State private var searchText = ""
+    @State private var account = AccountService.shared
+    @State private var isShowingCustomEntrySheet = false
     #if os(iOS)
     @State private var showingScanner = false
     #endif
@@ -37,7 +39,10 @@ struct AddToCollectionFlow: View {
         NavigationStack {
             Group {
                 if isSearching {
-                    CatalogSearchResultsList(searchText: searchText, status: defaultStatus, onAdd: add)
+                    CatalogSearchResultsList(
+                        searchText: searchText, status: defaultStatus, onAdd: add,
+                        onAddCustom: { isShowingCustomEntrySheet = true }
+                    )
                 } else {
                     platformList
                 }
@@ -76,19 +81,42 @@ struct AddToCollectionFlow: View {
                     dismiss()
                 }
             }
+            .sheet(isPresented: $isShowingCustomEntrySheet) {
+                CustomCatalogItemSheet(initialName: searchText, onCreated: add)
+            }
         }
         .frame(minWidth: 460, minHeight: 560)
     }
 
     private var platformList: some View {
-        List(platforms) { platform in
-            NavigationLink {
-                PlatformCatalogPicker(platform: platform, status: defaultStatus, onAdd: add)
-            } label: {
-                CatalogPlatformRow(platform: platform)
+        List {
+            ForEach(platforms) { platform in
+                NavigationLink {
+                    PlatformCatalogPicker(platform: platform, status: defaultStatus, onAdd: add)
+                } label: {
+                    CatalogPlatformRow(platform: platform)
+                }
+            }
+            Section {
+                addCustomEntryRow
             }
         }
         .listStyle(.inset)
+    }
+
+    /// "Can't find it?" — the whole point of this sheet is adding *something*
+    /// to the collection, so a game the shared catalog is missing (a bootleg,
+    /// an obscure homebrew, a variant) needs a way in right here, not just on
+    /// the standalone Browse Catalog screen. Gated on sign-in like every
+    /// other custom-entry entry point, since RLS only accepts an owned insert.
+    private var addCustomEntryRow: some View {
+        Button {
+            isShowingCustomEntrySheet = true
+        } label: {
+            Label("Can't find it? Add a Custom Entry", systemImage: "plus.circle")
+        }
+        .disabled(!account.state.isSignedIn)
+        .help(account.state.isSignedIn ? "" : "Sign in to add a custom catalog entry.")
     }
 
     private func add(_ item: CatalogItem) {
@@ -186,8 +214,10 @@ private struct CatalogSearchResultsList: View {
     var searchText: String
     var status: CollectionStatus
     var onAdd: (CatalogItem) -> Void
+    var onAddCustom: () -> Void
 
     @Query(sort: [SortDescriptor(\CatalogItem.name)]) private var catalog: [CatalogItem]
+    @State private var account = AccountService.shared
     @State private var kindFilter: ItemKind?
 
     private var results: [CatalogItem] {
@@ -235,6 +265,19 @@ private struct CatalogSearchResultsList: View {
                         .buttonStyle(.plain)
                     }
                 }
+            }
+
+            Section {
+                Button {
+                    onAddCustom()
+                } label: {
+                    Label(
+                        results.isEmpty ? "No matches — Add \"\(searchText)\" as a Custom Entry" : "Can't find it? Add a Custom Entry",
+                        systemImage: "plus.circle"
+                    )
+                }
+                .disabled(!account.state.isSignedIn)
+                .help(account.state.isSignedIn ? "" : "Sign in to add a custom catalog entry.")
             }
         }
     }

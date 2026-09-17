@@ -10,6 +10,13 @@ import SwiftData
 struct CustomCatalogItemSheet: View {
     var variantOf: CatalogItem?
     var initialPlatformSlug: String?
+    var initialName: String = ""
+    /// Fires after a successful save, right after this sheet dismisses
+    /// itself — lets a caller like `AddToCollectionFlow` continue straight
+    /// into its own `add(_:)` (the same `QuickAddSheet`-or-direct-add path
+    /// every other catalog item there goes through), so creating a custom
+    /// entry from "Add to Collection" actually adds it, not just creates it.
+    var onCreated: (CatalogItem) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -28,10 +35,17 @@ struct CustomCatalogItemSheet: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
 
-    init(variantOf: CatalogItem? = nil, initialPlatformSlug: String? = nil) {
+    init(
+        variantOf: CatalogItem? = nil,
+        initialPlatformSlug: String? = nil,
+        initialName: String = "",
+        onCreated: @escaping (CatalogItem) -> Void = { _ in }
+    ) {
         self.variantOf = variantOf
         self.initialPlatformSlug = initialPlatformSlug
-        _name = State(initialValue: variantOf?.name ?? "")
+        self.initialName = initialName
+        self.onCreated = onCreated
+        _name = State(initialValue: variantOf?.name ?? initialName)
         _kind = State(initialValue: variantOf?.kind ?? .game)
         _platformSlug = State(initialValue: variantOf?.platform?.slug ?? initialPlatformSlug)
         _manufacturerOrPublisher = State(initialValue: variantOf?.manufacturerOrPublisher ?? "")
@@ -128,9 +142,10 @@ struct CustomCatalogItemSheet: View {
         errorMessage = nil
         Task {
             do {
-                try await CustomCatalogItemActions.create(draft, platform: platform, in: modelContext)
+                let item = try await CustomCatalogItemActions.create(draft, platform: platform, in: modelContext)
                 isSaving = false
                 dismiss()
+                onCreated(item)
             } catch SyncError.notSignedIn {
                 isSaving = false
                 errorMessage = "Sign in to add a custom catalog entry — it's saved to your account, not just this device."
