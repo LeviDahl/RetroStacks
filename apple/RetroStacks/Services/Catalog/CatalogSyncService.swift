@@ -2,9 +2,14 @@ import Foundation
 import Observation
 import SwiftData
 
-/// Pulls the reference catalog from the data feed and reconciles it into
-/// SwiftData, keyed by `slug`. Additive for now — items that vanish from the
-/// feed are left in place until the real catalog stabilises.
+/// Pulls the reference catalog and reconciles it into SwiftData, keyed by
+/// `slug`. Additive for now — items that vanish from the feed are left in
+/// place until the real catalog stabilises.
+///
+/// Default repository is `SupabaseCatalogRepository` (live `catalog_items`
+/// table, public + signed-in-user's-own rows) as of 2026-09-17 — was a
+/// static JSON feed before; this type's own reconcile logic didn't need to
+/// change at all, only which `CatalogRepository` it's handed.
 ///
 /// Never throws out to the caller: if the fetch fails, whatever's already in the
 /// store (the `SampleData` seed, or the last successful sync) stays put.
@@ -25,7 +30,7 @@ final class CatalogSyncService {
     /// It's the app-lifetime `mainContext`, so holding it is harmless.
     private var lastContext: ModelContext?
 
-    static let shared = CatalogSyncService(repository: RemoteCatalogRepository())
+    static let shared = CatalogSyncService(repository: SupabaseCatalogRepository())
 
     init(repository: CatalogRepository) {
         self.repository = repository

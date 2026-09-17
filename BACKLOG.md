@@ -755,23 +755,39 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
   -supabase.mjs` batches the upsert (500/call); a full run migrated all
   13,185 items, verified per-platform against the source JSON — all 10
   platforms match exactly, not just a total-count check.
-- **Phase 3 — rewrite the app's catalog sync.** Not started. The real risk
-  phase: `CatalogSyncService`/`CatalogSeedStore`/`RemoteCatalogRepository`
-  currently expect one static downloaded file; they need to become an
-  incremental Supabase pull (same `updated_at`-since-last-sync shape
-  `SyncCoordinator` already proved out for collection sync) plus real write
-  support for a user's own private rows. First real sync at ~13,150 rows
-  will want the same encoding/perf scrutiny the collection-sync bugs got
-  (PGRST102-style key-mismatch risk applies here too — `catalog_items` has
-  even more nullable columns than `collection_items` did).
-- **Phase 4 — "add a custom catalog entry" UI.** Not started. Depends on
-  Phase 3 (needs real write support in the app first). This is what actually
-  delivers the variant-entry feature above.
+- ~~**Phase 3 — rewrite the app's catalog sync.**~~ Done. New
+  `SupabaseCatalogRepository` (drop-in `CatalogRepository`, same contract
+  `RemoteCatalogRepository` had) paginates `catalog_items` (PostgREST caps a
+  response at 1,000 rows, so this loops on `offset`) — public rows always,
+  plus the signed-in user's own private rows in the same fetch, since that's
+  just what the SELECT RLS policy already returns for whichever key/token is
+  used. Platforms stay bundled/local, read from the same seed
+  `CatalogSeedStore` already uses, so `reconcile`'s platform handling didn't
+  need to change at all — only where `items` comes from did.
+  `CatalogSyncService.shared` now defaults to it. Full-catalog fetch (13,185
+  items, ~13 pages) verified live at ~5-7s, comparable to the old static-feed
+  path, not a regression. `reconcile` itself untouched — still additive-only
+  (see the cleanup item below for why that's now worth revisiting).
+- **Phase 4 — "add a custom catalog entry" UI.** Not started — the natural
+  next step now that Phase 3 gives the app real Supabase-backed catalog
+  reads. This is what actually delivers the variant-entry feature above.
 - **Phase 5 — admin promotion surface.** Not started, not urgent — a
   privileged action for a single admin (today, just the one account) to
   promote a `submitted_for_public` row to real public. User's own framing:
   natural fit for the future companion website's admin section, not
   worth a whole in-app UI for one person's occasional action.
+- **Cleanup: stale local catalog items never get pruned.** Found while
+  verifying Phase 3 live: `CatalogSyncService.reconcile` has always been
+  "additive only — items that vanish from the feed are left in place" (a
+  pre-existing, deliberate simplification, not introduced by Phase 3) — a
+  local test install that's lived through this session's earlier Atari 2600
+  slug-scheme change (`atari-2600-frogger` → `2600-frogger`) still has 492
+  orphaned rows under the old slugs, confirmed by diffing local slugs against
+  the live Supabase set directly, not guessed. Harmless (just clutter, not
+  corruption) and a fresh install wouldn't have it at all, but worth actually
+  pruning (`deleted_at`-aware reconcile, or a "remove local items not in the
+  last full sync" pass) once the database/API layer itself is stable — not a
+  priority while that's still moving.
 
 ## Code health & error analytics
 
