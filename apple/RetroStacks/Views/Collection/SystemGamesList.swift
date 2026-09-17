@@ -28,19 +28,16 @@ struct SystemGamesList: View {
         self.mode = mode
         _searchQuery = State(initialValue: searchText)
         _scope = State(initialValue: mode == .wishlist ? .wanted : .owned)
-        // Seed synchronously so the first render is already correct, no
-        // one-frame flash of the empty state before `.task(id:)` runs.
-        // Keys/defaults duplicated here since `@AppStorage` isn't readable
-        // this early in `init`.
-        let store = UserDefaults.standard
-        let kindFilter = KindFilter(rawValue: store.string(forKey: "system.kindFilter") ?? "") ?? .games
-        let sortField = SortField(rawValue: store.string(forKey: "system.sortField") ?? "") ?? .title
-        let sortAscending = store.object(forKey: "system.sortAscending") as? Bool ?? true
-        let showHidden = store.object(forKey: "system.showHidden") as? Bool ?? false
-        _cachedCatalog = State(initialValue: Self.computeCatalog(
-            platform: platform, kindFilter: kindFilter, searchText: searchText,
-            sortField: sortField, sortAscending: sortAscending, showHidden: showHidden
-        ))
+        // Deliberately NOT seeded synchronously here anymore — found live
+        // 2026-09-17 that `platform.catalogItems`'s first access (a SwiftData
+        // relationship fault, thousands of rows post-IGDB) took 1-3+ seconds
+        // against a real store, and running that inside `init` blocks the
+        // main thread during the navigation push itself, freezing the whole
+        // app for that long. `.task(id:)` below now does this asynchronously
+        // instead, trading the old "no empty-state flash" guarantee for "the
+        // screen navigates immediately and shows a spinner" — a real
+        // regression on data volumes where the synchronous cost was small,
+        // a real fix on today's, where it isn't.
     }
 
     @Environment(\.modelContext) private var modelContext
@@ -132,6 +129,12 @@ struct SystemGamesList: View {
     /// elsewhere — re-sorts on the next real dependency change instead of
     /// reintroducing an `liveEntries` watch for a narrow case.
     @State private var cachedCatalog: [CatalogItem] = []
+    /// `false` until `recomputeCatalog()` has run at least once — distinguishes
+    /// "still loading" from "genuinely nothing here" so the empty state
+    /// doesn't flash a wrong, misleading message while `.task(id:)` is still
+    /// working. See the `init` doc comment: this is a deliberate tradeoff for
+    /// not blocking the main thread on navigation.
+    @State private var hasLoadedCatalog = false
 
     private var catalogCacheKey: String {
         "\(platform.slug)|\(kindFilter.rawValue)|\(searchQuery)|\(sortField.rawValue)|\(sortAscending)|\(showHidden)"
@@ -142,11 +145,9 @@ struct SystemGamesList: View {
             platform: platform, kindFilter: kindFilter, searchText: searchQuery,
             sortField: sortField, sortAscending: sortAscending, showHidden: showHidden
         )
+        hasLoadedCatalog = true
     }
 
-    /// No dependency on `self` — safe to call from `init` (to seed
-    /// `cachedCatalog` synchronously, so the very first render is already
-    /// correct) as well as from `recomputeCatalog()` later.
     private static func computeCatalog(
         platform: Platform, kindFilter: KindFilter, searchText: String,
         sortField: SortField, sortAscending: Bool, showHidden: Bool
@@ -315,7 +316,13 @@ struct SystemGamesList: View {
                 }
             }
 
-            if shown.isEmpty {
+            if !hasLoadedCatalog {
+                Section {
+                    loadingState
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            } else if shown.isEmpty {
                 Section {
                     emptyState
                         .listRowInsets(EdgeInsets())
@@ -355,7 +362,9 @@ struct SystemGamesList: View {
                     SystemSummaryStrip(summary: summary)
                 }
 
-                if shown.isEmpty {
+                if !hasLoadedCatalog {
+                    loadingState
+                } else if shown.isEmpty {
                     emptyState
                 } else {
                     Text("\(shown.count) \(shown.count == 1 ? "title" : "titles")")
@@ -508,6 +517,14 @@ struct SystemGamesList: View {
         case .missing: "Nothing missing"
         case .all: "No \(kindFilter.label.lowercased()) catalogued"
         }
+    }
+
+    /// Shown while `.task(id:)` is still faulting/filtering/sorting the
+    /// platform's catalog — see `hasLoadedCatalog`. Same region as
+    /// `emptyState` below, for the same reason.
+    private var loadingState: some View {
+        ProgressView("Loading \(platform.shortName) catalog…")
+            .frame(maxWidth: .infinity, minHeight: 240)
     }
 
     /// Scoped to just the list/grid region (below the About card, controls,

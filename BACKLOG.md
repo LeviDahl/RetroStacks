@@ -947,3 +947,49 @@ tooling):
   Entry" row sits at the bottom of the platform-browse list, and the search
   results list shows a stronger "No matches — Add '\<query\>' as a Custom
   Entry" variant when nothing matched.
+- ~~**System list → system detail navigation, ~4s freeze; "Add to Collection"
+  noticeably laggy — confirmed as real main-thread blocking, not perceived.**~~
+  Quick mitigation done; the real fix is below, deferred. Measured for real
+  against the on-disk dev store (a scratch test replicating the exact work
+  each does): `SystemGamesList.init`'s synchronous seed (`platform
+  .catalogItems`'s first access — a SwiftData relationship fault over
+  thousands of rows post-IGDB — then a filter+sort) took **3.37s and 1.43s**
+  across two runs, matching the reported ~4s almost exactly; `CollectionActions
+  .add`'s `context.save()` took **0.87s and 1.44s**, matching "noticeably
+  laggy" rather than "frozen." Both run synchronously on `@MainActor`, so
+  they block the whole app, not just their own screen. Fixed *for
+  `SystemGamesList`*: stopped seeding `cachedCatalog` synchronously in
+  `init` (was there specifically to avoid a one-frame empty-state flash —
+  a bad tradeoff once the synchronous cost is seconds, not a frame). A new
+  `hasLoadedCatalog` flag now distinguishes "still loading" from "genuinely
+  empty" so `.task(id:)` populating the cache asynchronously shows a real
+  `ProgressView` instead of either a wrong empty-state or nothing. This
+  makes the *navigation transition* itself smooth — the screen appears
+  immediately — but the underlying fault+sort still takes the same 1-3+
+  seconds once it starts running; it's deferred off the critical path of
+  the push animation, not made faster.
+- **Follow-up, not done: the actual non-blocking fix (background `ModelActor`)
+  and a possible catalog/collection store split.** Two related but distinct
+  pieces of real work, both flagged rather than rushed into this pass given
+  their size/risk:
+  - Move `SystemGamesList`'s catalog fault+sort (and anywhere else with the
+    same shape) to a background `ModelActor` with its own `ModelContext` on
+    the same store, fetching via a predicate (`#Predicate<CatalogItem> {
+    $0.platform?.slug == someSlug }`, matching `CatalogBrowseViewModel
+    .apply`'s existing pattern) instead of touching the live `platform
+    .catalogItems` relationship on the main actor at all — resolving back to
+    live `@Model` references via `PersistentIdentifier` once back on
+    `@MainActor`. This is the piece that would make the 1-3s cost actually
+    disappear (or at least move off the main thread) rather than just being
+    deferred past the navigation animation.
+  - `CollectionActions.add`'s `~1s` save is harder to fix the same way —
+    SwiftData saves generally need to happen on the context's own actor, and
+    a lot of code assumes `CollectionActions.add`/`.remove` complete
+    synchronously on `@MainActor`. Worth investigating whether splitting the
+    catalog (huge, rarely-written) and the collection (small, frequently
+    written) into two separate `ModelContainer`s/persistent stores would let
+    a collection save avoid considering the whole 13k+-row catalog graph at
+    all — unconfirmed whether that's actually *why* the save is slow (could
+    also just be inherent SQLite/WAL overhead at this store size), so this
+    needs its own real measurement before committing to the bigger
+    persistent-store-split architecture change it implies.
