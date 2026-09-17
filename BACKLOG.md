@@ -671,6 +671,55 @@ patterns already proven elsewhere (`CollectionSection`'s system-first list,
 `SystemGamesList`'s per-platform search). Worth a look next time the app is
 open.
 
+~~Correction 2026-09-17~~: that last claim — "`SystemGamesList`'s per-platform
+search" as an already-proven pattern — was stale/wrong. `SystemGamesList`
+never had its own `.searchable()`; it only ever showed whatever a *parent*
+screen's search bar happened to propagate down the nav stack, inconsistent
+depending on entry point. Found from real usage feedback ("a title search
+would be useful browsing a system") — the filter logic already handled
+search text correctly, it just had no always-present local source. Fixed:
+see "Real-usage feedback" below.
+
+## Real-usage feedback (2026-09-17, first live sync + collection session)
+
+First real-world session using the app for actual collection work (post the
+end-to-end sync fixes above). Four items came back:
+
+- ~~**Slowness adding/removing titles.**~~ Fixed. `SystemGamesList.catalog`
+  (filter + sort over a whole platform's catalog, up to ~1,900 items for
+  SNES) ran as a plain computed property, recomputed on *every* SwiftUI body
+  evaluation — since `liveEntries` is an unscoped `@Query` of every
+  `CollectionItem`, that fired on every add/remove/edit *anywhere* in the
+  app, not just this screen. Fine at ~400 items/platform (pre-IGDB), noticeably
+  slow at ~5x that. Cached in `@State`, refreshed only via `.task(id:)` on
+  real dependency changes.
+- ~~**Per-system title search.**~~ Fixed — see the correction above.
+  `SystemGamesList` now has its own `.searchable()` field, always present.
+- ~~**Manual hide/exclude for catalog slop.**~~ Fixed, as a fast-turnaround
+  alternative to a full licensed/unlicensed heuristic (still open, below):
+  `CatalogItem.isHidden`, toggled via leading swipe (iOS) / context menu
+  (macOS), with a "Show Hidden Items" toggle in the filter menu to review/
+  unhide. Purely local — never touched by `CatalogSyncService.reconcile`.
+- **Variants (5-screw NES, black-label carts, etc.) as distinct catalog
+  entries.** User's call: new `CatalogItem` rows per variant, not a free-text
+  field on the owned item. Not built yet — needs an actual "add a custom
+  catalog entry" flow (none exists; the app only ever browses the
+  IGDB-synced catalog today), and a decision on whether variant data ever
+  comes from IGDB or is entirely hand-curated. `CatalogItem.variant: String?`
+  already exists as a field (seed data uses it for hardware sub-labels like
+  "Player's Choice") — the gap is the *creation* UI, not the data model.
+- **Licensed/unlicensed filtering.** User's call: a heuristic using IGDB's
+  `involved_companies.publisher` as a first signal (unpublished likely means
+  homebrew/ROM-hack, like NES "2048"), refined later. Not verified against
+  real data yet — needs a live IGDB query (I don't hold IGDB credentials
+  myself; every real API check this project has done went through the user
+  running `curl` and pasting the response back, same as the `category`/
+  `release_region` bugs found in `igdb.mjs`). Concretely: pull `2048`'s IGDB
+  entry with `fields name,involved_companies.publisher,involved_companies
+  .company.name;` and see whether it actually lacks a credited publisher, or
+  whether the signal is noisier than expected, before writing an ingest-time
+  filter around it.
+
 ## Code health & error analytics
 
 Raised 2026-09-13, prompted by the `userID`/snake_case bug above slipping
