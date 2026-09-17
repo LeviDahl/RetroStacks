@@ -52,6 +52,14 @@ final class CatalogItem {
     var priceGuideProviderID: String?
     var priceGuideUpdatedAt: Date?
 
+    /// A personal "not interested in this" flag — homebrew/ROM-hack/emulator-
+    /// only entries that slipped into the IGDB pull alongside real licensed
+    /// releases (e.g. NES "2048"). Purely local browsing preference, not
+    /// catalog data: never touched by `CatalogSyncService.reconcile`, which
+    /// only ever sets the specific feed-derived fields it knows about — same
+    /// safe pattern the pricing fields above already rely on.
+    var isHidden: Bool = false
+
     var platform: Platform?
 
     @Relationship(deleteRule: .cascade, inverse: \CollectionItem.catalogItem)

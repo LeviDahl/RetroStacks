@@ -12,13 +12,35 @@ struct SystemGamesList: View {
     var platform: Platform
     /// Only sets the initial scope (My Collection → Owned, Wishlist → Wanted).
     var mode: CollectionSection.Mode
-    var searchText: String
+
+    /// This screen never had its own search field — it only ever showed
+    /// whatever a *parent* screen's `.searchable()` happened to propagate
+    /// down the nav stack, which isn't consistent across every way to reach
+    /// this screen. Found live 2026-09-17: real per-platform search, always
+    /// present regardless of entry point. `searchQuery` is `@State`, seeded
+    /// from whatever the caller passed (so arriving here already filtered,
+    /// e.g. from `CollectionSection`'s own search, still works) but from then
+    /// on owned locally by this screen's own `.searchable()` field.
+    @State private var searchQuery: String
 
     init(platform: Platform, mode: CollectionSection.Mode = .collection, searchText: String = "") {
         self.platform = platform
         self.mode = mode
-        self.searchText = searchText
+        _searchQuery = State(initialValue: searchText)
         _scope = State(initialValue: mode == .wishlist ? .wanted : .owned)
+        // Seed synchronously so the first render is already correct, no
+        // one-frame flash of the empty state before `.task(id:)` runs.
+        // Keys/defaults duplicated here since `@AppStorage` isn't readable
+        // this early in `init`.
+        let store = UserDefaults.standard
+        let kindFilter = KindFilter(rawValue: store.string(forKey: "system.kindFilter") ?? "") ?? .games
+        let sortField = SortField(rawValue: store.string(forKey: "system.sortField") ?? "") ?? .title
+        let sortAscending = store.object(forKey: "system.sortAscending") as? Bool ?? true
+        let showHidden = store.object(forKey: "system.showHidden") as? Bool ?? false
+        _cachedCatalog = State(initialValue: Self.computeCatalog(
+            platform: platform, kindFilter: kindFilter, searchText: searchText,
+            sortField: sortField, sortAscending: sortAscending, showHidden: showHidden
+        ))
     }
 
     @Environment(\.modelContext) private var modelContext
@@ -38,6 +60,11 @@ struct SystemGamesList: View {
     /// reversible for free, no per-field "reverse" case needed.
     @AppStorage("system.sortAscending") private var sortAscending = true
     @AppStorage("system.showAbout") private var showAbout = true
+    /// Off by default: hidden items (homebrew/ROM-hacks/etc. someone's
+    /// explicitly not interested in — see `CatalogItem.isHidden`) stay out of
+    /// normal browsing. Turning this on is how you get back to one to unhide
+    /// it — there's no separate management screen for v1.
+    @AppStorage("system.showHidden") private var showHidden = false
 
     enum SortField: String, CaseIterable, Identifiable {
         case title, releaseYear, publisher, value
@@ -93,10 +120,41 @@ struct SystemGamesList: View {
 
     // MARK: Derived
 
-    private var catalog: [CatalogItem] {
+    /// Filter+sort over a whole platform's catalog (~1,900 items for SNES)
+    /// used to run as a plain computed property on *every* body evaluation —
+    /// since `liveEntries` below is an unscoped `@Query`, that fired on every
+    /// add/remove/edit anywhere in the app, not just this screen. Fine at
+    /// ~400 items/platform, noticeably slow found live 2026-09-17 at ~5x that
+    /// post-IGDB. Cached here, refreshed only via `.task(id:)` in `body` on
+    /// real dependency changes. `shown`'s filter over this stays a plain
+    /// computed property (a cheap O(n) pass, not a re-sort). Accepted
+    /// tradeoff: "Value" sort won't live-reorder as a price changes
+    /// elsewhere — re-sorts on the next real dependency change instead of
+    /// reintroducing an `liveEntries` watch for a narrow case.
+    @State private var cachedCatalog: [CatalogItem] = []
+
+    private var catalogCacheKey: String {
+        "\(platform.slug)|\(kindFilter.rawValue)|\(searchQuery)|\(sortField.rawValue)|\(sortAscending)|\(showHidden)"
+    }
+
+    private func recomputeCatalog() {
+        cachedCatalog = Self.computeCatalog(
+            platform: platform, kindFilter: kindFilter, searchText: searchQuery,
+            sortField: sortField, sortAscending: sortAscending, showHidden: showHidden
+        )
+    }
+
+    /// No dependency on `self` — safe to call from `init` (to seed
+    /// `cachedCatalog` synchronously, so the very first render is already
+    /// correct) as well as from `recomputeCatalog()` later.
+    private static func computeCatalog(
+        platform: Platform, kindFilter: KindFilter, searchText: String,
+        sortField: SortField, sortAscending: Bool, showHidden: Bool
+    ) -> [CatalogItem] {
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         let filtered = platform.catalogItems.filter { item in
-            (kindFilter.kind == nil || item.kind == kindFilter.kind)
+            (showHidden || !item.isHidden)
+                && (kindFilter.kind == nil || item.kind == kindFilter.kind)
                 && (q.isEmpty
                     || item.name.lowercased().contains(q)
                     || (item.variant?.lowercased().contains(q) ?? false)
@@ -105,26 +163,27 @@ struct SystemGamesList: View {
         return filtered.sorted { a, b in
             switch sortField {
             case .title:
-                return ascendingCompare(a.name.lowercased(), b.name.lowercased())
+                return ascendingCompare(a.name.lowercased(), b.name.lowercased(), sortAscending: sortAscending)
             case .releaseYear:
                 return ascendingCompare(a.releaseYearNA ?? .max, b.releaseYearNA ?? .max,
-                                         tiebreak: (a.name, b.name))
+                                         sortAscending: sortAscending, tiebreak: (a.name, b.name))
             case .publisher:
                 return ascendingCompare(a.manufacturerOrPublisher ?? "~", b.manufacturerOrPublisher ?? "~",
-                                         tiebreak: (a.name, b.name))
+                                         sortAscending: sortAscending, tiebreak: (a.name, b.name))
             case .value:
                 let av = a.ownedEntry?.estimatedValue ?? a.headlineValue ?? 0
                 let bv = b.ownedEntry?.estimatedValue ?? b.headlineValue ?? 0
-                return ascendingCompare(av, bv, tiebreak: (a.name, b.name))
+                return ascendingCompare(av, bv, sortAscending: sortAscending, tiebreak: (a.name, b.name))
             }
         }
     }
 
     /// One comparator every sort field routes through, `sortAscending`-aware.
     /// Equal primary values fall back to `tiebreak` (always name-ascending, so
-    /// ties never look shuffled) when one is supplied.
-    private func ascendingCompare<T: Comparable>(
-        _ lhs: T, _ rhs: T, tiebreak: (String, String)? = nil
+    /// ties never look shuffled) when one is supplied. `static` (no `self`) so
+    /// `computeCatalog` can call it from `init`, before `self` is fully formed.
+    private static func ascendingCompare<T: Comparable>(
+        _ lhs: T, _ rhs: T, sortAscending: Bool, tiebreak: (String, String)? = nil
     ) -> Bool {
         if lhs != rhs { return sortAscending ? lhs < rhs : lhs > rhs }
         guard let tiebreak else { return false }
@@ -143,7 +202,7 @@ struct SystemGamesList: View {
     /// True when the item is already in whatever list the current scope adds to.
     private func inList(_ c: CatalogItem) -> Bool { c.entry(for: scope.addStatus) != nil }
 
-    private var shown: [CatalogItem] { catalog.filter { matches($0, scope) } }
+    private var shown: [CatalogItem] { cachedCatalog.filter { matches($0, scope) } }
 
     private var summary: CollectionStats.SystemSummary? {
         CollectionStatsBuilder.systemSummaries(from: liveEntries, status: .owned)
@@ -158,6 +217,8 @@ struct SystemGamesList: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .task(id: catalogCacheKey) { recomputeCatalog() }
+            .searchable(text: $searchQuery, prompt: "Search \(platform.shortName)")
             .toolbar {
                 if canBulkAdd {
                     ToolbarItem {
@@ -360,6 +421,17 @@ struct SystemGamesList: View {
                 onRemove: catalogItem.entry(for: addStatus).map { entry in { withAnimation { CollectionActions.remove(entry, in: modelContext) } }
                 }
             )
+            .contextMenu {
+                Button {
+                    withAnimation { toggleHidden(catalogItem) }
+                } label: {
+                    Label(
+                        catalogItem.isHidden ? "Unhide" : "Hide",
+                        systemImage: catalogItem.isHidden ? "eye" : "eye.slash"
+                    )
+                }
+            }
+            .opacity(catalogItem.isHidden ? 0.5 : 1) // dimmed to read as "set aside," not normal
         }
     }
     #endif
@@ -389,6 +461,10 @@ struct SystemGamesList: View {
             Toggle(isOn: $sortAscending) {
                 Label("Ascending", systemImage: "arrow.up")
             }
+            Divider()
+            Toggle(isOn: $showHidden) {
+                Label("Show Hidden Items", systemImage: "eye.slash")
+            }
         } label: {
             Label("\(kindFilter.label) · \(sortField.label) \(sortAscending ? "↑" : "↓")",
                   systemImage: "line.3.horizontal.decrease.circle")
@@ -396,6 +472,12 @@ struct SystemGamesList: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+    }
+
+    private func toggleHidden(_ catalogItem: CatalogItem) {
+        catalogItem.isHidden.toggle()
+        modelContext.saveLoggingErrors(reportingAs: .localSave)
+        recomputeCatalog()
     }
 
     private func handleAdd(_ catalogItem: CatalogItem, status: CollectionStatus) {
@@ -484,6 +566,18 @@ struct SystemGamesList: View {
                     }
                 }
             }
+            .swipeActions(edge: .leading) {
+                Button {
+                    withAnimation { toggleHidden(catalogItem) }
+                } label: {
+                    Label(
+                        catalogItem.isHidden ? "Unhide" : "Hide",
+                        systemImage: catalogItem.isHidden ? "eye" : "eye.slash"
+                    )
+                }
+                .tint(.mutedText)
+            }
+            .opacity(catalogItem.isHidden ? 0.5 : 1) // dimmed to read as "set aside," not normal
         }
     }
     #endif
@@ -538,7 +632,7 @@ struct SystemGamesList: View {
     private var bulkStatus: CollectionStatus { .owned }
 
     private func commitBulkAdd() {
-        let bySlug = Dictionary(catalog.map { ($0.slug, $0) }, uniquingKeysWith: { a, _ in a })
+        let bySlug = Dictionary(cachedCatalog.map { ($0.slug, $0) }, uniquingKeysWith: { a, _ in a })
         withAnimation {
             for slug in picked {
                 guard let item = bySlug[slug] else { continue }
@@ -583,269 +677,4 @@ struct SystemGamesList: View {
         .padding(12)
         .background(.bar)
     }
-}
-
-// MARK: - iOS row
-
-/// Thumbnail + title + meta line — the shared visual for every catalog row in
-/// the drill-down (plain, selectable, hover).
-struct CatalogRowContent: View {
-    var catalogItem: CatalogItem
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ItemThumbnail(
-                kind: catalogItem.kind,
-                platformSymbol: catalogItem.platform?.iconSystemName,
-                imageName: catalogItem.imageName,
-                imageURL: catalogItem.imageURL,
-                size: 48, cornerRadius: 10
-            )
-            .accessibilityHidden(true) // decorative — the title text beside it says the same thing
-            VStack(alignment: .leading, spacing: 3) {
-                Text(catalogItem.displayTitle)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text(catalogItem.kind.displayName)
-                    if let year = catalogItem.releaseYearNA { Text("·"); Text(String(year)) }
-                    if let pub = catalogItem.manufacturerOrPublisher { Text("·"); Text(pub).lineLimit(1) }
-                }
-                .font(.caption)
-                .foregroundStyle(.mutedText)
-                .lineLimit(1)
-            }
-        }
-    }
-}
-
-/// A catalog row inside a platform drill-down: title + meta on the left,
-/// ownership state or a one-tap Add on the right. On macOS a wishlist toggle
-/// appears on hover.
-struct PlatformCatalogRow: View {
-    var catalogItem: CatalogItem
-    var listStatus: CollectionStatus
-    var onAdd: () -> Void
-    var onToggleWishlist: (() -> Void)?
-
-    @State private var hovering = false
-
-    private var entry: CollectionItem? { catalogItem.entry(for: listStatus) }
-    private var wishlisted: Bool { catalogItem.entry(for: .wishlist) != nil }
-
-    /// On iOS there's no hover state, so gating on `hovering` (macOS-only)
-    /// left the *only* way to add a not-yet-wishlisted item to the wishlist
-    /// from this row an undiscoverable leading swipe — the button only ever
-    /// appeared once an item was already wishlisted. Persistent on iOS;
-    /// still hover-revealed on macOS, where it's genuinely just decluttering
-    /// a denser layout, not hiding the only way in.
-    private var wishlistButtonVisible: Bool {
-        #if os(iOS)
-        true
-        #else
-        hovering || wishlisted
-        #endif
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if let entry {
-                NavigationLink(value: entry) { CatalogRowContent(catalogItem: catalogItem) }
-                    .buttonStyle(.plain)
-            } else {
-                NavigationLink(value: catalogItem) { CatalogRowContent(catalogItem: catalogItem) }
-                    .buttonStyle(.plain)
-            }
-
-            Spacer(minLength: 8)
-
-            if let onToggleWishlist, wishlistButtonVisible {
-                Button(action: onToggleWishlist) {
-                    Image(systemName: wishlisted ? "star.fill" : "star")
-                        .foregroundStyle(wishlisted ? .accentGold : .secondary)
-                }
-                .buttonStyle(.borderless)
-                .help(wishlisted ? "Remove from wishlist" : "Add to wishlist")
-                .accessibilityLabel(wishlisted ? "Remove from wishlist" : "Add to wishlist")
-                .transition(.opacity)
-            }
-
-            trailing
-        }
-        .padding(.vertical, 3)
-        .contentShape(Rectangle())
-        #if os(macOS)
-        .onHover { hovering = $0 }
-        .animation(.easeInOut(duration: 0.12), value: hovering)
-        #endif
-        .swipeActions(edge: .leading) {
-            if let onToggleWishlist {
-                Button(action: onToggleWishlist) {
-                    Label(wishlisted ? "Unwish" : "Wishlist",
-                          systemImage: wishlisted ? "star.slash" : "star")
-                }
-                // Fixed, not `.accentGold` — this is a fill with the
-                // system's own white label drawn on top, not text-on-wash,
-                // so it needs to stay dark enough for white-on-top contrast
-                // in *both* appearances, not flip like `.accentGold` does.
-                .tint(Color(red: 0.471, green: 0.337, blue: 0.0))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var trailing: some View {
-        if let entry {
-            VStack(alignment: .trailing, spacing: 3) {
-                if let value = entry.estimatedValue {
-                    Text(Money.string(value)).font(.callout.weight(.semibold)).foregroundStyle(.mutedText)
-                }
-                HStack(spacing: 5) {
-                    CompletenessBadge(completeness: entry.completeness)
-                    Image(systemName: listStatus == .wishlist ? "star.fill" : "checkmark.seal.fill")
-                        .font(.caption)
-                        .foregroundStyle(listStatus == .wishlist ? .accentGold : .accentGreen)
-                        .accessibilityLabel(listStatus == .wishlist ? "Wishlisted" : "Owned")
-                }
-            }
-            .accessibilityElement(children: .combine)
-        } else {
-            Button(action: onAdd) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.tint)
-            .help(listStatus == .wishlist ? "Add to wishlist" : "Add to collection")
-            .accessibilityLabel(listStatus == .wishlist ? "Add to wishlist" : "Add to collection")
-        }
-    }
-}
-
-/// Row shown while the list is in multi-select ("Select") mode: a checkbox in
-/// place of the disclosure / add button. Rows already in the list are locked.
-struct SelectableCatalogRow: View {
-    var catalogItem: CatalogItem
-    var alreadyIn: Bool
-    var picked: Bool
-    var toggle: () -> Void
-
-    var body: some View {
-        Button(action: toggle) {
-            HStack(spacing: 12) {
-                Image(systemName: alreadyIn ? "checkmark.circle.fill"
-                      : picked ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(alreadyIn ? .accentGreen : picked ? Color.accentColor : .secondary)
-                CatalogRowContent(catalogItem: catalogItem)
-                Spacer(minLength: 8)
-                if alreadyIn {
-                    Text("In list").font(.caption).foregroundStyle(.mutedText)
-                }
-            }
-            .padding(.vertical, 3)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(alreadyIn)
-    }
-}
-
-// MARK: - A–Z scrubber
-
-/// Trailing-edge letter index for long, title-sorted catalogs. Tap or drag a
-/// letter to jump. iOS only — macOS has a real scrollbar and more room.
-struct AZScrubber: View {
-    var letters: [String]
-    var onSelect: (String) -> Void
-
-    @State private var active: String?
-
-    var body: some View {
-        VStack(spacing: 1) {
-            ForEach(letters, id: \.self) { letter in
-                Text(letter)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(active == letter ? Color.white : Color.accentColor)
-                    .frame(width: 16, height: 15)
-                    .background {
-                        if active == letter {
-                            Circle().fill(Color.accentColor)
-                        }
-                    }
-            }
-        }
-        .padding(.vertical, 6)
-        .glassEffect(.regular, in: Capsule())
-        .contentShape(Capsule())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    let count = letters.count
-                    guard count > 0 else { return }
-                    let rowH: CGFloat = 16
-                    let idx = min(max(Int(value.location.y / rowH), 0), count - 1)
-                    let letter = letters[idx]
-                    if letter != active {
-                        active = letter
-                        onSelect(letter)
-                    }
-                }
-                .onEnded { _ in active = nil }
-        )
-        .sensoryFeedback(.selection, trigger: active)
-        .accessibilityLabel("Section index")
-    }
-}
-
-// MARK: - Summary strip
-
-/// Compact count / completion / value strip reused at the top of a system's list.
-struct SystemSummaryStrip: View {
-    var summary: CollectionStats.SystemSummary
-
-    var body: some View {
-        HStack(spacing: 0) {
-            metric("Owned",
-                   summary.catalogGameCount > 0
-                     ? "\(summary.ownedGameCount)/\(summary.catalogGameCount)"
-                     : "\(summary.ownedItemCount)")
-            Divider().frame(height: 34)
-            metric("Complete", summary.catalogGameCount > 0 ? "\(summary.completionPercent)%" : "—")
-            Divider().frame(height: 34)
-            metric("Value", Money.string(summary.value))
-            if summary.remainingValue > 0 {
-                Divider().frame(height: 34)
-                metric("To finish", Money.string(summary.remainingValue))
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func metric(_ label: String, _ value: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value).font(.headline.monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
-            Text(label).font(.caption2).foregroundStyle(.mutedText)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-#Preview {
-    let container = SampleData.previewContainer()
-    // #Preview only, fixture data is always valid.
-    // swiftlint:disable:next force_try
-    let platform = try! container.mainContext.fetch(FetchDescriptor<Platform>())
-        // "snes" is always seeded.
-        // swiftlint:disable:next force_unwrapping
-        .first { $0.slug == "snes" }!
-    NavigationStack {
-        SystemGamesList(platform: platform, mode: .collection)
-            .navigationDestination(for: CollectionItem.self) { CollectionItemDetailView(item: $0) }
-            .navigationDestination(for: CatalogItem.self) { CatalogItemDetailView(item: $0) }
-    }
-    .modelContainer(container)
 }
