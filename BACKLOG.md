@@ -702,12 +702,19 @@ end-to-end sync fixes above). Four items came back:
   unhide. Purely local — never touched by `CatalogSyncService.reconcile`.
 - **Variants (5-screw NES, black-label carts, etc.) as distinct catalog
   entries.** User's call: new `CatalogItem` rows per variant, not a free-text
-  field on the owned item. Not built yet — needs an actual "add a custom
-  catalog entry" flow (none exists; the app only ever browses the
-  IGDB-synced catalog today), and a decision on whether variant data ever
-  comes from IGDB or is entirely hand-curated. `CatalogItem.variant: String?`
-  already exists as a field (seed data uses it for hardware sub-labels like
-  "Player's Choice") — the gap is the *creation* UI, not the data model.
+  field on the owned item, mixing IGDB-sourced data with hand-created rows.
+  Checked real candidates before committing to anything: IGDB's own docs
+  don't model this granularity, and PriceCharting's *website* clearly does
+  (Zelda alone has 5-screw/3-screw/gold-vs-gray/Rev-A/SOQ variants listed)
+  but its public API doesn't expose any of it (verified via its real docs,
+  not assumed) — so this will be hand-curated for the foreseeable future,
+  not auto-pulled from anywhere.
+
+  This grew into a much bigger architecture decision: the catalog moves from
+  a static JSON feed to a live Supabase-backed table with a real public/
+  private split, not a bolt-on "variants" feature. See "Catalog goes live in
+  Supabase" below — Phases 1 and 2 are done; the "add a custom catalog
+  entry" UI (Phase 4) is what actually delivers this item, still pending.
 - **Licensed/unlicensed filtering.** User's call: a heuristic using IGDB's
   `involved_companies.publisher` as a first signal (unpublished likely means
   homebrew/ROM-hack, like NES "2048"), refined later. Not verified against
@@ -719,6 +726,52 @@ end-to-end sync fixes above). Four items came back:
   .company.name;` and see whether it actually lacks a credited publisher, or
   whether the signal is noisier than expected, before writing an ingest-time
   filter around it.
+
+## Catalog goes live in Supabase (2026-09-17)
+
+Prompted by the variant-catalog-entry request above: the catalog was a
+static JSON feed (built by `api/build/*.mjs`, downloaded read-only) with no
+way for a user to add their own rows at all. Real architecture change, not
+a bolt-on — see `supabase/schema.sql`'s "Phase 2" section for the full
+account, commit `72aae82` for the schema and `f0d521f` for the migration.
+
+- ~~**Phase 1 — schema + RLS.**~~ Done. One table (`catalog_items`), split
+  by `owner_user_id` (`null` = public/shared, set = private to that user).
+  A regular user can only ever write their own rows — never a public one
+  directly, not even to "submit" something; that's a separate admin-gated
+  `promote_catalog_item_to_public()` (`SECURITY DEFINER`, checks a new
+  `admins` table with no RLS-exposed read/write of its own). Verified live,
+  not just applied: confirmed the anon key genuinely can't insert a public
+  row (`42501`), and that a real select against the table works.
+- ~~**Phase 2 — migrate the existing catalog in.**~~ Done. Found a real bug
+  before it could bite at scale: PostgREST's own upsert (`?on_conflict=slug`)
+  can't target a *partial* unique index (Postgres needs an exact index-shape
+  match, predicate included) — confirmed against the real table (`42P10`)
+  before writing around it, not assumed. Fixed with a hand-written
+  `upsert_public_catalog_items(jsonb)` function using the real
+  `ON CONFLICT (slug) WHERE owner_user_id IS NULL` syntax only raw SQL can
+  express, locked to `service_role` via explicit `revoke`/`grant` (checked
+  the anon key really can't call it either). `api/build/migrate-catalog-to
+  -supabase.mjs` batches the upsert (500/call); a full run migrated all
+  13,185 items, verified per-platform against the source JSON — all 10
+  platforms match exactly, not just a total-count check.
+- **Phase 3 — rewrite the app's catalog sync.** Not started. The real risk
+  phase: `CatalogSyncService`/`CatalogSeedStore`/`RemoteCatalogRepository`
+  currently expect one static downloaded file; they need to become an
+  incremental Supabase pull (same `updated_at`-since-last-sync shape
+  `SyncCoordinator` already proved out for collection sync) plus real write
+  support for a user's own private rows. First real sync at ~13,150 rows
+  will want the same encoding/perf scrutiny the collection-sync bugs got
+  (PGRST102-style key-mismatch risk applies here too — `catalog_items` has
+  even more nullable columns than `collection_items` did).
+- **Phase 4 — "add a custom catalog entry" UI.** Not started. Depends on
+  Phase 3 (needs real write support in the app first). This is what actually
+  delivers the variant-entry feature above.
+- **Phase 5 — admin promotion surface.** Not started, not urgent — a
+  privileged action for a single admin (today, just the one account) to
+  promote a `submitted_for_public` row to real public. User's own framing:
+  natural fit for the future companion website's admin section, not
+  worth a whole in-app UI for one person's occasional action.
 
 ## Code health & error analytics
 
