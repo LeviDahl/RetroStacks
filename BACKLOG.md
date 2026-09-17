@@ -700,21 +700,21 @@ end-to-end sync fixes above). Four items came back:
   `CatalogItem.isHidden`, toggled via leading swipe (iOS) / context menu
   (macOS), with a "Show Hidden Items" toggle in the filter menu to review/
   unhide. Purely local — never touched by `CatalogSyncService.reconcile`.
-- **Variants (5-screw NES, black-label carts, etc.) as distinct catalog
-  entries.** User's call: new `CatalogItem` rows per variant, not a free-text
-  field on the owned item, mixing IGDB-sourced data with hand-created rows.
-  Checked real candidates before committing to anything: IGDB's own docs
-  don't model this granularity, and PriceCharting's *website* clearly does
-  (Zelda alone has 5-screw/3-screw/gold-vs-gray/Rev-A/SOQ variants listed)
-  but its public API doesn't expose any of it (verified via its real docs,
-  not assumed) — so this will be hand-curated for the foreseeable future,
-  not auto-pulled from anywhere.
+- ~~**Variants (5-screw NES, black-label carts, etc.) as distinct catalog
+  entries.**~~ Done — see "Catalog goes live in Supabase" → Phase 4 below for
+  how it actually shipped. User's call: new `CatalogItem` rows per variant,
+  not a free-text field on the owned item, mixing IGDB-sourced data with
+  hand-created rows. Checked real candidates before committing to anything:
+  IGDB's own docs don't model this granularity, and PriceCharting's
+  *website* clearly does (Zelda alone has 5-screw/3-screw/gold-vs-gray/
+  Rev-A/SOQ variants listed) but its public API doesn't expose any of it
+  (verified via its real docs, not assumed) — so this stays hand-curated for
+  the foreseeable future, not auto-pulled from anywhere.
 
-  This grew into a much bigger architecture decision: the catalog moves from
+  This grew into a much bigger architecture decision: the catalog moved from
   a static JSON feed to a live Supabase-backed table with a real public/
   private split, not a bolt-on "variants" feature. See "Catalog goes live in
-  Supabase" below — Phases 1 and 2 are done; the "add a custom catalog
-  entry" UI (Phase 4) is what actually delivers this item, still pending.
+  Supabase" below for the full account.
 - **Licensed/unlicensed filtering.** User's call: a heuristic using IGDB's
   `involved_companies.publisher` as a first signal (unpublished likely means
   homebrew/ROM-hack, like NES "2048"), refined later. Not verified against
@@ -768,9 +768,30 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
   items, ~13 pages) verified live at ~5-7s, comparable to the old static-feed
   path, not a regression. `reconcile` itself untouched — still additive-only
   (see the cleanup item below for why that's now worth revisiting).
-- **Phase 4 — "add a custom catalog entry" UI.** Not started — the natural
-  next step now that Phase 3 gives the app real Supabase-backed catalog
-  reads. This is what actually delivers the variant-entry feature above.
+- ~~**Phase 4 — "add a custom catalog entry" UI.**~~ Done. The read side came
+  free from Phase 3 (RLS's own SELECT policy already returns the signed-in
+  user's private rows alongside public ones); this phase was the write side.
+  `CatalogItem.ownerUserID`/`FeedItem.ownerUserID` thread the server's
+  `owner_user_id` through decode and `reconcile` so the app can tell "mine"
+  apart from public. `CustomCatalogItemService.create` does a plain
+  authenticated `INSERT` (not an offline change-tracking queue like
+  `CollectionSyncEngine` — a rare, explicit action doesn't need one);
+  `CustomCatalogItemActions.create` posts it then writes the server's own
+  response straight into SwiftData, so local and remote can't diverge on a
+  partial failure. Slugs are client-generated (`makeSlug`: a readable base
+  plus a short random suffix) since only per-owner uniqueness matters for a
+  private row. One form (`CustomCatalogItemSheet`) covers both "variant of
+  an existing item" (`CatalogItemDetailView`'s new "Add a Variant" button,
+  platform/kind locked) and "wholly new entry" (`CatalogSection`'s toolbar
+  "Add Custom Entry"); both disabled with a tooltip when signed out, since
+  RLS's `catalog_items_insert_own` policy only ever accepts
+  `owner_user_id = auth.uid()`. Verified live against the real table (not
+  just applied): the exact JSON shape the app sends inserts cleanly (`201`),
+  a duplicate slug under the same owner correctly conflicts (`409`,
+  `catalog_items_private_slug_idx`), the same slug as an existing *public*
+  row does **not** false-conflict (different partial index, as designed),
+  and the anon key is correctly rejected by RLS (`42501`) — scratch rows
+  cleaned up after.
 - **Phase 5 — admin promotion surface.** Not started, not urgent — a
   privileged action for a single admin (today, just the one account) to
   promote a `submitted_for_public` row to real public. User's own framing:

@@ -12,6 +12,8 @@ struct CatalogItemDetailView: View {
     /// way now (was an inconsistency: this screen and `AddToCollectionFlow`
     /// used to add instantly while `SystemGamesList` asked first).
     @State private var quickAddTarget: CatalogItem?
+    @State private var account = AccountService.shared
+    @State private var isShowingAddVariantSheet = false
 
     /// Swap for an injected instance in tests; the shared one carries the cache.
     private let pricing = PricingService.shared
@@ -68,6 +70,22 @@ struct CatalogItemDetailView: View {
                     Label("Add to Collection", systemImage: "plus")
                 }
             }
+            ToolbarItem {
+                Button {
+                    isShowingAddVariantSheet = true
+                } label: {
+                    Label("Add a Variant", systemImage: "plus.square.on.square")
+                }
+                .disabled(!account.state.isSignedIn)
+                .help(
+                    account.state.isSignedIn
+                        ? "Add a different print of this item — 5-screw, black label, and the like."
+                        : "Sign in to add a variant."
+                )
+            }
+        }
+        .sheet(isPresented: $isShowingAddVariantSheet) {
+            CustomCatalogItemSheet(variantOf: item)
         }
         .sheet(item: $quickAddTarget) { catalogItem in
             QuickAddSheet(catalogItem: catalogItem) { completeness, condition in

@@ -52,14 +52,41 @@ struct SupabaseCatalogItemRowTests {
         #expect(row.platformSlug == "snes")
         #expect(row.developer == "Square")
         #expect(row.genre == "RPG")
+        #expect(row.ownerUserID == nil)
 
         // The actual point: extra columns this type doesn't model yet
-        // (owner_user_id, estimated_value_*, submitted_for_public, etc.)
-        // don't break decoding — Decodable ignores unknown keys by default,
-        // but worth locking down given this row shape will keep growing.
+        // (estimated_value_*, submitted_for_public, etc.) don't break
+        // decoding — Decodable ignores unknown keys by default, but worth
+        // locking down given this row shape will keep growing.
         let feedItem = row.asFeedItem
         #expect(feedItem.slug == row.slug)
         #expect(feedItem.name == "Chrono Trigger")
         #expect(feedItem.imageURL == "https://example.com/ct.png")
+        #expect(feedItem.ownerUserID == nil)
+    }
+
+    /// A private row — `owner_user_id` set, the one field that tells the app
+    /// apart a "mine" entry (`CatalogItem.ownerUserID`) from a public one.
+    @Test func decodesAPrivateRowsOwner() throws {
+        let ownerID = UUID()
+        let json = """
+        [
+          {
+            "slug": "nes-zelda-5-screw-abc123",
+            "owner_user_id": "\(ownerID.uuidString)",
+            "platform_slug": "nes",
+            "kind": "game",
+            "name": "The Legend of Zelda",
+            "variant": "5-Screw",
+            "summary": ""
+          }
+        ]
+        """
+        let data = try #require(json.data(using: .utf8))
+        let rows = try JSONDecoder.exactKeys.decode([SupabaseCatalogItemRow].self, from: data)
+        let row = try #require(rows.first)
+
+        #expect(row.ownerUserID == ownerID)
+        #expect(row.asFeedItem.ownerUserID == ownerID)
     }
 }

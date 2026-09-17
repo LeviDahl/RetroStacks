@@ -11,6 +11,8 @@ struct CatalogSection: View {
 
     @State private var viewModel = CatalogBrowseViewModel()
     @State private var selectedID: PersistentIdentifier?
+    @State private var account = AccountService.shared
+    @State private var isShowingCustomEntrySheet = false
 
     private var items: [CatalogItem] { viewModel.apply(to: allItems) }
     private var selectedItem: CatalogItem? {
@@ -43,6 +45,9 @@ struct CatalogSection: View {
                     prompt: viewModel.platformSlugFilter == nil ? "Search the whole catalog" : "Search \(navigationTitleText)"
                 )
                 .toolbar { toolbarContent }
+                .sheet(isPresented: $isShowingCustomEntrySheet) {
+                    CustomCatalogItemSheet(initialPlatformSlug: viewModel.platformSlugFilter)
+                }
         } detail: {
             Group {
                 if let selectedItem {
@@ -134,6 +139,19 @@ struct CatalogSection: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarItem {
+            Button {
+                isShowingCustomEntrySheet = true
+            } label: {
+                Label("Add Custom Entry", systemImage: "plus")
+            }
+            .disabled(!account.state.isSignedIn)
+            .help(
+                account.state.isSignedIn
+                    ? "Add a game the catalog is missing, or a bootleg/variant just for you."
+                    : "Sign in to add a custom catalog entry."
+            )
+        }
         if viewModel.platformSlugFilter != nil {
             ToolbarItem(placement: .cancellationAction) {
                 Button {
