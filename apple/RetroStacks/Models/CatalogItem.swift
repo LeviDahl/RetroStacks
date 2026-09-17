@@ -60,6 +60,16 @@ final class CatalogItem {
     /// safe pattern the pricing fields above already rely on.
     var isHidden: Bool = false
 
+    /// Mirrors `catalog_items.owner_user_id` server-side: `nil` for the
+    /// shared public catalog, set for an item *this account* created (a
+    /// variant, a bootleg, a game the shared catalog is missing — see
+    /// `supabase/schema.sql`'s Phase 2 section). Set by
+    /// `CatalogSyncService.reconcile` from the feed like any other field —
+    /// unlike `isHidden`, this genuinely is catalog data, just scoped to one
+    /// owner instead of everyone. Drives whether the UI offers to edit/
+    /// delete an entry.
+    var ownerUserID: UUID?
+
     var platform: Platform?
 
     @Relationship(deleteRule: .cascade, inverse: \CollectionItem.catalogItem)

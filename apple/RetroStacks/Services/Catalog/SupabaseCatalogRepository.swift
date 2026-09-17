@@ -126,6 +126,9 @@ nonisolated struct SupabaseCatalogItemRow: Decodable, Sendable {
     var imageURLString: String?
     var imageCredit: String?
     var imageLicense: String?
+    /// `nil` for a public row; set to the owning account's id for a private,
+    /// user-created row. See `CatalogItem.ownerUserID`.
+    var ownerUserID: UUID?
 
     enum CodingKeys: String, CodingKey {
         case slug
@@ -137,6 +140,7 @@ nonisolated struct SupabaseCatalogItemRow: Decodable, Sendable {
         case imageURLString = "image_url_string"
         case imageCredit = "image_credit"
         case imageLicense = "image_license"
+        case ownerUserID = "owner_user_id"
     }
 
     var asFeedItem: FeedItem {
@@ -144,7 +148,8 @@ nonisolated struct SupabaseCatalogItemRow: Decodable, Sendable {
             slug: slug, platformSlug: platformSlug, kind: kind, name: name, variant: variant,
             releaseYearNA: releaseYearNA, manufacturerOrPublisher: manufacturerOrPublisher,
             developer: developer, genre: genre, upc: upc, summary: summary,
-            imageURL: imageURLString, imageCredit: imageCredit, imageLicense: imageLicense
+            imageURL: imageURLString, imageCredit: imageCredit, imageLicense: imageLicense,
+            ownerUserID: ownerUserID
         )
     }
 }

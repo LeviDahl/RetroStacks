@@ -40,6 +40,12 @@ nonisolated struct FeedItem: Decodable, Sendable {
     var imageURL: String?
     var imageCredit: String?
     var imageLicense: String?
+    /// `nil` for the static feed (`RemoteCatalogRepository`) and for public
+    /// rows from `SupabaseCatalogRepository` — set only for a private,
+    /// user-created row. See `CatalogItem.ownerUserID`. Optional properties
+    /// get an implicit `nil` default in the memberwise init, so existing
+    /// `FeedItem(...)` call sites (tests, mainly) don't need updating.
+    var ownerUserID: UUID?
 }
 
 nonisolated struct PriceGuideFeed: Decodable, Sendable {

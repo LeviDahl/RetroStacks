@@ -143,6 +143,7 @@ final class CatalogSyncService {
             set(\.imageURLString, fi.imageURL)
             set(\.imageCredit, fi.imageCredit)
             set(\.imageLicense, fi.imageLicense)
+            set(\.ownerUserID, fi.ownerUserID)
             let platform = platformsBySlug[fi.platformSlug]
             if item.platform?.slug != platform?.slug { item.platform = platform }
         }
