@@ -305,6 +305,85 @@ $$;
 -- action).
 
 -- ---------------------------------------------------------------------------
+-- Phase 5 (2026-09-17): curating the public catalog — excluding bootlegs/
+-- ROM-hacks/non-cartridge entries the IGDB import let through (e.g. "8 Bit
+-- Son of a Bitch" on NES), for every user, not just locally on one device
+-- (see CatalogItem.isHidden for the *local-only* equivalent).
+-- ---------------------------------------------------------------------------
+-- Soft delete, not a real DELETE: sets the same `deleted_at` every sync
+-- engine already treats as a tombstone (`SupabaseCatalogRepository` already
+-- filters `deleted_at is.null` on every fetch), so this is reversible —
+-- `admin_restore_catalog_items` just clears it again — and needs no new
+-- client-side handling to take effect.
+--
+-- Targets `slug`, not the row's `id` — the app's local `CatalogItem` never
+-- stores the server-side uuid, only the slug it's already keyed by
+-- everywhere else, so this avoids plumbing a new identifier through decode/
+-- reconcile just for this one admin path. `owner_user_id is null` in the
+-- `where` keeps this scoped to the shared catalog on purpose: an admin
+-- excluding entries is about curating what's public, not touching another
+-- user's private rows, which they can't see or reach through this path
+-- anyway (a private row's slug isn't guaranteed unique across owners, so a
+-- bare slug match could otherwise hit the wrong owner's row).
+--
+-- Bulk (`slugs text[]`) so an in-app multi-select excludes everything picked
+-- in one call, not one round trip per row — same reasoning as the migration
+-- script's bulk upsert below, just RPC-sized for the app instead of a
+-- migration script.
+
+create or replace function public.admin_exclude_catalog_items(slugs text[])
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.admins where user_id = auth.uid()) then
+    raise exception 'not authorized';
+  end if;
+  update public.catalog_items
+  set deleted_at = now()
+  where slug = any(slugs) and owner_user_id is null;
+end;
+$$;
+
+create or replace function public.admin_restore_catalog_items(slugs text[])
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.admins where user_id = auth.uid()) then
+    raise exception 'not authorized';
+  end if;
+  update public.catalog_items
+  set deleted_at = null
+  where slug = any(slugs) and owner_user_id is null;
+end;
+$$;
+
+-- Lets the app conditionally show admin-only UI without being able to read
+-- the (deliberately unreadable) `admins` table directly — returns a plain
+-- boolean for the calling user only, never the membership list itself.
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (select 1 from public.admins where user_id = auth.uid());
+$$;
+
+-- Callable from the app via Supabase's RPC endpoint, e.g.:
+--   POST /rest/v1/rpc/admin_exclude_catalog_items  { "slugs": ["nes-8-bit-son-of-a-bitch"] }
+--   POST /rest/v1/rpc/is_admin  {}
+-- No explicit revoke/grant, same as `promote_catalog_item_to_public` above —
+-- the internal `admins` check is the real security boundary; any signed-in
+-- user can *attempt* the call, only an admin's call succeeds.
+
+-- ---------------------------------------------------------------------------
 -- Bulk upsert for the migration/refresh script — service_role only.
 -- ---------------------------------------------------------------------------
 -- Found live 2026-09-17: PostgREST's own upsert (`Prefer: resolution=

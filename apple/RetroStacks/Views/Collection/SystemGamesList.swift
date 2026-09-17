@@ -51,6 +51,15 @@ struct SystemGamesList: View {
     @State private var bulkCompleteness: Completeness = .loose
     @State private var successToast: String?
     @State private var toastUndo: (() -> Void)?
+    /// Whether the signed-in user can bulk-exclude items from the *shared*
+    /// catalog (see `AdminCatalogCurationService`) — checked once per visit
+    /// via a real RPC (the client can't read the `admins` table directly to
+    /// know this locally), not cached across screens. `false` while the
+    /// check is pending, same as signed-out: fails closed, never shows the
+    /// admin action to someone who isn't one.
+    @State private var isAdmin = false
+    @State private var isExcluding = false
+    @State private var isShowingExcludeConfirm = false
     @AppStorage("system.kindFilter") private var kindRaw = KindFilter.games.rawValue
     @AppStorage("system.sortField") private var sortRaw = SortField.title.rawValue
     /// Applies to whichever `sortField` is active — add a new field and it's
@@ -219,6 +228,7 @@ struct SystemGamesList: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .task(id: catalogCacheKey) { recomputeCatalog() }
+            .task { isAdmin = await AdminCatalogCurationService().checkIsAdmin() }
             .searchable(text: $searchQuery, prompt: "Search \(platform.shortName)")
             .toolbar {
                 if canBulkAdd {
@@ -252,6 +262,16 @@ struct SystemGamesList: View {
             .toast(successToast, actionTitle: toastUndo != nil ? "Undo" : nil, action: toastUndo) {
                 successToast = nil
                 toastUndo = nil
+            }
+            .confirmationDialog(
+                "Exclude \(picked.count) \(picked.count == 1 ? "item" : "items") from the shared catalog?",
+                isPresented: $isShowingExcludeConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Exclude for Everyone", role: .destructive) { commitBulkExclude() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes them from the catalog every user sees, not just this device. Reversible from the Supabase SQL Editor if it's a mistake.")
             }
     }
 
@@ -664,6 +684,39 @@ struct SystemGamesList: View {
         }
     }
 
+    /// Server call first, local reflection only after it actually succeeds —
+    /// same reasoning as `CustomCatalogItemActions.create`: no offline queue
+    /// here, so local and remote must agree, not diverge. Sets `isHidden`
+    /// locally rather than deleting the local `CatalogItem` outright: a
+    /// hard delete would cascade-delete any `CollectionItem` someone already
+    /// has for it (`CatalogItem`'s relationship is `deleteRule: .cascade`),
+    /// silently destroying a real collection record as a side effect of an
+    /// unrelated curation action. `isHidden` gets the same immediate visual
+    /// result (out of normal browsing) with none of that risk.
+    private func commitBulkExclude() {
+        let slugs = Array(picked)
+        isExcluding = true
+        Task {
+            do {
+                try await AdminCatalogCurationService().exclude(slugs: slugs)
+                let slugSet = Set(slugs)
+                for item in cachedCatalog where slugSet.contains(item.slug) {
+                    item.isHidden = true
+                }
+                modelContext.saveLoggingErrors(reportingAs: .localSave)
+                withAnimation {
+                    picked.removeAll()
+                    selecting = false
+                }
+                recomputeCatalog()
+                successToast = "Excluded \(slugs.count) from the catalog for everyone"
+            } catch {
+                successToast = "Couldn't exclude: \((error as? CatalogError)?.userMessage ?? error.localizedDescription)"
+            }
+            isExcluding = false
+        }
+    }
+
     @ViewBuilder
     private var bulkAddBar: some View {
         VStack(spacing: 8) {
@@ -679,6 +732,14 @@ struct SystemGamesList: View {
             HStack {
                 Button("Cancel") {
                     withAnimation { picked.removeAll(); selecting = false }
+                }
+                if isAdmin {
+                    Button(role: .destructive) {
+                        isShowingExcludeConfirm = true
+                    } label: {
+                        Label("Exclude", systemImage: "eye.slash")
+                    }
+                    .disabled(picked.isEmpty || isExcluding)
                 }
                 Spacer()
                 Button {
