@@ -792,11 +792,36 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
   row does **not** false-conflict (different partial index, as designed),
   and the anon key is correctly rejected by RLS (`42501`) — scratch rows
   cleaned up after.
-- **Phase 5 — admin promotion surface.** Not started, not urgent — a
-  privileged action for a single admin (today, just the one account) to
-  promote a `submitted_for_public` row to real public. User's own framing:
-  natural fit for the future companion website's admin section, not
-  worth a whole in-app UI for one person's occasional action.
+- **Phase 5 — admin promotion surface.** Half-started 2026-09-17, from a
+  different direction than originally planned: not promoting a private row
+  to public, but *curating* the existing public catalog — excluding
+  IGDB-import junk (bootlegs, ROM hacks, non-cartridge entries like "8 Bit
+  Son of a Bitch" on NES) for every user, not just locally. New
+  `admin_exclude_catalog_items`/`admin_restore_catalog_items` (bulk
+  soft-delete-by-slug, same `deleted_at` tombstone every sync path already
+  respects — reversible) and `is_admin()` (lets the app gate the UI without
+  reading the locked-down `admins` table directly), all in `schema.sql`,
+  same `SECURITY DEFINER` pattern as `promote_catalog_item_to_public`.
+  `AdminCatalogCurationService` + a new admin-only "Exclude" action in
+  `SystemGamesList`'s existing bulk-select mode (behind a confirmation
+  dialog) are wired up app-side. **Not yet run against the real schema** —
+  needs `supabase/schema.sql` re-applied in the SQL Editor before the RPCs
+  exist, then a real click-through verification. The original
+  `promote_catalog_item_to_public` path (private → public) is still
+  untouched and still not built into any UI.
+  - Real data check while scoping this (queried the live local store
+    directly, not guessed): of NES's 1,694 catalog entries, 981 have
+    `releaseYearNA <= 1995` (NES's real commercial window), 583 are after
+    1995, and 130 have no release year at all. A release-year heuristic
+    alone gets partway to separating real releases from the ~890 the user
+    estimates are junk, but undercounts — likely because some hacks fake a
+    period-accurate copyright year. `category`/`version_parent` (IGDB's own
+    "is this a mod/hack" fields) are already filtered at ingest time and
+    evidently aren't catching these either, since they got through. The
+    `involved_companies.publisher` signal proposed earlier in this doc is
+    still the next thing to actually check against live IGDB data — handed
+    to the user as real `curl` commands to run (I don't hold IGDB
+    credentials), result pending.
 - **Cleanup: stale local catalog items never get pruned.** Found while
   verifying Phase 3 live: `CatalogSyncService.reconcile` has always been
   "additive only — items that vanish from the feed are left in place" (a
