@@ -71,6 +71,23 @@ struct SystemGamesList: View {
     /// normal browsing. Turning this on is how you get back to one to unhide
     /// it — there's no separate management screen for v1.
     @AppStorage("system.showHidden") private var showHidden = false
+    /// Narrows to items matching *both* of the two real, IGDB-verified
+    /// signals for likely bootlegs/ROM hacks/homebrew that slipped into the
+    /// IGDB import as if they were real releases (found live 2026-09-17,
+    /// checked against real `curl` results, not guessed — see
+    /// `BACKLOG.md`'s Phase 5 section for the full account):
+    /// `manufacturerOrPublisher` missing or credited on very few other items
+    /// on this platform (a real publisher published many games; a ROM
+    /// hacker's own handle, which IGDB's community data structurally can't
+    /// tell apart from a real publisher credit, published exactly one), AND
+    /// `releaseYearNA` missing or past the platform's own
+    /// `discontinuedYearNA` (a real release falls inside the platform's
+    /// actual commercial window; every hack checked was either dated years
+    /// to decades later or not dated at all). Requiring *both* — not
+    /// either — is deliberate: a real but obscure publisher with a correct
+    /// period date won't match, and neither will a hack that happens to
+    /// credit a real company by mistake.
+    @AppStorage("system.reviewCandidatesOnly") private var reviewCandidatesOnly = false
 
     enum SortField: String, CaseIterable, Identifiable {
         case title, releaseYear, publisher, value
@@ -146,59 +163,22 @@ struct SystemGamesList: View {
     @State private var hasLoadedCatalog = false
 
     private var catalogCacheKey: String {
-        "\(platform.slug)|\(kindFilter.rawValue)|\(searchQuery)|\(sortField.rawValue)|\(sortAscending)|\(showHidden)"
+        "\(platform.slug)|\(kindFilter.rawValue)|\(searchQuery)|\(sortField.rawValue)|\(sortAscending)|\(showHidden)|\(reviewCandidatesOnly)"
     }
 
     private func recomputeCatalog() {
         cachedCatalog = Self.computeCatalog(
             platform: platform, kindFilter: kindFilter, searchText: searchQuery,
-            sortField: sortField, sortAscending: sortAscending, showHidden: showHidden
+            sortField: sortField, sortAscending: sortAscending, showHidden: showHidden,
+            reviewCandidatesOnly: reviewCandidatesOnly
         )
         hasLoadedCatalog = true
     }
 
-    private static func computeCatalog(
-        platform: Platform, kindFilter: KindFilter, searchText: String,
-        sortField: SortField, sortAscending: Bool, showHidden: Bool
-    ) -> [CatalogItem] {
-        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        let filtered = platform.catalogItems.filter { item in
-            (showHidden || !item.isHidden)
-                && (kindFilter.kind == nil || item.kind == kindFilter.kind)
-                && (q.isEmpty
-                    || item.name.lowercased().contains(q)
-                    || (item.variant?.lowercased().contains(q) ?? false)
-                    || (item.manufacturerOrPublisher?.lowercased().contains(q) ?? false))
-        }
-        return filtered.sorted { a, b in
-            switch sortField {
-            case .title:
-                return ascendingCompare(a.name.lowercased(), b.name.lowercased(), sortAscending: sortAscending)
-            case .releaseYear:
-                return ascendingCompare(a.releaseYearNA ?? .max, b.releaseYearNA ?? .max,
-                                         sortAscending: sortAscending, tiebreak: (a.name, b.name))
-            case .publisher:
-                return ascendingCompare(a.manufacturerOrPublisher ?? "~", b.manufacturerOrPublisher ?? "~",
-                                         sortAscending: sortAscending, tiebreak: (a.name, b.name))
-            case .value:
-                let av = a.ownedEntry?.estimatedValue ?? a.headlineValue ?? 0
-                let bv = b.ownedEntry?.estimatedValue ?? b.headlineValue ?? 0
-                return ascendingCompare(av, bv, sortAscending: sortAscending, tiebreak: (a.name, b.name))
-            }
-        }
-    }
-
-    /// One comparator every sort field routes through, `sortAscending`-aware.
-    /// Equal primary values fall back to `tiebreak` (always name-ascending, so
-    /// ties never look shuffled) when one is supplied. `static` (no `self`) so
-    /// `computeCatalog` can call it from `init`, before `self` is fully formed.
-    private static func ascendingCompare<T: Comparable>(
-        _ lhs: T, _ rhs: T, sortAscending: Bool, tiebreak: (String, String)? = nil
-    ) -> Bool {
-        if lhs != rhs { return sortAscending ? lhs < rhs : lhs > rhs }
-        guard let tiebreak else { return false }
-        return tiebreak.0.localizedCaseInsensitiveCompare(tiebreak.1) == .orderedAscending
-    }
+    // `rarePublisherThreshold`, `isReviewCandidate`, `computeCatalog`, and
+    // `ascendingCompare` moved to `SystemGamesListCatalog.swift` (file_length)
+    // — pure logic with no dependency on `self`, same reasoning as the
+    // `SystemGamesListRows.swift` split.
 
     private func matches(_ c: CatalogItem, _ scope: Scope) -> Bool {
         switch scope {
@@ -494,6 +474,10 @@ struct SystemGamesList: View {
             Toggle(isOn: $showHidden) {
                 Label("Show Hidden Items", systemImage: "eye.slash")
             }
+            Divider()
+            Toggle(isOn: $reviewCandidatesOnly) {
+                Label("Review Candidates Only", systemImage: "questionmark.circle")
+            }
         } label: {
             Label("\(kindFilter.label) · \(sortField.label) \(sortAscending ? "↑" : "↓")",
                   systemImage: "line.3.horizontal.decrease.circle")
@@ -636,10 +620,8 @@ struct SystemGamesList: View {
         sortField == .title && sortAscending && !selecting && letterIndex.count > 3 && shown.count > 40
     }
 
-    static func indexLetter(for title: String) -> String {
-        guard let first = title.uppercased().unicodeScalars.first else { return "#" }
-        return CharacterSet.uppercaseLetters.contains(first) ? String(first) : "#"
-    }
+    // `indexLetter` moved to `SystemGamesListCatalog.swift` alongside the
+    // other pure static helpers.
 
     // MARK: Bulk add
 
