@@ -994,7 +994,32 @@ tooling):
   corner `AppStatusBadge`. Wired for catalog sync + price refresh + collection
   sync (`SyncCoordinator` reports/clears `.collectionSync`, same pattern).
 - iPad: a proper 3-column layout for the collection drill-down.
-- EU / JP region switch (`Region` already modeled).
+- **EU / JP region switch (`Region` already modeled, but only per-*platform*
+  today — `Platform.regionsAvailable`, never wired to any UI). Flagged again
+  2026-09-18** while pruning NES bootlegs: the user is currently excluding
+  anything not released in NA as part of that cleanup, on the explicit
+  understanding some of it may need to come back once real region data
+  exists — not a permanent judgment that non-NA titles don't belong.
+  Concretely closer than it looks: `api/build/ingest/igdb.mjs` already
+  fetches `release_dates.release_region` per release (confirmed reading the
+  script, not guessed — see its `NA_REGIONS`/`datesWithRegion` handling), it
+  just collapses that into a binary NA-or-drop decision at ingest time and
+  discards the rest rather than keeping it. A real region filter needs:
+  1. Ingest keeps the full per-item region set instead of collapsing it
+     (`CatalogItem`/`FeedItem`/the Supabase `catalog_items` row all need a
+     region field — doesn't exist today, only the platform-level one does).
+  2. A region filter in the UI (`CatalogBrowseViewModel`/`SystemGamesList`
+     already have the filter-menu pattern down — `showHidden`,
+     `reviewCandidatesOnly` — this would slot in the same way).
+  3. Some way to tell "genuinely EU/JP-only" apart from "IGDB just has no
+     region data for this one" (the ingest script's own current fallback:
+     no region data at all → keep it — meaning some non-NA-only titles may
+     already be sitting in the catalog uncaught by the NA filter, and could
+     be showing up in the review-candidates heuristic for the wrong reason).
+  Bringing a wrongly-excluded item back in the meantime doesn't need new
+  plumbing — `admin_restore_catalog_items` (Phase 5) already does exactly
+  that, by slug, whenever a specific one turns out to be worth restoring
+  before the real region feature exists.
 - Revisit the `GeometryReader` breakdown bar if the `_NSDetectedLayoutRecursion`
   log ever turns into visible jank.
 
