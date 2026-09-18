@@ -64,7 +64,7 @@ struct AboutSystemCard: View {
             LazyVGrid(columns: columns, spacing: 8) {
                 SystemFactTile(label: "Years", value: yearRange)
                 SystemFactTile(label: "Generation", value: "\(platform.generation)")
-                SystemFactTile(label: "Catalog", value: "\(platform.catalogItems.count)")
+                SystemFactTile(label: "Catalog", value: "\(platform.visibleCatalogItems().count)")
                 SystemFactTile(label: "Owned", value: "\(ownedCount)")
                 SystemFactTile(label: "Wishlist", value: "\(wishlistCount)")
                 SystemFactTile(label: "Value", value: Money.string(summary?.value ?? 0))

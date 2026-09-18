@@ -703,13 +703,16 @@ struct SystemGamesList: View {
 
     /// Server call first, local reflection only after it actually succeeds —
     /// same reasoning as `CustomCatalogItemActions.create`: no offline queue
-    /// here, so local and remote must agree, not diverge. Sets `isHidden`
-    /// locally rather than deleting the local `CatalogItem` outright: a
-    /// hard delete would cascade-delete any `CollectionItem` someone already
-    /// has for it (`CatalogItem`'s relationship is `deleteRule: .cascade`),
-    /// silently destroying a real collection record as a side effect of an
-    /// unrelated curation action. `isHidden` gets the same immediate visual
-    /// result (out of normal browsing) with none of that risk.
+    /// here, so local and remote must agree, not diverge. Same safe-delete-
+    /// or-hide split `CatalogSyncService.reconcile`'s pruning pass uses:
+    /// deletes the local `CatalogItem` outright when nobody's collection
+    /// references it (true for nearly all of these), so every raw count
+    /// (`platform.catalogItems.count` and friends) is correct immediately,
+    /// not just after the next sync's own pruning pass catches up. Falls
+    /// back to `isHidden = true` only when someone owns or wishlists it —
+    /// a hard delete there would cascade-delete their real `CollectionItem`
+    /// (`deleteRule: .cascade`) as a side effect of an unrelated curation
+    /// action.
     private func commitBulkExclude() {
         let slugs = Array(picked)
         isExcluding = true
@@ -718,7 +721,11 @@ struct SystemGamesList: View {
                 try await AdminCatalogCurationService().exclude(slugs: slugs)
                 let slugSet = Set(slugs)
                 for item in cachedCatalog where slugSet.contains(item.slug) {
-                    item.isHidden = true
+                    if item.collectionEntries.isEmpty {
+                        modelContext.delete(item)
+                    } else {
+                        item.isHidden = true
+                    }
                 }
                 modelContext.saveLoggingErrors(reportingAs: .localSave)
                 withAnimation {

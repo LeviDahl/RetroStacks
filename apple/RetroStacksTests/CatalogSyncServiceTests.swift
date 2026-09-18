@@ -89,6 +89,110 @@ struct CatalogSyncServiceTests {
         #expect(!AppStatusCenter.shared.issues.contains { $0.source == .catalogSync })
     }
 
+    // MARK: - Pruning (added 2026-09-18, alongside the admin-exclude feature)
+
+    /// The common case: a public item vanished from the feed (e.g. an admin
+    /// exclude) and nobody's collection references it — safe to actually
+    /// delete, so every raw count (`platform.catalogItems.count`) is
+    /// correct without any view needing to know about `isHidden` at all.
+    @MainActor
+    @Test func syncDeletesAnUnownedPublicItemMissingFromTheFeed() async throws {
+        let context = try freshContext()
+        let platform = Platform(
+            slug: "snes", name: "Super Nintendo Entertainment System", shortName: "SNES",
+            manufacturer: "Nintendo", generation: 4
+        )
+        context.insert(platform)
+        let stale = CatalogItem(slug: "snes-some-bootleg", kind: .game, name: "Some Bootleg")
+        stale.platform = platform
+        context.insert(stale)
+
+        let service = CatalogSyncService(repository: FakeCatalogRepository(result: .success(Self.feedShapedLikeReality())))
+        await service.sync(into: context)
+
+        let remaining = try context.fetch(FetchDescriptor<CatalogItem>(predicate: #Predicate { $0.slug == "snes-some-bootleg" }))
+        #expect(remaining.isEmpty, "an unowned, missing-from-the-feed public item should be deleted outright")
+    }
+
+    /// The safety case: the same missing item, but someone owns it — must
+    /// not be hard-deleted, since `CatalogItem`'s relationship to
+    /// `CollectionItem` is `deleteRule: .cascade` and would silently take
+    /// their real collection record with it. Falls back to `isHidden` —
+    /// same effect everywhere that's already respected, none of the risk.
+    @MainActor
+    @Test func syncHidesRatherThanDeletesAnOwnedPublicItemMissingFromTheFeed() async throws {
+        let context = try freshContext()
+        let platform = Platform(
+            slug: "snes", name: "Super Nintendo Entertainment System", shortName: "SNES",
+            manufacturer: "Nintendo", generation: 4
+        )
+        context.insert(platform)
+        let stale = CatalogItem(slug: "snes-some-bootleg", kind: .game, name: "Some Bootleg")
+        stale.platform = platform
+        context.insert(stale)
+        let entry = CollectionItem(catalogItem: stale, status: .owned)
+        context.insert(entry)
+
+        let service = CatalogSyncService(repository: FakeCatalogRepository(result: .success(Self.feedShapedLikeReality())))
+        await service.sync(into: context)
+
+        let survivors = try context.fetch(FetchDescriptor<CatalogItem>(predicate: #Predicate { $0.slug == "snes-some-bootleg" }))
+        let survivor = try #require(survivors.first, "an owned item must survive pruning, not be deleted")
+        #expect(survivor.isHidden == true)
+        let entries = try context.fetch(FetchDescriptor<CollectionItem>())
+        #expect(entries.count == 1, "the real CollectionItem must not be cascade-deleted as a side effect")
+    }
+
+    /// A private (user-created) item missing from this fetch usually just
+    /// means the viewer is signed out or it's a different account's row —
+    /// never treated as "the server deleted it," unlike a public item.
+    @MainActor
+    @Test func syncNeverPrunesAPrivateItemMissingFromTheFeed() async throws {
+        let context = try freshContext()
+        let platform = Platform(
+            slug: "snes", name: "Super Nintendo Entertainment System", shortName: "SNES",
+            manufacturer: "Nintendo", generation: 4
+        )
+        context.insert(platform)
+        let mine = CatalogItem(slug: "snes-my-custom-entry", kind: .game, name: "My Custom Entry")
+        mine.platform = platform
+        mine.ownerUserID = UUID()
+        context.insert(mine)
+
+        let service = CatalogSyncService(repository: FakeCatalogRepository(result: .success(Self.feedShapedLikeReality())))
+        await service.sync(into: context)
+
+        let survivors = try context.fetch(FetchDescriptor<CatalogItem>(predicate: #Predicate { $0.slug == "snes-my-custom-entry" }))
+        let survivor = try #require(survivors.first, "a private item must never be pruned just for being absent from a public-scoped fetch")
+        #expect(survivor.isHidden == false)
+    }
+
+    /// A previously-excluded (or previously-hidden-by-pruning) item that
+    /// reappears in a later feed should un-hide itself — mirrors
+    /// `upsert_public_catalog_items` clearing `deleted_at` server-side on a
+    /// re-conflict, so a mistaken exclude that gets reversed (`admin
+    /// _restore_catalog_items`) actually shows up again on the next sync.
+    @MainActor
+    @Test func syncUnhidesAnItemThatReappearsInTheFeed() async throws {
+        let context = try freshContext()
+        let platform = Platform(
+            slug: "snes", name: "Super Nintendo Entertainment System", shortName: "SNES",
+            manufacturer: "Nintendo", generation: 4
+        )
+        context.insert(platform)
+        let previouslyExcluded = CatalogItem(slug: "snes-chrono-trigger", kind: .game, name: "Chrono Trigger")
+        previouslyExcluded.platform = platform
+        previouslyExcluded.isHidden = true
+        context.insert(previouslyExcluded)
+
+        let service = CatalogSyncService(repository: FakeCatalogRepository(result: .success(Self.feedShapedLikeReality())))
+        await service.sync(into: context)
+
+        let items = try context.fetch(FetchDescriptor<CatalogItem>(predicate: #Predicate { $0.slug == "snes-chrono-trigger" }))
+        let item = try #require(items.first)
+        #expect(item.isHidden == false, "an item present in a fresh feed should never stay stuck hidden from an earlier prune")
+    }
+
     // MARK: - Failure surfacing
 
     @MainActor

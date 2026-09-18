@@ -3,9 +3,14 @@ import Observation
 import SwiftData
 
 /// Pulls the reference catalog and reconciles it into SwiftData, keyed by
-/// `slug`. Additive for now — items that vanish from the feed are left in
-/// place until the real catalog stabilises.
+/// `slug`. Prunes local *public* items that vanish from the feed (see
+/// `reconcile`'s final pass) — was additive-only until 2026-09-18, when an
+/// admin-exclude feature made the gap directly visible: every catalog count
+/// in the app read the raw local relationship, so excluding an item
+/// server-side never actually moved any of them until the next sync, and
+/// even then wouldn't have, since nothing pruned the stale local row.
 ///
+
 /// Default repository is `SupabaseCatalogRepository` (live `catalog_items`
 /// table, public + signed-in-user's-own rows) as of 2026-09-17 — was a
 /// static JSON feed before; this type's own reconcile logic didn't need to
@@ -111,6 +116,11 @@ final class CatalogSyncService {
             try context.fetch(FetchDescriptor<CatalogItem>()).map { ($0.slug, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        // Public-item slugs this fetch actually returned — used below to
+        // find local rows the server no longer has. Built up front, not
+        // derived from `itemsBySlug`'s final shape, so it stays exactly
+        // "what the feed said exists" regardless of dict mutation below.
+        let seenSlugs = Set(feed.items.map(\.slug))
 
         var processed = 0
         for fi in feed.items {
@@ -146,6 +156,36 @@ final class CatalogSyncService {
             set(\.ownerUserID, fi.ownerUserID)
             let platform = platformsBySlug[fi.platformSlug]
             if item.platform?.slug != platform?.slug { item.platform = platform }
+            // A re-synced item should never stay stuck excluded/hidden from
+            // an earlier prune below — mirrors `upsert_public_catalog_items`
+            // clearing `deleted_at` server-side on the same re-conflict.
+            if item.isHidden { item.isHidden = false }
+        }
+
+        pruneMissingPublicItems(itemsBySlug: itemsBySlug, seenSlugs: seenSlugs, context: context)
+    }
+
+    /// Removes local rows the server no longer has — an admin exclude, or a
+    /// slug scheme change, or genuine removal. Scoped to *public* items
+    /// only (`ownerUserID == nil`): a private item's absence from this fetch
+    /// often just means the viewer is signed out or it's a different
+    /// account's row, not that it was deleted, so pruning those here would
+    /// risk deleting someone's real custom catalog entry out from under
+    /// them. Deletes outright when nobody's collection references it
+    /// (`CatalogItem`'s relationship is `deleteRule: .cascade`, so deleting
+    /// a referenced row would silently take a real `CollectionItem` with
+    /// it); falls back to `isHidden = true` — same local representation
+    /// `AdminCatalogCurationService`'s own exclude flow already uses — when
+    /// someone does own or wishlist it, so their record survives and it
+    /// still disappears from normal browsing everywhere `isHidden` is
+    /// already respected.
+    private func pruneMissingPublicItems(itemsBySlug: [String: CatalogItem], seenSlugs: Set<String>, context: ModelContext) {
+        for (slug, item) in itemsBySlug where item.ownerUserID == nil && !seenSlugs.contains(slug) {
+            if item.collectionEntries.isEmpty {
+                context.delete(item)
+            } else if !item.isHidden {
+                item.isHidden = true
+            }
         }
     }
 }

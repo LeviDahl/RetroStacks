@@ -66,6 +66,22 @@ extension Platform {
     var games: [CatalogItem] { catalogItems.filter { $0.kind == .game } }
     var accessories: [CatalogItem] { catalogItems.filter { $0.kind == .accessory } }
 
+    /// What a normal browsing view of this platform actually shows — raw
+    /// `catalogItems` includes locally hidden entries (`CatalogItem
+    /// .isHidden`), which covers both a personal "not interested" hide
+    /// *and* an admin's catalog-wide exclude (represented the same way
+    /// locally — see `AdminCatalogCurationService`; no separate flag).
+    /// Found live 2026-09-18: every "N catalog entries" count on screen
+    /// used the raw total, so excluding ~500 NES bootlegs for everyone
+    /// didn't move a single number anywhere except the filtered list
+    /// itself. `includeHidden` defaults to matching the same
+    /// `system.showHidden` toggle `SystemGamesList` reads, so a count
+    /// shown before you ever open that screen still agrees with what it
+    /// would show once you do.
+    func visibleCatalogItems(includeHidden: Bool = UserDefaults.standard.bool(forKey: "system.showHidden")) -> [CatalogItem] {
+        includeHidden ? catalogItems : catalogItems.filter { !$0.isHidden }
+    }
+
     func items(of kind: ItemKind) -> [CatalogItem] {
         catalogItems.filter { $0.kind == kind }.sorted { $0.name < $1.name }
     }

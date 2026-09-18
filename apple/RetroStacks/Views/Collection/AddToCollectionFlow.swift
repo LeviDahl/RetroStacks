@@ -148,7 +148,8 @@ struct CatalogPlatformRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(platform.name).font(.body.weight(.medium)).lineLimit(1)
-                Text("\(platform.catalogItems.count) catalog \(platform.catalogItems.count == 1 ? "entry" : "entries")")
+                let count = platform.visibleCatalogItems().count
+                Text("\(count) catalog \(count == 1 ? "entry" : "entries")")
                     .font(.caption)
                     .foregroundStyle(.mutedText)
             }
