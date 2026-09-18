@@ -145,7 +145,10 @@ struct PlatformCatalogRow: View {
 }
 
 /// Row shown while the list is in multi-select ("Select") mode: a checkbox in
-/// place of the disclosure / add button. Rows already in the list are locked.
+/// place of the disclosure / add button. `alreadyIn` is informational only
+/// ("In list" badge) — every row stays pickable, since Select now backs
+/// bulk-remove and bulk-exclude too, not just bulk-add, and those need to
+/// pick exactly the already-in rows.
 struct SelectableCatalogRow: View {
     var catalogItem: CatalogItem
     var alreadyIn: Bool
@@ -169,7 +172,6 @@ struct SelectableCatalogRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(alreadyIn)
     }
 }
 

@@ -151,8 +151,10 @@ struct SystemCatalogTile: View {
 }
 
 /// Grid tile shown while the screen is in multi-select ("Select") mode — a
-/// checkmark badge in place of the Add button. Tiles already in the list are
-/// locked, matching `SelectableCatalogRow` on iOS.
+/// checkmark badge in place of the Add button. `alreadyIn` is informational
+/// only ("In list" badge) — matching `SelectableCatalogRow` on iOS, every
+/// tile stays pickable, since Select now backs bulk-remove and bulk-exclude
+/// too, not just bulk-add.
 struct SelectableCatalogTile: View {
     var catalogItem: CatalogItem
     var alreadyIn: Bool
@@ -207,7 +209,6 @@ struct SelectableCatalogTile: View {
             .opacity(alreadyIn ? 0.55 : 1)
         }
         .buttonStyle(.plain)
-        .disabled(alreadyIn)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
             if picked {

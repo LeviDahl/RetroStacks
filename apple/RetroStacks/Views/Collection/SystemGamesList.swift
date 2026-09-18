@@ -211,7 +211,7 @@ struct SystemGamesList: View {
             .task { isAdmin = await AdminCatalogCurationService().checkIsAdmin() }
             .searchable(text: $searchQuery, prompt: "Search \(platform.shortName)")
             .toolbar {
-                if canBulkAdd {
+                if canSelect {
                     ToolbarItem {
                         Button(selecting ? "Done" : "Select") {
                             withAnimation {
@@ -623,24 +623,27 @@ struct SystemGamesList: View {
     // `indexLetter` moved to `SystemGamesListCatalog.swift` alongside the
     // other pure static helpers.
 
-    // MARK: Bulk add
+    // MARK: Bulk actions
 
-    /// Only worth offering when the current view has rows you don't already have.
-    private var canBulkAdd: Bool {
-        (scope == .missing || scope == .all) && shown.contains { !inList($0) }
-    }
+    /// Available in every scope now, not just Missing/All — bulk-select is
+    /// also how you bulk-*remove* (Owned/Wanted) or bulk-exclude (any
+    /// scope), not only bulk-add, so gating it to "has something addable"
+    /// stopped making sense once those other actions existed. `> 1` (not
+    /// `> 0`): bulk-anything is meaningless with just one row to act on.
+    private var canSelect: Bool { shown.count > 1 }
 
+    /// No "already in your collection" lock (removed 2026-09-18) — that only
+    /// ever made sense while Select meant bulk-*add* (can't add what you
+    /// already have). Now it also backs bulk-remove (Owned/Wanted scope,
+    /// where *every* shown row is already in the list by definition — the
+    /// old lock would have made every row unpickable there) and bulk-exclude
+    /// (whether you personally own an item has nothing to do with whether it
+    /// belongs in the shared catalog). Each commit action skips whatever
+    /// doesn't apply to a given picked item instead.
     private func togglePick(_ item: CatalogItem) {
-        guard !inList(item) else { return }
         if picked.contains(item.slug) { picked.remove(item.slug) } else { picked.insert(item.slug) }
     }
 
-    /// Bypasses `togglePick`'s "already in your collection" lock on purpose —
-    /// that lock only makes sense for bulk-*add* (can't add what you already
-    /// have), not for bulk-exclude, where whether you personally own an item
-    /// has nothing to do with whether it belongs in the shared catalog. A
-    /// review pass over hundreds of candidates needs this; tapping each row
-    /// individually doesn't scale past a handful of items.
     private var isAllShownSelected: Bool { !shown.isEmpty && picked.count == shown.count }
 
     private func toggleSelectAll() {
@@ -657,9 +660,11 @@ struct SystemGamesList: View {
         }
     }
 
-    /// Bulk add from Missing/All targets the collection (owned); from Wanted it
-    /// would be redundant. `.all` may include already-owned rows — those are
-    /// locked in the picker, so this only ever adds new ones.
+    /// Bulk add always targets owned, regardless of scope — upgrading a
+    /// Wanted item to owned is a reasonable bulk action too, not just
+    /// Missing/All. Picking an already-owned row is harmless now: `Collection
+    /// Actions.add` no-ops on an existing entry for that status rather than
+    /// duplicating it.
     private var bulkStatus: CollectionStatus { .owned }
 
     private func commitBulkAdd() {
@@ -672,6 +677,24 @@ struct SystemGamesList: View {
                     completeness: bulkCompleteness, condition: .good,
                     in: modelContext
                 )
+            }
+            picked.removeAll()
+            selecting = false
+        }
+    }
+
+    /// The bulk-add undo path, and the reason `togglePick` no longer locks
+    /// already-in rows: removes whatever entry matches the *current scope's*
+    /// status (Owned/All → owned, Wanted → wishlist) for each picked item
+    /// that actually has one, silently skipping picked items that don't —
+    /// same "just skip what doesn't apply" shape as `CollectionActions.add`'s
+    /// own no-op-if-existing guard, just for the opposite direction.
+    private func commitBulkRemove() {
+        let bySlug = Dictionary(cachedCatalog.map { ($0.slug, $0) }, uniquingKeysWith: { a, _ in a })
+        withAnimation {
+            for slug in picked {
+                guard let item = bySlug[slug], let entry = item.entry(for: scope.addStatus) else { continue }
+                CollectionActions.remove(entry, in: modelContext)
             }
             picked.removeAll()
             selecting = false
@@ -711,17 +734,26 @@ struct SystemGamesList: View {
         }
     }
 
+    /// Add only makes sense from Missing/All (Owned/Wanted rows are already
+    /// there); Remove only makes sense from Owned/Wanted (Missing rows have
+    /// nothing to remove) — mutually exclusive by scope, so the bar only
+    /// ever shows one primary action, never both at once.
+    private var canBulkAdd: Bool { scope == .missing || scope == .all }
+    private var canBulkRemove: Bool { scope == .owned || scope == .wanted }
+
     @ViewBuilder
     private var bulkAddBar: some View {
         VStack(spacing: 8) {
-            Picker("Completeness", selection: $bulkCompleteness) {
-                Text("Loose").tag(Completeness.loose)
-                Text("Boxed").tag(Completeness.boxedNoManual)
-                Text("CIB").tag(Completeness.completeInBox)
-                Text("Sealed").tag(Completeness.sealed)
+            if canBulkAdd {
+                Picker("Completeness", selection: $bulkCompleteness) {
+                    Text("Loose").tag(Completeness.loose)
+                    Text("Boxed").tag(Completeness.boxedNoManual)
+                    Text("CIB").tag(Completeness.completeInBox)
+                    Text("Sealed").tag(Completeness.sealed)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
 
             HStack {
                 Button("Cancel") {
@@ -739,14 +771,25 @@ struct SystemGamesList: View {
                     .disabled(picked.isEmpty || isExcluding)
                 }
                 Spacer()
-                Button {
-                    commitBulkAdd()
-                } label: {
-                    Text(picked.isEmpty ? "Select items to add" : "Add \(picked.count) to collection")
-                        .frame(maxWidth: .infinity)
+                if canBulkRemove {
+                    Button(role: .destructive) {
+                        commitBulkRemove()
+                    } label: {
+                        Text(picked.isEmpty ? "Select items to remove" : "Remove \(picked.count) from \(scope == .wanted ? "wishlist" : "collection")")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(picked.isEmpty)
+                } else {
+                    Button {
+                        commitBulkAdd()
+                    } label: {
+                        Text(picked.isEmpty ? "Select items to add" : "Add \(picked.count) to collection")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(picked.isEmpty)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(picked.isEmpty)
             }
         }
         .padding(12)
