@@ -95,6 +95,7 @@ struct AboutSystemCard: View {
                         .foregroundStyle(.mutedText)
                         .labelStyle(.titleAndIcon)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     }
                 }
                 SystemFactTile(label: "Owned", value: "\(ownedCount)")
@@ -112,11 +113,15 @@ struct AboutSystemCard: View {
         }
     }
 
+    /// Widened from 120/3-across (macOS/iOS) specifically so the Catalog
+    /// tile's icon breakdown row fits without truncating — `.adaptive` and
+    /// `.flexible()` both already force every tile in a row to the same
+    /// width, so this one change keeps every tile uniform, not just Catalog.
     private var columns: [GridItem] {
         #if os(macOS)
-        [GridItem(.adaptive(minimum: 120), spacing: 8)]
+        [GridItem(.adaptive(minimum: 160), spacing: 8)]
         #else
-        [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+        [GridItem(.flexible()), GridItem(.flexible())]
         #endif
     }
 }
