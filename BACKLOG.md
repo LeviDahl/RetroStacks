@@ -861,6 +861,19 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
     wasn't optional this time. Not yet run against the app for a real
     click-through — worth doing before relying on it for the actual NES
     cleanup pass.
+  - **Admin surface for viewing/restoring excluded items — not started,
+    not urgent, flagged 2026-09-18 for whenever admin tools come up
+    again.** Right now `admin_restore_catalog_items` can only be reached
+    by knowing the exact slug ahead of time (no in-app list of what's
+    currently excluded, on any platform) — real friction for exactly the
+    case the EU/JP region item above calls out: realizing later that a
+    specific excluded title should come back. Would want at minimum a
+    browsable "excluded on this platform" list (`deleted_at is not null`,
+    `owner_user_id is null` — the app doesn't fetch these today since
+    `SupabaseCatalogRepository` filters them out on purpose) with a
+    restore action per row; natural fit alongside wherever the
+    `promote_catalog_item_to_public` surface eventually lands, since both
+    are "admin needs to see something the normal app deliberately hides."
 - ~~**Cleanup: stale local catalog items never get pruned.**~~ Fixed
   2026-09-18 — stopped being a "not a priority yet" item the moment the
   admin-exclude feature made it directly visible: excluding NES bootlegs
