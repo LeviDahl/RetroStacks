@@ -882,6 +882,40 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
   also finally clear the original 492-item Atari 2600 slug-scheme
   discrepancy on the next sync, as a side effect — not separately
   verified yet.
+  - **Follow-up, same day: the fix above wasn't actually enough, twice
+    over.** User reported the real numbers after syncing (1604 NES games,
+    not the ~1047 the server actually has) — checked against the live
+    server directly (`curl`, not guessed) to confirm 1047 live / 544
+    excluded / 1591 total public NES rows, then against the real local
+    store, which found two distinct bugs:
+    - **A second, un-consolidated raw-count spot.** `Platform.games`
+      (feeding Dashboard's platform breakdown — `catalogGameCount`,
+      `remainingValue`, `completionRatio` in `CollectionStats
+      .systemSummaries`) filtered raw `catalogItems` directly, same shape
+      as the bug already fixed once for `AboutSystemCard`. Browse
+      Catalog's own filter (`CatalogBrowseViewModel.apply`) never checked
+      `isHidden` at all. User's call: one source of truth, not another
+      patched call site. `Platform.consoles`/`.games`/`.accessories`/
+      `.items(of:)` are now all defined *in terms of*
+      `visibleCatalogItems()` — there's nowhere left to filter
+      `catalogItems` by kind except through it. `CatalogBrowseViewModel`
+      got its own `showHidden` (plain stored property, deliberately
+      independent of `SystemGamesList`'s — matches every other filter on
+      that view model already resetting per visit).
+    - **The exclude action's own safe-delete-or-hide check was wrong.**
+      Checked local data directly: 561 NES items hidden, 0 deleted — every
+      single excluded item took the "someone owns it" branch. Root cause:
+      `CollectionActions.remove` only *soft*-deletes (`markDeleted()`,
+      sets `deletedAt`), so the ~560 items from the earlier accidental-
+      bulk-add-then-undo incident still had a tombstoned `CollectionItem`
+      attached, and the check used raw `collectionEntries` (which counts
+      tombstones) instead of `liveEntries` (which doesn't). Fixed in both
+      `commitBulkExclude` and `reconcile`'s pruning pass — already-
+      mis-hidden items self-correct (actually delete) on the next sync,
+      since pruning re-evaluates every local item every time, no separate
+      migration needed. Two more `CatalogSyncServiceTests` (one
+      reproducing the tombstone case exactly) plus a new
+      `HiddenCatalogItemVisibilityTests` lock both fixes down.
 
 ## Code health & error analytics
 
