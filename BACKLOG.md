@@ -812,16 +812,35 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
   - Real data check while scoping this (queried the live local store
     directly, not guessed): of NES's 1,694 catalog entries, 981 have
     `releaseYearNA <= 1995` (NES's real commercial window), 583 are after
-    1995, and 130 have no release year at all. A release-year heuristic
-    alone gets partway to separating real releases from the ~890 the user
-    estimates are junk, but undercounts — likely because some hacks fake a
-    period-accurate copyright year. `category`/`version_parent` (IGDB's own
-    "is this a mod/hack" fields) are already filtered at ingest time and
-    evidently aren't catching these either, since they got through. The
-    `involved_companies.publisher` signal proposed earlier in this doc is
-    still the next thing to actually check against live IGDB data — handed
-    to the user as real `curl` commands to run (I don't hold IGDB
-    credentials), result pending.
+    1995, and 130 have no release year at all — a real if imperfect
+    (undercounts the user's ~890 estimate a bit) starting split.
+  - ~~`involved_companies.publisher`-missing as a signal~~ **Checked live
+    against real IGDB data (user ran the `curl` calls) and ruled out** —
+    doesn't work. IGDB is community-contributed and lets anyone list
+    themselves as a "company": every one of 5 real "Super Mario Bros. 3"
+    ROM hacks checked (Alpha, Xmas Edition, A New Journey, "+", a "Lost
+    Levels" hack) has `involved_companies` populated with the hacker's own
+    handle ("Infidelity", "sukoritai", "xerox519", …) — structurally
+    identical to a real publisher credit, so "no companies credited"
+    doesn't reliably distinguish a hack from a real release.
+  - **`first_release_date` is the real signal, and it's clean.** Same 6
+    real-vs-hack comparison: the real Super Mario Bros. 3 has
+    `1988-10-23` — the actual historical NES release date. Every hack is
+    either missing the field entirely or dated years to decades later
+    (2005, 2015, 2016, 2022, 2023) — "8 Bit Son-of-a-Bitch" itself is
+    `2022-01-01`, an exact midnight-Jan-1 placeholder. `category`/
+    `version_parent` (IGDB's own "is this a mod/hack" fields) are already
+    filtered at ingest time and evidently aren't catching these — neither
+    is set on any of the hacks checked — so release-date is doing real work
+    here that IGDB's own structured fields don't.
+  - No new code needed for the immediate cleanup: `SystemGamesList`
+    already has "Sort by Release Year" — sorting descending clusters every
+    suspicious (post-1995/no-year) entry together instead of scattering
+    them through 1,694 titles, so the bulk-select-and-exclude flow above
+    can be pointed at the whole cluster at once. A dedicated "jump to
+    suspicious" filter shortcut is a possible follow-up, not done — offered
+    to the user, no answer yet on whether it's worth building over sort +
+    scroll.
 - **Cleanup: stale local catalog items never get pruned.** Found while
   verifying Phase 3 live: `CatalogSyncService.reconcile` has always been
   "additive only — items that vanish from the feed are left in place" (a
