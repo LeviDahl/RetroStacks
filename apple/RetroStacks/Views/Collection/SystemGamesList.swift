@@ -628,9 +628,13 @@ struct SystemGamesList: View {
     /// Available in every scope now, not just Missing/All — bulk-select is
     /// also how you bulk-*remove* (Owned/Wanted) or bulk-exclude (any
     /// scope), not only bulk-add, so gating it to "has something addable"
-    /// stopped making sense once those other actions existed. `> 1` (not
-    /// `> 0`): bulk-anything is meaningless with just one row to act on.
-    private var canSelect: Bool { shown.count > 1 }
+    /// stopped making sense once those other actions existed. Was `> 1` on
+    /// the reasoning that bulk-anything is redundant with one row to act
+    /// on — true for Add (there's already a direct "+" tap), but wrong for
+    /// Exclude: that has no other single-item path at all, so a filter
+    /// narrowing to exactly one item made that lone item permanently
+    /// unreachable for exclusion. Found live 2026-09-18.
+    private var canSelect: Bool { !shown.isEmpty }
 
     /// No "already in your collection" lock (removed 2026-09-18) — that only
     /// ever made sense while Select meant bulk-*add* (can't add what you
