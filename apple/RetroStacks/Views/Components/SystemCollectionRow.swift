@@ -15,6 +15,22 @@ struct SystemCollectionRow: View {
             : "\(summary.ownedItemCount) item\(summary.ownedItemCount == 1 ? "" : "s")"
     }
 
+    /// `countText` above is deliberately games-only, which otherwise makes
+    /// owned consoles/accessories invisible on this row entirely — user's
+    /// own catch, and preference: a separate owned/total ratio per kind
+    /// (matching `countText`'s own shape), not just a combined count. Each
+    /// hides on its own when the catalog has none of that kind (most
+    /// platforms have no cataloged accessories, say), same as the
+    /// completion-% label already does for `catalogGameCount == 0`.
+    private var consoleText: String? {
+        guard summary.catalogConsoleCount > 0 else { return nil }
+        return "\(summary.ownedConsoleCount)/\(summary.catalogConsoleCount)"
+    }
+    private var accessoryText: String? {
+        guard summary.catalogAccessoryCount > 0 else { return nil }
+        return "\(summary.ownedAccessoryCount)/\(summary.catalogAccessoryCount)"
+    }
+
     var body: some View {
         HStack(spacing: 14) {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -40,6 +56,14 @@ struct SystemCollectionRow: View {
 
                 HStack(spacing: 10) {
                     Label(countText, systemImage: "gamecontroller")
+                    if let consoleText {
+                        Label(consoleText, systemImage: "tv")
+                            .accessibilityLabel("\(consoleText) consoles owned")
+                    }
+                    if let accessoryText {
+                        Label(accessoryText, systemImage: "cable.connector")
+                            .accessibilityLabel("\(accessoryText) accessories owned")
+                    }
                     if summary.catalogGameCount > 0 {
                         Label("\(summary.completionPercent)%", systemImage: "chart.pie")
                     }

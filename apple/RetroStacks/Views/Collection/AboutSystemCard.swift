@@ -21,6 +21,22 @@ struct AboutSystemCard: View {
     private var ownedCount: Int { platform.catalogItems.filter(\.isOwned).count }
     private var wishlistCount: Int { platform.catalogItems.filter(\.isWishlisted).count }
 
+    /// "1,043 games · 2 consoles · 2 accessories" under the plain total —
+    /// user's own follow-up after noticing "Catalog" (all kinds) and My
+    /// Collection's per-system ratio (games-only) disagreed by exactly the
+    /// hardware/accessory count. `nil` when there's only one kind present
+    /// (the overwhelming majority of platforms), so the breakdown doesn't
+    /// clutter the common case where it'd just repeat the total.
+    private var catalogBreakdown: String? {
+        let counts: [(count: Int, label: String)] = [
+            (platform.games.count, "games"),
+            (platform.consoles.count, "consoles"),
+            (platform.accessories.count, "accessories")
+        ].filter { $0.count > 0 }
+        guard counts.count > 1 else { return nil }
+        return counts.map { "\($0.count) \($0.label)" }.joined(separator: " · ")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 16) {
@@ -64,7 +80,7 @@ struct AboutSystemCard: View {
             LazyVGrid(columns: columns, spacing: 8) {
                 SystemFactTile(label: "Years", value: yearRange)
                 SystemFactTile(label: "Generation", value: "\(platform.generation)")
-                SystemFactTile(label: "Catalog", value: "\(platform.visibleCatalogItems().count)")
+                SystemFactTile(label: "Catalog", value: "\(platform.visibleCatalogItems().count)", detail: catalogBreakdown)
                 SystemFactTile(label: "Owned", value: "\(ownedCount)")
                 SystemFactTile(label: "Wishlist", value: "\(wishlistCount)")
                 SystemFactTile(label: "Value", value: Money.string(summary?.value ?? 0))
@@ -84,11 +100,16 @@ struct AboutSystemCard: View {
 struct SystemFactTile: View {
     var label: String
     var value: String
+    var detail: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label).font(.caption2).foregroundStyle(.mutedText)
             Text(value).font(.callout.weight(.semibold).monospacedDigit())
                 .lineLimit(1).minimumScaleFactor(0.7)
+            if let detail {
+                Text(detail).font(.caption2).foregroundStyle(.mutedText)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)

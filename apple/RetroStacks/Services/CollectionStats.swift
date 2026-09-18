@@ -28,6 +28,15 @@ struct CollectionStats {
         var ownedItemCount: Int
         var ownedGameCount: Int
         var catalogGameCount: Int
+        /// Consoles/accessories, tracked the same shape as games — the
+        /// games-only ratio above otherwise makes owned hardware invisible
+        /// on `SystemCollectionRow` entirely. Zero-catalog kinds (most
+        /// platforms have no cataloged accessories, say) hide their row
+        /// rather than showing a "0/0".
+        var ownedConsoleCount: Int
+        var catalogConsoleCount: Int
+        var ownedAccessoryCount: Int
+        var catalogAccessoryCount: Int
         var value: Decimal
         /// Sum of reference prices for catalogued games on this platform you
         /// don't own — roughly "what finishing the set would cost".
@@ -111,6 +120,10 @@ enum CollectionStatsBuilder {
                 ownedItemCount: group.count,
                 ownedGameCount: ownedGames,
                 catalogGameCount: games.count,
+                ownedConsoleCount: group.filter { $0.kind == .console }.count,
+                catalogConsoleCount: platform.consoles.count,
+                ownedAccessoryCount: group.filter { $0.kind == .accessory }.count,
+                catalogAccessoryCount: platform.accessories.count,
                 value: group.compactMap(\.estimatedValue).reduce(0, +),
                 remainingValue: remaining,
                 completionRatio: games.count > 0
