@@ -861,18 +861,27 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
     wasn't optional this time. Not yet run against the app for a real
     click-through — worth doing before relying on it for the actual NES
     cleanup pass.
-- **Cleanup: stale local catalog items never get pruned.** Found while
-  verifying Phase 3 live: `CatalogSyncService.reconcile` has always been
-  "additive only — items that vanish from the feed are left in place" (a
-  pre-existing, deliberate simplification, not introduced by Phase 3) — a
-  local test install that's lived through this session's earlier Atari 2600
-  slug-scheme change (`atari-2600-frogger` → `2600-frogger`) still has 492
-  orphaned rows under the old slugs, confirmed by diffing local slugs against
-  the live Supabase set directly, not guessed. Harmless (just clutter, not
-  corruption) and a fresh install wouldn't have it at all, but worth actually
-  pruning (`deleted_at`-aware reconcile, or a "remove local items not in the
-  last full sync" pass) once the database/API layer itself is stable — not a
-  priority while that's still moving.
+- ~~**Cleanup: stale local catalog items never get pruned.**~~ Fixed
+  2026-09-18 — stopped being a "not a priority yet" item the moment the
+  admin-exclude feature made it directly visible: excluding NES bootlegs
+  for everyone didn't move a single count on screen (About System Card,
+  the platform picker's "N catalog entries", …) except the one already-
+  filtered browse list, since nothing pruned the stale local row. User's
+  own instinct, confirmed before building: the server side was already
+  correct (`SupabaseCatalogRepository` already filters `deleted_at
+  is.null`), so the fix belongs in `reconcile`, not scattered client-side
+  checks. `reconcile` now prunes local *public* items missing from a
+  fresh feed — deletes outright when unowned (the common case), falls
+  back to `isHidden = true` only when someone's collection references it
+  (a hard delete would cascade-delete their real `CollectionItem`).
+  Private items are never pruned this way (their absence from one fetch
+  usually just means the viewer is signed out, not that the server
+  deleted them). `Platform.visibleCatalogItems(includeHidden:)` is the
+  one narrow client-side backstop left, for that same rare owned+excluded
+  case. Four new `CatalogSyncServiceTests` lock the boundary down. Should
+  also finally clear the original 492-item Atari 2600 slug-scheme
+  discrepancy on the next sync, as a side effect — not separately
+  verified yet.
 
 ## Code health & error analytics
 
