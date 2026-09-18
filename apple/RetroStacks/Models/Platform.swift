@@ -62,28 +62,38 @@ final class Platform {
 }
 
 extension Platform {
-    var consoles: [CatalogItem] { catalogItems.filter { $0.kind == .console } }
-    var games: [CatalogItem] { catalogItems.filter { $0.kind == .game } }
-    var accessories: [CatalogItem] { catalogItems.filter { $0.kind == .accessory } }
-
-    /// What a normal browsing view of this platform actually shows — raw
-    /// `catalogItems` includes locally hidden entries (`CatalogItem
-    /// .isHidden`), which covers both a personal "not interested" hide
-    /// *and* an admin's catalog-wide exclude (represented the same way
-    /// locally — see `AdminCatalogCurationService`; no separate flag).
-    /// Found live 2026-09-18: every "N catalog entries" count on screen
-    /// used the raw total, so excluding ~500 NES bootlegs for everyone
-    /// didn't move a single number anywhere except the filtered list
-    /// itself. `includeHidden` defaults to matching the same
-    /// `system.showHidden` toggle `SystemGamesList` reads, so a count
-    /// shown before you ever open that screen still agrees with what it
-    /// would show once you do.
+    /// The one source of truth for "what a normal browsing view of this
+    /// platform actually shows." Raw `catalogItems` includes locally hidden
+    /// entries (`CatalogItem.isHidden`), which covers both a personal "not
+    /// interested" hide *and* an admin's catalog-wide exclude (represented
+    /// the same way locally — see `AdminCatalogCurationService`; no
+    /// separate flag). Found live 2026-09-18, twice: excluding ~500 NES
+    /// bootlegs moved the filtered browse list, but not `AboutSystemCard`'s
+    /// "Catalog" count (fixed by routing it through here) — and *separately*
+    /// not Dashboard's platform breakdown, because `.games` below filtered
+    /// raw `catalogItems` directly instead of going through this. Every
+    /// kind-scoped accessor is now defined *in terms of* this one method
+    /// specifically so a third spot can't reappear the same way: there's
+    /// nowhere left to filter raw `catalogItems` by kind except here.
+    ///
+    /// `includeHidden` defaults to matching the same `system.showHidden`
+    /// toggle `SystemGamesList` reads, so a count shown before you ever open
+    /// that screen still agrees with what it would show once you do.
+    ///
+    /// Sync/admin-curation code (`CatalogSyncService.reconcile`,
+    /// `AdminCatalogCurationService`'s callers) reads raw `catalogItems`
+    /// directly on purpose, never this — that logic needs to see hidden
+    /// items to re-evaluate them, not just browse what's currently visible.
     func visibleCatalogItems(includeHidden: Bool = UserDefaults.standard.bool(forKey: "system.showHidden")) -> [CatalogItem] {
         includeHidden ? catalogItems : catalogItems.filter { !$0.isHidden }
     }
 
+    var consoles: [CatalogItem] { visibleCatalogItems().filter { $0.kind == .console } }
+    var games: [CatalogItem] { visibleCatalogItems().filter { $0.kind == .game } }
+    var accessories: [CatalogItem] { visibleCatalogItems().filter { $0.kind == .accessory } }
+
     func items(of kind: ItemKind) -> [CatalogItem] {
-        catalogItems.filter { $0.kind == kind }.sorted { $0.name < $1.name }
+        visibleCatalogItems().filter { $0.kind == kind }.sorted { $0.name < $1.name }
     }
 
     var eraLabel: String {

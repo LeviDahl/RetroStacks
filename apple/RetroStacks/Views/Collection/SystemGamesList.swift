@@ -706,13 +706,16 @@ struct SystemGamesList: View {
     /// here, so local and remote must agree, not diverge. Same safe-delete-
     /// or-hide split `CatalogSyncService.reconcile`'s pruning pass uses:
     /// deletes the local `CatalogItem` outright when nobody's collection
-    /// references it (true for nearly all of these), so every raw count
-    /// (`platform.catalogItems.count` and friends) is correct immediately,
-    /// not just after the next sync's own pruning pass catches up. Falls
-    /// back to `isHidden = true` only when someone owns or wishlists it —
-    /// a hard delete there would cascade-delete their real `CollectionItem`
+    /// *currently* references it, so every count reading through
+    /// `Platform.visibleCatalogItems` is correct immediately, not just
+    /// after the next sync's own pruning pass catches up. Falls back to
+    /// `isHidden = true` only when someone owns or wishlists it — a hard
+    /// delete there would cascade-delete their real `CollectionItem`
     /// (`deleteRule: .cascade`) as a side effect of an unrelated curation
-    /// action.
+    /// action. Checks `liveEntries`, not raw `collectionEntries` — a
+    /// tombstoned (soft-removed) entry from a since-undone add still counts
+    /// as "owned" under the raw relationship, which is exactly what
+    /// happened here once already (found live 2026-09-18).
     private func commitBulkExclude() {
         let slugs = Array(picked)
         isExcluding = true
@@ -721,7 +724,7 @@ struct SystemGamesList: View {
                 try await AdminCatalogCurationService().exclude(slugs: slugs)
                 let slugSet = Set(slugs)
                 for item in cachedCatalog where slugSet.contains(item.slug) {
-                    if item.collectionEntries.isEmpty {
+                    if item.liveEntries.isEmpty {
                         modelContext.delete(item)
                     } else {
                         item.isHidden = true

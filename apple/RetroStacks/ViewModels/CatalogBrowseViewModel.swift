@@ -23,6 +23,16 @@ final class CatalogBrowseViewModel {
     var sortField: SortField = .title
     var sortAscending = true
     var ownershipFilter: OwnershipFilter = .all
+    /// Off by default, same meaning as `SystemGamesList`'s own toggle
+    /// (`CatalogItem.isHidden` — a personal hide, or an admin's catalog-wide
+    /// exclude, represented locally the same way). Found live 2026-09-18:
+    /// `apply(to:)` never checked `isHidden` at all, so Browse Catalog kept
+    /// showing every excluded item with no way to filter them out, unlike
+    /// the per-system drill-down. Plain stored property, not `@AppStorage`
+    /// backed — deliberately independent of `SystemGamesList`'s toggle,
+    /// matching every other filter on this view model, which also resets
+    /// each time Browse Catalog is opened fresh.
+    var showHidden = false
 
     enum OwnershipFilter: String, CaseIterable, Identifiable {
         case all, owned, notOwned, wishlist
@@ -40,6 +50,7 @@ final class CatalogBrowseViewModel {
     func apply(to items: [CatalogItem]) -> [CatalogItem] {
         var result = items
 
+        if !showHidden { result = result.filter { !$0.isHidden } }
         if let kindFilter { result = result.filter { $0.kind == kindFilter } }
         if let platformSlugFilter { result = result.filter { $0.platform?.slug == platformSlugFilter } }
         if let generationFilter { result = result.filter { $0.platform?.generation == generationFilter } }

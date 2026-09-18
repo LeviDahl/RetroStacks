@@ -143,6 +143,37 @@ struct CatalogSyncServiceTests {
         #expect(entries.count == 1, "the real CollectionItem must not be cascade-deleted as a side effect")
     }
 
+    /// Found live 2026-09-18: a tombstoned (soft-removed via `CollectionActions
+    /// .remove`, which only sets `deletedAt`) `CollectionItem` still counts
+    /// as "owned" under the raw `collectionEntries` relationship, so the
+    /// first version of this pruning check wrongly hid instead of deleted
+    /// every item that had ever been added-then-undone — exactly what
+    /// happened when a user accidentally bulk-added ~560 review-candidate
+    /// items, then used bulk-remove to undo it, then excluded them: all 560
+    /// got hidden, none deleted, because the tombstoned entries were still
+    /// attached. Must check `liveEntries` (deletedAt == nil only).
+    @MainActor
+    @Test func syncDeletesAPublicItemWhoseOnlyCollectionEntryIsSoftDeleted() async throws {
+        let context = try freshContext()
+        let platform = Platform(
+            slug: "snes", name: "Super Nintendo Entertainment System", shortName: "SNES",
+            manufacturer: "Nintendo", generation: 4
+        )
+        context.insert(platform)
+        let stale = CatalogItem(slug: "snes-some-bootleg", kind: .game, name: "Some Bootleg")
+        stale.platform = platform
+        context.insert(stale)
+        let tombstoned = CollectionItem(catalogItem: stale, status: .owned)
+        tombstoned.markDeleted()
+        context.insert(tombstoned)
+
+        let service = CatalogSyncService(repository: FakeCatalogRepository(result: .success(Self.feedShapedLikeReality())))
+        await service.sync(into: context)
+
+        let remaining = try context.fetch(FetchDescriptor<CatalogItem>(predicate: #Predicate { $0.slug == "snes-some-bootleg" }))
+        #expect(remaining.isEmpty, "a tombstoned collection entry must not count as \"owned\" — the item should still be deleted")
+    }
+
     /// A private (user-created) item missing from this fetch usually just
     /// means the viewer is signed out or it's a different account's row —
     /// never treated as "the server deleted it," unlike a public item.

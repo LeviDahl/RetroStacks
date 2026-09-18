@@ -29,7 +29,7 @@ struct CatalogSection: View {
     private var itemsCacheKey: String {
         "\(viewModel.kindFilter?.rawValue ?? "-")|\(viewModel.platformSlugFilter ?? "-")|"
             + "\(viewModel.generationFilter.map(String.init) ?? "-")|\(viewModel.ownershipFilter.rawValue)|"
-            + "\(viewModel.searchText)|\(viewModel.sortField.rawValue)|\(viewModel.sortAscending)"
+            + "\(viewModel.searchText)|\(viewModel.sortField.rawValue)|\(viewModel.sortAscending)|\(viewModel.showHidden)"
     }
 
     private var items: [CatalogItem] { cachedItems }
@@ -211,6 +211,10 @@ struct CatalogSection: View {
                     ForEach(CatalogBrowseViewModel.SortField.allCases) { Text($0.label).tag($0) }
                 }
                 Toggle("Ascending", isOn: $viewModel.sortAscending)
+                Divider()
+                Toggle(isOn: $viewModel.showHidden) {
+                    Label("Show Hidden Items", systemImage: "eye.slash")
+                }
                 if viewModel.hasActiveFilters {
                     Divider()
                     Button("Clear Filters", role: .destructive) { viewModel.clearFilters() }

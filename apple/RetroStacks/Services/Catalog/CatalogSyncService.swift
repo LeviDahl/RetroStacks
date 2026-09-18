@@ -178,10 +178,14 @@ final class CatalogSyncService {
     /// `AdminCatalogCurationService`'s own exclude flow already uses — when
     /// someone does own or wishlist it, so their record survives and it
     /// still disappears from normal browsing everywhere `isHidden` is
-    /// already respected.
+    /// already respected. Checks `liveEntries`, not raw `collectionEntries`
+    /// — found live 2026-09-18: `CollectionActions.remove` only *soft*-
+    /// deletes (`markDeleted()`), so a tombstoned entry from a since-undone
+    /// add still counts as "owned" under the raw relationship, wrongly
+    /// routing every such item to hide instead of delete.
     private func pruneMissingPublicItems(itemsBySlug: [String: CatalogItem], seenSlugs: Set<String>, context: ModelContext) {
         for (slug, item) in itemsBySlug where item.ownerUserID == nil && !seenSlugs.contains(slug) {
-            if item.collectionEntries.isEmpty {
+            if item.liveEntries.isEmpty {
                 context.delete(item)
             } else if !item.isHidden {
                 item.isHidden = true
