@@ -833,14 +833,34 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
     filtered at ingest time and evidently aren't catching these — neither
     is set on any of the hacks checked — so release-date is doing real work
     here that IGDB's own structured fields don't.
-  - No new code needed for the immediate cleanup: `SystemGamesList`
-    already has "Sort by Release Year" — sorting descending clusters every
-    suspicious (post-1995/no-year) entry together instead of scattering
-    them through 1,694 titles, so the bulk-select-and-exclude flow above
-    can be pointed at the whole cluster at once. A dedicated "jump to
-    suspicious" filter shortcut is a possible follow-up, not done — offered
-    to the user, no answer yet on whether it's worth building over sort +
-    scroll.
+  - ~~A dedicated "jump to suspicious" filter, instead of sort + scroll~~
+    Done — user's own follow-up: publisher count alone (their original
+    idea) isn't reliable either. Checked live: NES's top 40 publishers by
+    count are *all* real (Nintendo down through Milton Bradley, including
+    real-but-unlicensed ones like Active Enterprises/Camerica/Color Dreams
+    and real modern homebrew studios like Mega Cat Studios/The Mojon
+    Twins/Piko Interactive) — the signal is in the *tail*, not the head:
+    460 distinct publisher names on NES, 279 of them appearing on exactly
+    one item, another 71 on exactly two. Publishers appearing ≤3 times
+    cover 591 items; add the 330 "(none)" items and that's 921 — close to
+    the user's original ~890 estimate. Combined with the release-date
+    signal above (requiring *both*, not either — a real obscure publisher
+    with a correct period date shouldn't get flagged just for being
+    small), built as a real "Review Candidates Only" toggle in
+    `SystemGamesList`'s filter menu
+    (`SystemGamesListReviewCandidateTests` locks the decision boundary
+    down with constructed fixtures, not just the live spot-checks above).
+    Verified against the real store before shipping: 562 NES items match
+    both signals — a real, sizeable narrowing from 1,694, and Super Mario
+    Bros. 3/Legend of Zelda/etc. correctly stay out while the SMB3 hack
+    family and similar correctly get flagged. `computeCatalog`/
+    `ascendingCompare`/`isReviewCandidate`/`indexLetter` split into a new
+    `SystemGamesListCatalog.swift` in the process — the new heuristic
+    pushed `SystemGamesList`'s `type_body_length` from a tolerated warning
+    into a hard lint error (615 lines against the 600 threshold), so this
+    wasn't optional this time. Not yet run against the app for a real
+    click-through — worth doing before relying on it for the actual NES
+    cleanup pass.
 - **Cleanup: stale local catalog items never get pruned.** Found while
   verifying Phase 3 live: `CatalogSyncService.reconcile` has always been
   "additive only — items that vanish from the feed are left in place" (a
