@@ -635,6 +635,18 @@ struct SystemGamesList: View {
         if picked.contains(item.slug) { picked.remove(item.slug) } else { picked.insert(item.slug) }
     }
 
+    /// Bypasses `togglePick`'s "already in your collection" lock on purpose —
+    /// that lock only makes sense for bulk-*add* (can't add what you already
+    /// have), not for bulk-exclude, where whether you personally own an item
+    /// has nothing to do with whether it belongs in the shared catalog. A
+    /// review pass over hundreds of candidates needs this; tapping each row
+    /// individually doesn't scale past a handful of items.
+    private var isAllShownSelected: Bool { !shown.isEmpty && picked.count == shown.count }
+
+    private func toggleSelectAll() {
+        picked = isAllShownSelected ? [] : Set(shown.map(\.slug))
+    }
+
     private func toggleWishlist(_ item: CatalogItem) {
         withAnimation {
             if let existing = item.entry(for: .wishlist) {
@@ -714,6 +726,9 @@ struct SystemGamesList: View {
             HStack {
                 Button("Cancel") {
                     withAnimation { picked.removeAll(); selecting = false }
+                }
+                Button(isAllShownSelected ? "Deselect All" : "Select All \(shown.count)") {
+                    withAnimation { toggleSelectAll() }
                 }
                 if isAdmin {
                     Button(role: .destructive) {
