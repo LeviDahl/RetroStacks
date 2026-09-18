@@ -705,11 +705,18 @@ end-to-end sync fixes above). Four items came back:
   how it actually shipped. User's call: new `CatalogItem` rows per variant,
   not a free-text field on the owned item, mixing IGDB-sourced data with
   hand-created rows. Checked real candidates before committing to anything:
-  IGDB's own docs don't model this granularity, and PriceCharting's
-  *website* clearly does (Zelda alone has 5-screw/3-screw/gold-vs-gray/
-  Rev-A/SOQ variants listed) but its public API doesn't expose any of it
-  (verified via its real docs, not assumed) — so this stays hand-curated for
-  the foreseeable future, not auto-pulled from anywhere.
+  IGDB's own docs don't model this granularity. At the time, PriceCharting's
+  *website* clearly did (Zelda alone has 5-screw/3-screw/gold-vs-gray/
+  Rev-A/SOQ variants listed) but its public API was believed not to expose
+  any of it — so this stayed hand-curated.
+  ~~Correction 2026-09-18~~: that API claim doesn't hold up once actually
+  subscribed and tested live — a real `/api/products` search returned `NES
+  | Legend of Zelda [5 Screw]` directly. Variant tags *do* show up in
+  `product-name` for at least well-documented variants; the original check
+  was reading the docs, not calling the API with a paid token. Still hand-
+  curated for now (nothing auto-pulls variant data into the catalog), but
+  the "API can't do this" premise was wrong, worth remembering if this gets
+  revisited.
 
   This grew into a much bigger architecture decision: the catalog moved from
   a static JSON feed to a live Supabase-backed table with a real public/
@@ -861,6 +868,44 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
     wasn't optional this time. Not yet run against the app for a real
     click-through — worth doing before relying on it for the actual NES
     cleanup pass.
+  - ~~A stronger-than-heuristic signal, once willing to pay for it~~ Done
+    2026-09-18: user subscribed to PriceCharting's $49/mo Legendary tier
+    specifically to test this. New `api/build/pricecharting-catalog-match
+    .mjs` — takes the same review-candidates heuristic (ported to JS, kept
+    in sync by hand with `SystemGamesListCatalog.swift`'s Swift version,
+    no shared source between the app and this build pipeline), searches
+    PriceCharting's live `/api/products` for each candidate, and writes a
+    report (`api/data/pricecharting-match-<platform>.json`, gitignored —
+    point-in-time, not source data) suggesting keep/exclude per item.
+    Doesn't touch `catalog_items` itself — same "assists, doesn't replace"
+    reasoning as the client-side toggle; the resulting slugs still go
+    through the app's own admin-exclude flow by hand.
+    - First real run against NES's *current* (already-cleaned-up) catalog:
+      only 6 review candidates remained (down from ~562 before the user's
+      earlier bulk-exclude pass — a real confirmation that pass worked).
+      2 matched PriceCharting exactly (`Battle Kid 2: Mountain of Torment
+      [Homebrew]`, `Nomolos: Storming the Catsle [Homebrew]` — both real
+      RetroUSB homebrew with genuine sales data) and correctly suggested
+      "keep"; 4 had no PriceCharting match at all and suggested "exclude."
+      One of those four (`Larry and the Long Look for a Luscious Lover`,
+      also credited to RetroUSB, a publisher with *other* confirmed real
+      releases) is a good example of why this stays a suggestion, not an
+      auto-exclude — could be a genuinely obscure real release PriceCharting
+      hasn't priced yet, not necessarily fake.
+    - Region signal confirmed usable the same run (see the EU/JP item
+      above): PriceCharting splits releases into regional console names
+      (`NES` / `PAL NES` / `Famicom`) rather than a per-item field — the
+      script records which one a match came from. Only `nes`'s mapping is
+      verified so far (`CONSOLE_NAMES` in the script) — add more platforms
+      only after confirming their console-name pattern live, not by
+      guessing the naming convention from NES's.
+    - No bulk "everything for a platform" API endpoint exists (confirmed
+      live, not assumed from docs) — `/api/products` search caps around
+      100 results per query. Fine for a review-candidates-sized list (a
+      few hundred at most); would need the CSV bulk export (also Legendary-
+      tier, a separate logged-in-website download, not a token-authenticated
+      URL) if this ever needs to check the *whole* catalog rather than just
+      the flagged subset.
   - **Admin surface for viewing/restoring excluded items — not started,
     not urgent, flagged 2026-09-18 for whenever admin tools come up
     again.** Right now `admin_restore_catalog_items` can only be reached
@@ -1138,3 +1183,48 @@ tooling):
     also just be inherent SQLite/WAL overhead at this store size), so this
     needs its own real measurement before committing to the bigger
     persistent-store-split architecture change it implies.
+
+## Platform expansion (scoped 2026-09-18, not started)
+
+Same shape of work as the disc-system catalogs import (PS1/PS2/Dreamcast/
+GameCube, "Data feed & backend" above) — real bugs surfaced there
+(non-hoisted `const` functions, the `category`/`release_region` IGDB field
+bugs, duplicate-slug collisions) that a *new* platform import should expect
+to hit its own version of, not assume will go smoothly just because the
+pattern's proven. Deliberately sequenced *after* the PriceCharting matching
+script/NES cleanup, per the user's own call.
+
+**Scope, confirmed via direct questions rather than guessed:**
+- **Floor stays at gen 2** — add ColecoVision and Intellivision alongside
+  the existing Atari 2600 (all three are the same generation; Atari 2600
+  alone was never meant to represent the whole era on its own).
+- **Ceiling stays at gen 6 for now** — no original Xbox, no 7th gen
+  (Wii/PS3/Xbox 360) yet, explicitly no 8th gen or newer (PS4/Xbox One/
+  Switch/Switch 2). User's own framing: "6th for now, if any additional
+  work needed to set up for success for 7th eventually, do it now" — the
+  ingest script's `PLATFORMS` map (`api/build/ingest/igdb.mjs`) is already
+  just a lookup table entries get added to, so there's no real structural
+  prep work this implies beyond what adding these platforms already does;
+  not inventing scaffolding for its own sake.
+- **New platforms to add (9, bringing the catalog from 10 → 19 systems):**
+  Sega Master System (gen 3, alongside NES); TurboGrafx-16/PC Engine and
+  Neo Geo (gen 4, alongside SNES/Genesis — **Neo Geo explicitly lower
+  priority** than the rest of this list, user's own call); Sega Saturn,
+  3DO, Philips CD-i, Atari Jaguar (gen 5, alongside N64/PlayStation).
+- Each one needs its own real IGDB platform-ID lookup and ingest run
+  (`igdb.mjs`), the same as every platform already in the catalog — the
+  user's own IGDB credentials are required for this (not held by the
+  assistant; every real IGDB check this project has done has gone through
+  the user running the actual query and sharing results back). Platforms
+  themselves stay bundled/local-only either way (`api/data/curated.json`,
+  never migrated to Supabase — see "Catalog goes live in Supabase"'s Phase
+  2 section for why) — the app's own `Platform` list is fully data-driven
+  from whatever's in the feed, so no client-side model/UI change is needed
+  just to add a platform; only the ingest + migration pipeline is real
+  work here.
+- Not yet scoped: exact IGDB platform IDs for any of the 9 (need
+  confirming live, not guessed, same discipline as every other real IGDB
+  fact recorded in this document); whether each of these needs its own
+  curated seed entries (icon, summary, region availability) the way the
+  original 10 platforms got, or can lean more heavily on IGDB's own data
+  from the start.

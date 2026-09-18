@@ -65,3 +65,7 @@ Secrets.plist
 
 # api build output (published by CI)
 api/dist/
+
+# Point-in-time analysis reports (pricecharting-catalog-match.mjs) — derived,
+# goes stale immediately as the live catalog changes, not source data.
+api/data/pricecharting-match-*.json
