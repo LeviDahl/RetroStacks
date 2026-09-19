@@ -41,5 +41,5 @@ EU/JP later.
 - **Collection sync**: Supabase Auth (magic link, paste-the-link-back — no
   URL-scheme deep link, so no Xcode target changes needed) + Postgres,
   wired end-to-end and unit-tested (Keychain round-trip, wire format,
-  last-write-wins merge). Not yet exercised with a real live sign-in — see
-  `BACKLOG.md`'s Multi-user section for what's still pending there.
+  last-write-wins merge), and exercised with a real live sign-in
+  (2026-09-15/16). Photo sync is the piece still pending — see `BACKLOG.md`.

@@ -38,7 +38,7 @@ final class CatalogBrowseViewModel {
     /// confirmed-NA (or unconfirmed) items, now done here instead of at
     /// ingest time. `CatalogItem.regions == nil` (no region data at all)
     /// always counts as NA regardless of this toggle, same "assume NA"
-    /// posture as everywhere else this field is read. See BACKLOG.md's
+    /// posture as everywhere else this field is read. See FEATURES.md's
     /// "EU / JP region switch."
     var showNonNARegions = false
 

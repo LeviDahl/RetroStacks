@@ -6,7 +6,7 @@ import Testing
 
 /// `SystemGamesList.isReviewCandidate` — the heuristic for bootlegs/ROM
 /// hacks/homebrew that slipped into the IGDB import. Verified 2026-09-17
-/// against real IGDB data before being built (see `BACKLOG.md`'s Phase 5
+/// against real IGDB data before being built (see `FEATURES.md`'s Phase 5
 /// section) — these fixtures lock down the exact decision boundary that
 /// real check established, not a re-guess of it.
 ///

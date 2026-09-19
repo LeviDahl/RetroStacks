@@ -1,6 +1,6 @@
 #!/bin/bash
 # Exhaustive, unattended Leaks check for the macOS build of RetroStacks.
-# See BACKLOG.md's "Automated leak testing — exhaustive, unattended" for the
+# See FEATURES.md's "Automated leak testing — exhaustive, unattended" for the
 # full story of how each piece here was figured out; this script is Phase 1 +
 # Phase 3 of that plan (Phase 2, the walkthrough itself, is
 # RetroStacksUITests/AppWalkthroughTests.swift).

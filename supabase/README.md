@@ -2,10 +2,10 @@
 
 **Collection sync wired up and live** (2026-09-12); **the catalog moved into
 Supabase 2026-09-17** (see *The catalog* below). This doc describes what's
-actually built. See the
-root [`BACKLOG.md`](../BACKLOG.md#multi-user-phase-1) for what's still
-pending (a real end-to-end sign-in test, Photos upload) and how this fits
-the rest of the roadmap.
+actually built. See
+[`FEATURES.md`](../FEATURES.md#multi-user-sync-supabase-phase-1) for the
+history (including the bugs the live sign-in test found) and
+[`BACKLOG.md`](../BACKLOG.md) for what's still pending (Photos upload).
 
 ## What this is for
 
@@ -68,28 +68,20 @@ and that's how it went:
   field, "Check your mail," a field to paste the link back in.
 - **Regression-tested**: `AccountServiceTests` (Keychain session round-trip —
   this is what caught a real silent bug where session persistence was
-  completely broken, see `BACKLOG.md`), `SupabaseCollectionRowTests` (wire
+  completely broken, see `FEATURES.md`), `SupabaseCollectionRowTests` (wire
   format), `SyncCoordinatorTests` (merge logic). Not something to take on
-  faith — see `BACKLOG.md`'s Multi-user section for the actual bugs found
+  faith — see `FEATURES.md`'s Multi-user section for the actual bugs found
   this way.
 
 **Not done yet**: **Photos** — `CollectionItem.photoData` still doesn't sync;
 it needs the Storage bucket upload (`collection-photos`, already created by
 `schema.sql`, path `<user_id>/<exportID>/<n>.jpg`) wired into
 `SupabaseCollectionSyncEngine` or a sibling type. Every other field syncs
-without it. Also still pending: a real, live end-to-end sign-in test — send
-an actual email, paste an actual link back, watch a real row land in
-`collection_items`. Everything up to that point is real-Keychain and
-real-wire-format tested, but nobody has done the live round trip yet.
+without it.
 
-**Why the live sign-in test still matters:** auth flows and RLS policies are
-the kind of thing that's cheap to get subtly wrong and expensive to debug
-blind. Everything that unit tests can cover (Keychain persistence, wire
-format, merge logic) already found and fixed one real bug this way — but a
-real magic-link round trip and a real `auth.uid()` against the RLS policies
-above needs an actual email sent and an actual link pasted back, not another
-guess at the REST response shape. That's the one remaining gap between
-"built and tested" and "trust it with your real collection."
+**Live sign-in has been exercised** (2026-09-15/16): a real magic-link round
+trip against the real project, which found a real bug the unit tests couldn't
+(`completeSignIn` posted the wrong `/verify` body shape — see FEATURES.md).
 
 ## The catalog (`catalog_items`)
 

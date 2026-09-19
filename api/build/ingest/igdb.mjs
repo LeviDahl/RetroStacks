@@ -48,7 +48,7 @@ const PLATFORMS = {
   "gamecube":    { igdb: 21,  system: "Nintendo GameCube" },
 };
 
-// 2026-09-18 platform expansion (see BACKLOG.md) — added without a session
+// 2026-09-18 platform expansion (see FEATURES.md) — added without a session
 // holding IGDB credentials to verify numeric platform ids against the live
 // API, and hand-typed numeric ids found via web search disagreed with each
 // other across sources (two different ids each for Sega Saturn and Atari
@@ -269,7 +269,7 @@ function deduplicateSlugs(items) {
 function toItem(platformSlug, cfg, g) {
   if (!g.name) return null;
 
-  // Region tracking, not a drop filter — changed 2026-09-18 (see BACKLOG.md's
+  // Region tracking, not a drop filter — changed 2026-09-18 (see FEATURES.md's
   // "EU / JP region switch"). Used to discard anything without a confirmed NA
   // release; now keeps everything and records which regions actually had a
   // release, so the app can filter instead of the ingest silently deciding.

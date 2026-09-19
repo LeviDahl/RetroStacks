@@ -16,7 +16,7 @@ excluded:
   - apple/RetroStacksTests/Fixtures
 
 # Opt-in rules worth having on top of SwiftLint's default set — matched to
-# the "code smells worth watching for" from BACKLOG.md's Code health section
+# the "code smells worth watching for" from FEATURES.md's Code health section
 # (force unwraps and swallowed errors are exactly what hid the userID bug).
 # `force_try`/`empty_count`/`redundant_type_annotation` are already default
 # rules — listed here only where they needed opting in.

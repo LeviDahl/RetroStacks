@@ -76,7 +76,7 @@ struct SystemGamesList: View {
     /// signals for likely bootlegs/ROM hacks/homebrew that slipped into the
     /// IGDB import as if they were real releases (found live 2026-09-17,
     /// checked against real `curl` results, not guessed — see
-    /// `BACKLOG.md`'s Phase 5 section for the full account):
+    /// `FEATURES.md`'s Phase 5 section for the full account):
     /// `manufacturerOrPublisher` missing or credited on very few other items
     /// on this platform (a real publisher published many games; a ROM
     /// hacker's own handle, which IGDB's community data structurally can't

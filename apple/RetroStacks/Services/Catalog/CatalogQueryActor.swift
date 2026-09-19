@@ -5,7 +5,7 @@ import SwiftData
 /// and sort off the main actor. Previously this ran on `@MainActor` even
 /// though it was already deferred via `.task(id:)` (past the navigation
 /// push animation, not off the main thread) — the same real cost, first
-/// measured at 1.4-3.4s against the on-disk dev store (see BACKLOG.md's
+/// measured at 1.4-3.4s against the on-disk dev store (see FEATURES.md's
 /// sidebar-lag entry), was still blocking the UI whenever it actually ran.
 ///
 /// A `@ModelActor` gets its own `ModelContext` on the same store, so

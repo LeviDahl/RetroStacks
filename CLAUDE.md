@@ -65,6 +65,8 @@
   what's already been investigated vs. still open.
 
 ## 🗂️ Backlog
-Enhancement ideas and deferred work live in [`BACKLOG.md`](BACKLOG.md). Add to it
+Enhancement ideas and deferred work live in [`BACKLOG.md`](BACKLOG.md) (open items
+only); finished work and its history live in [`FEATURES.md`](FEATURES.md) — move an
+entry there when it ships. Add to the backlog
 rather than letting good ideas evaporate mid-task; near-term implementation TODOs
 stay in the `api/` and `apple/` READMEs.

@@ -3,7 +3,7 @@ import os
 
 /// Fetches the reference catalog from Supabase's `catalog_items` table
 /// instead of the static feed — Phase 3 of the plan in `supabase/schema.sql`
-/// ("Phase 2", the table itself) / `BACKLOG.md`'s "Catalog goes live in
+/// ("Phase 2", the table itself) / `FEATURES.md`'s "Catalog goes live in
 /// Supabase". `reconcile` (`CatalogSyncService`) is untouched: this is a
 /// drop-in `CatalogRepository`, same contract, different origin.
 ///

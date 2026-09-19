@@ -201,7 +201,7 @@ create table if not exists public.catalog_items (
 
   -- Which regions this specific release actually shipped in — "NA", "EU",
   -- "JP", any subset. Added 2026-09-18 for the region filter (see
-  -- BACKLOG.md's "EU / JP region switch"); null means the ingest source had
+  -- FEATURES.md's "EU / JP region switch"); null means the ingest source had
   -- no region data at all for this item, distinct from an empty array
   -- (queried but confirmed-nowhere, which shouldn't happen in practice).
   -- Null is treated as "assume NA" by the app, matching the old ingest

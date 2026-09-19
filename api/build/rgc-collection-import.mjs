@@ -11,7 +11,7 @@
 // outside that (handhelds, Xbox/PS3+/Switch) and RGC systems on RetroStacks'
 // backlog-but-not-built list (Intellivision, Master System, Jaguar, Saturn,
 // TurboGrafx-16, ColecoVision, 3DO) are deliberately skipped — see
-// BACKLOG.md's "Platform expansion" section. The full RGC export CSV is kept
+// FEATURES.md's "Platform expansion" section. The full RGC export CSV is kept
 // so those can be cross-referenced once real ingest happens for those
 // platforms, instead of re-scraping.
 //

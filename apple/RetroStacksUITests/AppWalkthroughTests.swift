@@ -5,7 +5,7 @@ import XCTest
 // These literals must match `AccessibilityID` in
 // RetroStacks/App/AccessibilityID.swift by hand.
 
-/// Drives the app for `Scripts/leak-check.sh` — see `BACKLOG.md`'s "Automated
+/// Drives the app for `Scripts/leak-check.sh` — see `FEATURES.md`'s "Automated
 /// leak testing" section for the full plan this is phase 2 of.
 ///
 /// Unlike `NavigationTests`, this does **not** call `app.launch()`. It attaches

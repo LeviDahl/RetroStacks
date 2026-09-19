@@ -177,8 +177,8 @@ Full source also type-checks under Swift 6 against the macOS 26 and iOS 26 SDKs.
 - ~~Add a `RemotePricingProvider`~~ — done, ahead of `SampleGuideProvider`.
 - ~~Add `PhotosPicker` binding to `CollectionItem.photoData`~~ — done.
 - ~~Multi-device collection sync~~ — done: Supabase Auth + Postgres, see
-  [`../supabase/README.md`](../supabase/README.md). Not yet exercised with a
-  real live sign-in — that's the next thing to actually do, not build.
+  [`../supabase/README.md`](../supabase/README.md). Exercised with a real live
+  sign-in 2026-09-15/16; photo sync is still pending (`BACKLOG.md`).
 - ~~Barcode scanning~~ — done (iOS/VisionKit); needs a real-device test, the
   Simulator has no camera.
 - Real box-art assets keyed by `CatalogItem.imageName` (games currently use

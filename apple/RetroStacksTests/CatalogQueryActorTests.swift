@@ -7,7 +7,7 @@ import Testing
 /// Locks down that `CatalogQueryActor` (a background `@ModelActor`) produces
 /// the exact same result as the original synchronous
 /// `SystemGamesList.computeCatalog` for the same inputs — the whole point of
-/// moving this off the main actor (see BACKLOG.md's sidebar-lag entry) was
+/// moving this off the main actor (see FEATURES.md's sidebar-lag entry) was
 /// to make it non-blocking without changing what it returns.
 struct CatalogQueryActorTests {
     @MainActor

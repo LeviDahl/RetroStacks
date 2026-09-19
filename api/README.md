@@ -121,7 +121,7 @@ HTTPS* in Settings → Pages once GitHub enables it.
 ## TODO
 - [x] Grow the real catalog beyond the 6 cartridge systems — done 2026-09-14
       (PS1/PS2/Dreamcast/GameCube) and expanded 2026-09-18/19 to 19 platforms
-      (~22,000 generated items). See `BACKLOG.md`'s Data feed and Platform
+      (~22,000 generated items). See `FEATURES.md`'s Data feed and Platform
       expansion sections for what those runs found and fixed.
 - [x] Catalog in Supabase instead of only static JSON — done 2026-09-17.
 - [ ] Nightly PriceCharting CSV ingest (Legendary tier) instead of per-item calls

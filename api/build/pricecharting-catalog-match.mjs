@@ -9,7 +9,7 @@
 //      heuristic alone: PriceCharting only tracks things with real collector
 //      market value, so absence there is a much more direct "this was never
 //      actually sold" signal than an inferred pattern. Confirmed live
-//      2026-09-18 before building this (see BACKLOG.md): the actual NES
+//      2026-09-18 before building this (see FEATURES.md): the actual NES
 //      bootleg that prompted the review-candidates feature is genuinely
 //      absent from PriceCharting's whole catalog, while real small-batch
 //      homebrew (e.g. "8-Bit Xmas 2022 [Homebrew]") is present with real
@@ -73,7 +73,7 @@ const RARE_PUBLISHER_THRESHOLD = 3;
 // PriceCharting's regional console-name values for each of our platform
 // slugs — confirmed live 2026-09-18 by searching real titles and checking
 // which console-name values their regional releases actually show up under
-// (see BACKLOG.md). Only platforms actually checked are listed; add more
+// (see FEATURES.md). Only platforms actually checked are listed; add more
 // only after confirming the same way, not by guessing the naming pattern.
 const CONSOLE_NAMES = {
   nes: { NA: ["NES"], EU: ["PAL NES"], JP: ["Famicom"] },
