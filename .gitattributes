@@ -1,0 +1,2 @@
+# Ingest output: minified, regenerated wholesale — don't render diffs.
+api/data/generated/*.json -diff linguist-generated

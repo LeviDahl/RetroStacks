@@ -1160,6 +1160,132 @@
       "shortName" : "PS2",
       "slug" : "ps2",
       "summary" : "Best-selling console of all time. Played DVDs, huge library, backward compatible with PS1."
+    },
+    {
+      "discontinuedYearNA" : 1985,
+      "generation" : 2,
+      "iconSystemName" : "gamecontroller",
+      "manufacturer" : "Coleco",
+      "name" : "ColecoVision",
+      "regions" : [
+        "NA"
+      ],
+      "releaseYearNA" : 1982,
+      "shortName" : "CV",
+      "slug" : "colecovision",
+      "summary" : "Arcade-accurate ports (Donkey Kong pack-in) and an Expansion Module that ran Atari 2600 carts."
+    },
+    {
+      "discontinuedYearNA" : 1990,
+      "generation" : 2,
+      "iconSystemName" : "gamecontroller",
+      "manufacturer" : "Mattel Electronics",
+      "name" : "Intellivision",
+      "regions" : [
+        "NA"
+      ],
+      "releaseYearNA" : 1979,
+      "shortName" : "INTV",
+      "slug" : "intellivision",
+      "summary" : "Mattel's disc-controller rival to the 2600, known for deeper sports sims and strategy games."
+    },
+    {
+      "discontinuedYearNA" : 1992,
+      "generation" : 3,
+      "iconSystemName" : "gamecontroller",
+      "manufacturer" : "Sega",
+      "name" : "Sega Master System",
+      "regions" : [
+        "NA"
+      ],
+      "releaseYearNA" : 1986,
+      "shortName" : "SMS",
+      "slug" : "sega-master-system",
+      "summary" : "Sega's NES-era competitor — technically ahead, never caught Nintendo in the US market."
+    },
+    {
+      "discontinuedYearNA" : 1994,
+      "generation" : 4,
+      "iconSystemName" : "gamecontroller",
+      "manufacturer" : "NEC",
+      "name" : "TurboGrafx-16",
+      "regions" : [
+        "NA"
+      ],
+      "releaseYearNA" : 1989,
+      "shortName" : "TG16",
+      "slug" : "turbografx-16",
+      "summary" : "NEC's PC Engine, rebranded for the US. Small US library, huge cult following, HuCards."
+    },
+    {
+      "discontinuedYearNA" : 1997,
+      "generation" : 4,
+      "iconSystemName" : "gamecontroller",
+      "manufacturer" : "SNK",
+      "name" : "Neo Geo",
+      "regions" : [
+        "NA"
+      ],
+      "releaseYearNA" : 1990,
+      "shortName" : "NEO",
+      "slug" : "neo-geo",
+      "summary" : "SNK's arcade-perfect home system — the same hardware as the arcade cabinet, at an arcade price."
+    },
+    {
+      "discontinuedYearNA" : 1998,
+      "generation" : 5,
+      "iconSystemName" : "opticaldiscdrive",
+      "manufacturer" : "Sega",
+      "name" : "Sega Saturn",
+      "regions" : [
+        "NA"
+      ],
+      "releaseYearNA" : 1995,
+      "shortName" : "SAT",
+      "slug" : "saturn",
+      "summary" : "Sega's PS1 rival — a surprise early launch, twin-CPU architecture, best-in-class 2D and fighters."
+    },
+    {
+      "discontinuedYearNA" : 1996,
+      "generation" : 5,
+      "iconSystemName" : "opticaldiscdrive",
+      "manufacturer" : "Panasonic",
+      "name" : "3DO Interactive Multiplayer",
+      "regions" : [
+        "NA"
+      ],
+      "releaseYearNA" : 1993,
+      "shortName" : "3DO",
+      "slug" : "3do",
+      "summary" : "A licensed hardware standard (Panasonic's FZ-1 the main US model) — pricey, short-lived, ahead of its time."
+    },
+    {
+      "discontinuedYearNA" : 1998,
+      "generation" : 4,
+      "iconSystemName" : "opticaldiscdrive",
+      "manufacturer" : "Philips",
+      "name" : "Philips CD-i",
+      "regions" : [
+        "NA"
+      ],
+      "releaseYearNA" : 1991,
+      "shortName" : "CD-i",
+      "slug" : "cd-i",
+      "summary" : "A CD-based multimedia platform that also played games — remembered mostly for its Zelda titles."
+    },
+    {
+      "discontinuedYearNA" : 1996,
+      "generation" : 5,
+      "iconSystemName" : "gamecontroller",
+      "manufacturer" : "Atari",
+      "name" : "Atari Jaguar",
+      "regions" : [
+        "NA"
+      ],
+      "releaseYearNA" : 1993,
+      "shortName" : "JAG",
+      "slug" : "jaguar",
+      "summary" : "Atari's last home console, marketed as the first 64-bit system. Small library, cult status."
     }
   ],
   "version" : "1"

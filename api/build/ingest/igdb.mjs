@@ -31,7 +31,10 @@ const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data", "g
 const TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 const IGDB = "https://api.igdb.com/v4";
 
-// our platform slug -> IGDB platform id (https://api-docs.igdb.com, /platforms)
+// our platform slug -> IGDB platform id (https://api-docs.igdb.com, /platforms).
+// These 10 ids were already in production use before this comment was
+// written and are left as-is (re-verifying them live on every run would
+// just be extra API calls for no benefit — they're known-good).
 const PLATFORMS = {
   "atari-2600":  { igdb: 59,  system: "Atari 2600" },
   "nes":         { igdb: 18,  system: "Nintendo Entertainment System" },
@@ -45,8 +48,44 @@ const PLATFORMS = {
   "gamecube":    { igdb: 21,  system: "Nintendo GameCube" },
 };
 
-// IGDB release_date region codes. 2 = North America; 8 = Worldwide.
+// 2026-09-18 platform expansion (see BACKLOG.md) — added without a session
+// holding IGDB credentials to verify numeric platform ids against the live
+// API, and hand-typed numeric ids found via web search disagreed with each
+// other across sources (two different ids each for Sega Saturn and Atari
+// Jaguar alone). Rather than risk a wrong-but-non-zero id silently pulling
+// an entirely different platform's games (the existing 0-results guard
+// below only catches an id matching *nothing*, not an id matching the
+// *wrong* thing), these resolve their real numeric id live by exact IGDB
+// platform name on first use instead of trusting a hardcoded number. Names
+// confirmed against igdb.com/platforms's own listing (not guessed).
+const PLATFORMS_BY_NAME = {
+  "colecovision":       { igdbName: "ColecoVision", system: "ColecoVision" },
+  "intellivision":      { igdbName: "Intellivision", system: "Intellivision" },
+  "sega-master-system": { igdbName: "Sega Master System/Mark III", system: "Sega Master System" },
+  "turbografx-16":      { igdbName: "TurboGrafx-16/PC Engine", system: "TurboGrafx-16" },
+  "neo-geo":            { igdbName: "Neo Geo AES", system: "Neo Geo" },
+  "saturn":             { igdbName: "Sega Saturn", system: "Sega Saturn" },
+  "3do":                { igdbName: "3DO Interactive Multiplayer", system: "3DO Interactive Multiplayer" },
+  "cd-i":               { igdbName: "Philips CD-i", system: "Philips CD-i" },
+  "jaguar":             { igdbName: "Atari Jaguar", system: "Atari Jaguar" },
+};
+
+async function resolvePlatformId(igdbName) {
+  const rows = await igdbPost("platforms", `fields id, name;\nwhere name = "${igdbName}";\nlimit 5;`);
+  if (rows.length === 0) {
+    throw new Error(`resolvePlatformId: no IGDB platform named "${igdbName}" — check the exact spelling against igdb.com/platforms`);
+  }
+  if (rows.length > 1) {
+    throw new Error(`resolvePlatformId: "${igdbName}" matched ${rows.length} IGDB platforms (${rows.map((r) => r.id).join(", ")}) — need an exact, unambiguous name`);
+  }
+  return rows[0].id;
+}
+
+// IGDB release_date region codes (release_region, not the deprecated region
+// field — see toItem's comment). 8 = Worldwide counts toward every region.
 const NA_REGIONS = new Set([2, 8]);
+const EU_REGIONS = new Set([1, 8]);
+const JP_REGIONS = new Set([5, 8]);
 // IGDB game.category — 0 = main game. Everything else (DLC, expansion, bundle,
 // episode, mod, port, pack, update) is excluded from the catalog.
 const MAIN_GAME = 0;
@@ -59,7 +98,7 @@ const ARTICLES = ["The", "A", "An", "Les", "La", "Le", "Los", "El", "Der", "Die"
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const targets = args.filter((a) => !a.startsWith("--"));
-const wanted = targets.length ? targets : Object.keys(PLATFORMS);
+const wanted = targets.length ? targets : [...Object.keys(PLATFORMS), ...Object.keys(PLATFORMS_BY_NAME)];
 
 const gamesQuery = (platformId, afterId) =>
   [
@@ -83,9 +122,16 @@ const gamesQuery = (platformId, afterId) =>
 
 if (dryRun) {
   for (const slug of wanted) {
-    const cfg = PLATFORMS[slug];
-    if (!cfg) { console.warn(`skip unknown platform: ${slug}`); continue; }
-    console.log(`\n--- ${slug} (IGDB platform ${cfg.igdb}) ---\n${gamesQuery(cfg.igdb, 0)}`);
+    if (PLATFORMS[slug]) {
+      const cfg = PLATFORMS[slug];
+      console.log(`\n--- ${slug} (IGDB platform ${cfg.igdb}) ---\n${gamesQuery(cfg.igdb, 0)}`);
+    } else if (PLATFORMS_BY_NAME[slug]) {
+      const cfg = PLATFORMS_BY_NAME[slug];
+      console.log(`\n--- ${slug} (id resolved live by name — needs a token, can't preview here) ---`);
+      console.log(`fields id, name;\nwhere name = "${cfg.igdbName}";\nlimit 5;`);
+    } else {
+      console.warn(`skip unknown platform: ${slug}`);
+    }
   }
   process.exit(0);
 }
@@ -105,7 +151,13 @@ const token = await getAppToken(clientId, clientSecret);
 mkdirSync(OUT, { recursive: true });
 
 for (const slug of wanted) {
-  const cfg = PLATFORMS[slug];
+  let cfg = PLATFORMS[slug];
+  if (!cfg && PLATFORMS_BY_NAME[slug]) {
+    const byName = PLATFORMS_BY_NAME[slug];
+    const igdbId = await resolvePlatformId(byName.igdbName);
+    console.log(`${slug}: resolved "${byName.igdbName}" -> IGDB platform ${igdbId}`);
+    cfg = { igdb: igdbId, system: byName.system };
+  }
   if (!cfg) { console.warn(`skip unknown platform: ${slug}`); continue; }
 
   const raw = await fetchAllGames(cfg.igdb);
@@ -134,11 +186,9 @@ for (const slug of wanted) {
   const path = join(OUT, `${slug}.json`);
   writeFileSync(
     path,
-    JSON.stringify(
-      { platformSlug: slug, system: cfg.system, source: "igdb", generatedAt: new Date().toISOString(), items },
-      null,
-      2,
-    ) + "\n",
+    // Minified on purpose: ~20MB pretty-printed across all platforms was
+    // 200k+ lines per re-ingest in git. See .gitattributes.
+    JSON.stringify({ platformSlug: slug, system: cfg.system, source: "igdb", generatedAt: new Date().toISOString(), items }) + "\n",
   );
   console.log(`${slug}: ${items.length} games (from ${raw.length} IGDB rows) -> data/generated/${slug}.json`);
 }
@@ -219,25 +269,39 @@ function deduplicateSlugs(items) {
 function toItem(platformSlug, cfg, g) {
   if (!g.name) return null;
 
-  // US-first: keep games with a North-American (or Worldwide) release for this
-  // platform. If IGDB has no per-region data at all, keep it and fall back to
-  // the global first_release_date; if it has region data but none is NA, drop.
+  // Region tracking, not a drop filter — changed 2026-09-18 (see BACKLOG.md's
+  // "EU / JP region switch"). Used to discard anything without a confirmed NA
+  // release; now keeps everything and records which regions actually had a
+  // release, so the app can filter instead of the ingest silently deciding.
   //
   // Confirmed live 2026-09-14: `release_dates.region` is IGDB's old, DEPRECATED
   // field — never populated anymore, silently returning nothing instead of
   // erroring (queryable but dead). The real field is `release_region`, backed
   // by the /v4/release_date_regions lookup table; it reuses the same integer
-  // ids the old `region` enum used (2 = north_america, 8 = worldwide — see
-  // NA_REGIONS above) plus two new ones (9 = korea, 10 = brazil) tacked on.
-  // `datesWithRegion` isolates entries that actually carry a value, so a game
-  // with genuinely no region data (still possible per-entry) falls through to
-  // "keep" rather than being wrongly treated as a confirmed non-NA release.
+  // ids the old `region` enum used (1 = europe, 2 = north_america, 5 = japan,
+  // 8 = worldwide — see NA_REGIONS/EU_REGIONS/JP_REGIONS above) plus two new
+  // ones (9 = korea, 10 = brazil) tacked on, neither tracked here (out of
+  // this app's scope). `datesWithRegion` isolates entries that actually carry
+  // a value — a game with genuinely no region data anywhere gets `regions:
+  // null` (unconfirmed, not "confirmed non-NA"), which the app treats as
+  // "assume NA" to match the old behavior for anything ingest can't speak to.
+  //
+  // IGDB's own region tagging is community-sourced and has had gaps before in
+  // this exact field (see the deprecated-`region` history above) — treat a
+  // non-NA-only `regions` result as a signal worth corroborating, e.g. against
+  // PriceCharting's regional console-name listings (see
+  // `pricecharting-region-check.mjs`), not as certain on its own.
   const dates = (g.release_dates ?? []).filter(
     (d) => d.platform === cfg.igdb || d.platform == null,
   );
   const datesWithRegion = dates.filter((d) => d.release_region != null);
   const naDates = dates.filter((d) => NA_REGIONS.has(d.release_region));
-  if (datesWithRegion.length > 0 && naDates.length === 0) return null;
+  const euDates = dates.filter((d) => EU_REGIONS.has(d.release_region));
+  const jpDates = dates.filter((d) => JP_REGIONS.has(d.release_region));
+  const regions =
+    datesWithRegion.length === 0
+      ? null
+      : [naDates.length && "NA", euDates.length && "EU", jpDates.length && "JP"].filter(Boolean);
 
   const year =
     minYear(naDates) ??
@@ -257,6 +321,7 @@ function toItem(platformSlug, cfg, g) {
     kind: "game",
     name: title,
     releaseYearNA: year,
+    regions,
     manufacturerOrPublisher: publisher,
     developer,
     genre: g.genres?.[0]?.name ?? null,

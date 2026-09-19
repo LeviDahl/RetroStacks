@@ -199,6 +199,15 @@ create table if not exists public.catalog_items (
   upc text,
   summary text not null default '',
 
+  -- Which regions this specific release actually shipped in — "NA", "EU",
+  -- "JP", any subset. Added 2026-09-18 for the region filter (see
+  -- BACKLOG.md's "EU / JP region switch"); null means the ingest source had
+  -- no region data at all for this item, distinct from an empty array
+  -- (queried but confirmed-nowhere, which shouldn't happen in practice).
+  -- Null is treated as "assume NA" by the app, matching the old ingest
+  -- behavior of dropping anything it couldn't confirm as NA.
+  regions text[],
+
   image_name text,
   image_url_string text,
   image_credit text,
@@ -220,6 +229,13 @@ create table if not exists public.catalog_items (
   updated_at timestamptz not null default now(),
   deleted_at timestamptz             -- tombstone; null = live (same reasoning as collection_items)
 );
+
+-- `create table if not exists` above is a no-op against the already-live
+-- table this schema was first applied to, so `regions` needs its own
+-- explicit, idempotent add for that column to actually land on a re-run —
+-- unlike every column before it, which only ever existed via the original
+-- `create table`.
+alter table public.catalog_items add column if not exists regions text[];
 
 -- Postgres treats NULL as distinct from every other NULL in a unique
 -- constraint, so a plain `unique (slug, owner_user_id)` would silently allow
@@ -411,7 +427,7 @@ as $$
 begin
   insert into public.catalog_items (
     slug, owner_user_id, platform_slug, kind, name, variant, release_year_na,
-    manufacturer_or_publisher, developer, genre, upc, summary,
+    regions, manufacturer_or_publisher, developer, genre, upc, summary,
     image_name, image_url_string, image_credit, image_license
   )
   select
@@ -422,6 +438,14 @@ begin
     item ->> 'name',
     item ->> 'variant',
     nullif(item ->> 'release_year_na', '')::integer,
+    -- 'regions' is a JSON array (or absent/null — no region data from the
+    -- ingest source); array_length guards the empty-array edge case so that
+    -- becomes null too, same as "key absent", rather than an empty {}.
+    case
+      when jsonb_typeof(item -> 'regions') = 'array'
+        then array(select jsonb_array_elements_text(item -> 'regions'))
+      else null
+    end,
     item ->> 'manufacturer_or_publisher',
     item ->> 'developer',
     item ->> 'genre',
@@ -439,6 +463,7 @@ begin
     name = excluded.name,
     variant = excluded.variant,
     release_year_na = excluded.release_year_na,
+    regions = excluded.regions,
     manufacturer_or_publisher = excluded.manufacturer_or_publisher,
     developer = excluded.developer,
     genre = excluded.genre,
@@ -447,8 +472,19 @@ begin
     image_name = excluded.image_name,
     image_url_string = excluded.image_url_string,
     image_credit = excluded.image_credit,
-    image_license = excluded.image_license,
-    deleted_at = null;  -- a re-synced item should never stay tombstoned
+    image_license = excluded.image_license;
+    -- Deliberately NOT resetting deleted_at here anymore. Real regression
+    -- 2026-09-18: this used to unconditionally clear it ("a re-synced item
+    -- should never stay tombstoned"), written before admin-exclude existed.
+    -- Once it did, a routine ingest re-run (new platforms, region-data
+    -- backfill) silently resurrected every deliberately-excluded homebrew/
+    -- bootleg item just by including it in the fresh feed again — this
+    -- function has no way to tell "came back legitimately" apart from "an
+    -- admin excluded this on purpose and it shouldn't come back just
+    -- because the ingest source doesn't know that." The one path that
+    -- server-side `deleted_at` is actually cleared through now is
+    -- `admin_restore_catalog_items`, by explicit slug — the deliberate
+    -- un-exclude action, not a side effect of re-syncing.
 end;
 $$;
 

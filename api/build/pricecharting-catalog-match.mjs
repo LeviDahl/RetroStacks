@@ -21,15 +21,27 @@
 //      same NES title showing up under multiple regional console names with
 //      region-appropriate release dates.
 //
-// Read-only against Supabase — the app's own public anon key, no service
-// role key needed, this never writes anything back to catalog_items. Writes
-// a JSON report for a human to review; the resulting slugs feed into the
-// app's existing admin bulk-exclude flow, this script doesn't exclude
-// anything itself. Same reasoning as the client's own review-candidates
-// toggle: assists a human decision, doesn't replace one.
+// Read-only against Supabase by default — the app's own public anon key,
+// no service role key needed for a plain (dry-run) pass. Writes a JSON
+// report either way; pass --execute to actually soft-delete the flagged
+// items (needs SUPABASE_SERVICE_ROLE_KEY too, only then — see excludeSlugs).
+// User's own explicit instruction 2026-09-18: do the exclusion directly
+// rather than only report-and-wait-for-a-human, on the strength of it being
+// the same reversible deleted_at tombstone the in-app exclude button and
+// every sync path already use (admin_restore_catalog_items undoes it by
+// slug). Real writes to a shared table regardless — --execute is opt-in,
+// never the default, and always run a plain (dry-run) pass first to read
+// the report before trusting it enough to add --execute.
+//
+// A match tagged "[Homebrew]" in PriceCharting's own product-name is
+// suggested for exclusion too, not "keep" — user's call 2026-09-18: modern
+// homebrew doesn't belong in the catalog even when it's a real, physically-
+// sold item with genuine PriceCharting market value. See HOMEBREW_PATTERN.
 //
 //   PRICECHARTING_TOKEN=…  node api/build/pricecharting-catalog-match.mjs --platform nes
 //   node api/build/pricecharting-catalog-match.mjs --platform nes --limit 20   # testing
+//   PRICECHARTING_TOKEN=… SUPABASE_SERVICE_ROLE_KEY=…  \
+//     node api/build/pricecharting-catalog-match.mjs --platform nes --execute
 //
 // PriceCharting is an unmetered-by-call paid subscription, but hammering it
 // is still bad manners — same PRICECHARTING_DELAY_MS default (1100ms) as the
@@ -65,6 +77,15 @@ const RARE_PUBLISHER_THRESHOLD = 3;
 // only after confirming the same way, not by guessing the naming pattern.
 const CONSOLE_NAMES = {
   nes: { NA: ["NES"], EU: ["PAL NES"], JP: ["Famicom"] },
+  "atari-2600": { NA: ["Atari 2600"], EU: ["PAL Atari 2600"], JP: [] },
+  snes: { NA: ["Super Nintendo"], EU: ["PAL Super Nintendo"], JP: ["Super Famicom"] },
+  genesis: { NA: ["Sega Genesis"], EU: ["PAL Sega Mega Drive"], JP: ["JP Sega Mega Drive"] },
+  "game-boy": { NA: ["GameBoy"], EU: ["PAL GameBoy"], JP: [] },
+  n64: { NA: ["Nintendo 64"], EU: ["PAL Nintendo 64"], JP: ["JP Nintendo 64"] },
+  playstation: { NA: ["Playstation"], EU: ["PAL Playstation"], JP: ["JP Playstation"] },
+  dreamcast: { NA: ["Sega Dreamcast"], EU: ["PAL Sega Dreamcast"], JP: ["JP Sega Dreamcast"] },
+  gamecube: { NA: ["Gamecube"], EU: ["PAL Gamecube"], JP: ["JP Gamecube"] },
+  ps2: { NA: ["Playstation 2"], EU: ["PAL Playstation 2"], JP: ["JP Playstation 2"] },
 };
 
 const args = process.argv.slice(2);
@@ -72,6 +93,7 @@ const platformIdx = args.indexOf("--platform");
 const platformSlug = platformIdx >= 0 ? args[platformIdx + 1] : "nes";
 const limitIdx = args.indexOf("--limit");
 const limit = limitIdx >= 0 ? Number(args[limitIdx + 1]) : undefined;
+const execute = args.includes("--execute");
 
 const pcToken = process.env.PRICECHARTING_TOKEN;
 if (!pcToken) {
@@ -147,13 +169,18 @@ function findReviewCandidates(items, discontinuedYearNA) {
   }
 
   return items.filter((item) => {
+    const year = item.release_year_na;
+    // A release year past the platform's discontinuation is sufficient on
+    // its own — no legitimate NA release happens decades later, regardless
+    // of publisher. A publisher-frequency veto here previously hid every
+    // item from a prolific homebrew author (e.g. an N64 ROM-hacker with 18
+    // titles under one handle) even when the year was unambiguous.
+    if (year != null && discontinuedYearNA != null && year > discontinuedYearNA) return true;
+    if (year != null) return false;
+
     const pub = item.manufacturer_or_publisher?.trim();
     const publisherIsRare = pub ? (publisherCounts.get(pub) ?? 0) <= RARE_PUBLISHER_THRESHOLD : true;
-    if (!publisherIsRare) return false;
-
-    const year = item.release_year_na;
-    if (year == null) return true;
-    return discontinuedYearNA != null && year > discontinuedYearNA;
+    return publisherIsRare;
   });
 }
 
@@ -181,9 +208,18 @@ async function searchPriceCharting(query) {
 function bestMatch(itemName, products) {
   const target = normalize(itemName);
   const inPlatform = products.filter((p) => allConsoleNames.has(p["console-name"]));
-  let exact = inPlatform.find((p) => normalize(p["product-name"]) === target);
+  const exact = inPlatform.find((p) => normalize(p["product-name"]) === target);
   if (exact) return { match: exact, quality: "exact" };
-  let partial = inPlatform.find((p) => {
+  // Found live checking Atari 2600 before trusting this against the real
+  // catalog: plain substring containment produces real false positives on
+  // short/generic words — "Bloody Human Freeway" (a joke title) matched
+  // "Freeway [Zellers]", "Punch Chess" matched "Chess [Green Label]",
+  // "Kelly Kangaroo" matched plain "Kangaroo". A loose match here isn't
+  // trustworthy enough to *confirm* anything, so it no longer does —
+  // callers get this back as "quality: partial" and treat it as neither a
+  // confident keep nor a confident exclude, just a flag for a human to
+  // look at directly.
+  const partial = inPlatform.find((p) => {
     const n = normalize(p["product-name"]);
     return n.includes(target) || target.includes(n);
   });
@@ -196,6 +232,66 @@ function regionFor(consoleName) {
     if (names.includes(consoleName)) return region;
   }
   return null;
+}
+
+// User's own call 2026-09-18: modern homebrew doesn't belong in the
+// catalog even when it's a real, physically-sold product with genuine
+// PriceCharting market value (e.g. "Battle Kid 2: Mountain of Torment
+// [Homebrew]") — "presence in PriceCharting" alone isn't the same as
+// "keep," it just means "not a phantom ROM-hack that was never sold."
+// PriceCharting tags these explicitly in product-name; trust that tag
+// rather than guessing from our own fields. Matches "home" inside *any*
+// bracket tag, not the literal word "homebrew" — found live checking
+// Atari 2600 that PriceCharting's own data has at least one typo'd tag
+// ("[Homewbrew]"), so an exact-word match silently misses real cases.
+const HOMEBREW_PATTERN = /\[[^\]]*home/i;
+
+// Found live checking Genesis before trusting Atari 2600's pattern here
+// too: the [Homebrew] tag alone is nowhere near complete — most of a
+// sample "keep" list turned out to have PriceCharting's own release-date
+// in 2011-2025, genuinely modern indie/homebrew PriceCharting just never
+// tagged. If PriceCharting's *own* date for the matched item is itself
+// past the platform's commercial window, treat that exactly like an
+// explicit homebrew tag — same signal our own review-candidate heuristic
+// already uses, just applied to PriceCharting's date instead of ours.
+function classify(found, discontinuedYearNA) {
+  if (!found) return "exclude-not-found";
+  if (found.quality === "partial") return "uncertain";
+  if (HOMEBREW_PATTERN.test(found.match["product-name"])) return "exclude-homebrew";
+  const pcYear = found.match["release-date"] ? Number(found.match["release-date"].slice(0, 4)) : null;
+  if (pcYear != null && discontinuedYearNA != null && pcYear > discontinuedYearNA) return "exclude-homebrew";
+  return "keep";
+}
+
+// MARK: - Exclusion (--execute only)
+
+async function excludeSlugs(slugs) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    console.error("SUPABASE_SERVICE_ROLE_KEY is required for --execute.");
+    process.exit(1);
+  }
+  // Direct PATCH with the service role key, not the admin_exclude_catalog
+  // _items RPC — that RPC's admin check is auth.uid()-based (a signed-in
+  // user's JWT claim), which service_role calls don't carry, so it would
+  // always raise "not authorized" here. Same end state either way: sets
+  // deleted_at, the identical soft-delete tombstone every sync path (and
+  // the in-app exclude button) already respects — fully reversible by
+  // clearing it, nothing hard-deleted.
+  const url = new URL(`${SUPABASE_URL}/rest/v1/catalog_items`);
+  url.searchParams.set("slug", `in.(${slugs.map((s) => `"${s}"`).join(",")})`);
+  url.searchParams.set("owner_user_id", "is.null");
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ deleted_at: new Date().toISOString() }),
+  });
+  if (!res.ok) throw new Error(`Exclude PATCH failed: HTTP ${res.status} — ${await res.text()}`);
 }
 
 // MARK: - Main
@@ -237,11 +333,11 @@ async function main() {
             loosePriceCents: found.match["loose-price"] ?? null,
           }
         : null,
-      suggestion: found ? "keep" : "exclude-candidate",
+      suggestion: classify(found, platform.discontinuedYearNA),
     });
     if (checked % 25 === 0 || checked === candidates.length) {
-      const excludeCount = results.filter((r) => r.suggestion === "exclude-candidate").length;
-      console.log(`  [${checked}/${candidates.length}] ${excludeCount} not found in PriceCharting so far`);
+      const excludeCount = results.filter((r) => r.suggestion.startsWith("exclude")).length;
+      console.log(`  [${checked}/${candidates.length}] ${excludeCount} exclude candidates so far`);
     }
     if (checked < candidates.length) await sleep(delayMs);
   }
@@ -264,9 +360,32 @@ async function main() {
   );
 
   const keep = results.filter((r) => r.suggestion === "keep").length;
-  const exclude = results.filter((r) => r.suggestion === "exclude-candidate").length;
-  console.log(`\nDone. ${keep} confirmed in PriceCharting (suggest keep), ${exclude} not found (exclude candidates).`);
+  const homebrew = results.filter((r) => r.suggestion === "exclude-homebrew").length;
+  const notFound = results.filter((r) => r.suggestion === "exclude-not-found").length;
+  const uncertain = results.filter((r) => r.suggestion === "uncertain").length;
+  console.log(
+    `\nDone. ${keep} keep, ${homebrew} exclude (homebrew), ${notFound} exclude (not found), ` +
+      `${uncertain} uncertain (partial match — needs a human look, not auto-excluded).`
+  );
   console.log(`Report written to ${outPath}`);
+
+  if (execute) {
+    // "uncertain" (a loose substring match, not a confident one) is
+    // deliberately excluded from this list, not just from "keep" — a
+    // false "keep" is easy to miss later, but so is silently excluding
+    // something a partial match might actually have confirmed was real.
+    const toExclude = results.filter((r) => r.suggestion.startsWith("exclude")).map((r) => r.slug);
+    if (!toExclude.length) {
+      console.log("Nothing to exclude.");
+      return;
+    }
+    console.log(`\n--execute: excluding ${toExclude.length} items (soft delete, reversible)...`);
+    await excludeSlugs(toExclude);
+    console.log("Done.");
+    if (uncertain > 0) console.log(`${uncertain} "uncertain" items were left alone — review those by hand.`);
+  } else if (homebrew + notFound + uncertain > 0) {
+    console.log("(dry run — pass --execute to actually exclude the flagged items; \"uncertain\" ones never are)");
+  }
 }
 
 main().catch((err) => {

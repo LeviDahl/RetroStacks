@@ -53,6 +53,7 @@ function toRow(item) {
     name: item.name,
     variant: item.variant ?? null,
     release_year_na: item.releaseYearNA ?? null,
+    regions: item.regions ?? null,
     manufacturer_or_publisher: item.manufacturerOrPublisher ?? null,
     developer: item.developer ?? null,
     genre: item.genre ?? null,

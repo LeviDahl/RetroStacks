@@ -173,7 +173,7 @@ for (const slug of targets) {
   const path = join(OUT, `${slug}.json`);
   writeFileSync(
     path,
-    JSON.stringify({ platformSlug: slug, system: cfg.sys, generatedAt: new Date().toISOString(), items }, null, 2) + "\n",
+    JSON.stringify({ platformSlug: slug, system: cfg.sys, generatedAt: new Date().toISOString(), items }) + "\n",
   );
   console.log(`${slug}: ${items.length} games -> data/generated/${slug}.json`);
 }
