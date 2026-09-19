@@ -64,6 +64,17 @@
   it; see the Accessibility section of `BACKLOG.md` for current counts and
   what's already been investigated vs. still open.
 
+## 🏷️ Versioning
+Semantic versioning, `MAJOR.MINOR.PATCH`, pre-1.0 for now. `0.MINOR.0` = a coherent
+feature set; `0.MINOR.PATCH` = fixes only. 1.0.0 is a deliberate milestone, not a
+number that arrives on its own.
+- Cut a version when a feature set is done, tests pass, and it's pushed — not per
+  commit. Tag annotated on `main`: `git tag -a v0.6.0 -m "0.6.0 — <summary>"`, then push
+  the tag (ask first; pushing is outward-facing).
+- Add a row to the **Version history** table at the top of `FEATURES.md` in the same
+  change. `MARKETING_VERSION` lives in the Xcode project — the user sets it (never edit
+  `.pbxproj`); remind them to bump it to match the tag.
+
 ## 🗂️ Backlog
 Enhancement ideas and deferred work live in [`BACKLOG.md`](BACKLOG.md) (open items
 only); finished work and its history live in [`FEATURES.md`](FEATURES.md) — move an

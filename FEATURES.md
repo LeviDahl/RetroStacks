@@ -8,6 +8,26 @@ why they happened. Phrases like "not done yet" inside an entry describe the
 moment it was written; anything still genuinely open was carried into
 `BACKLOG.md`.
 
+## Version history
+
+Semantic versioning (`MAJOR.MINOR.PATCH`), pre-1.0 while the app is still one
+person's daily driver. `0.MINOR.0` marks a feature set; a patch (`0.MINOR.PATCH`)
+is fixes only. Each version is an annotated git tag (`git show v0.5.0`). The
+detailed, dated write-ups for everything below are in the sections after this
+list.
+
+| Version | Date | Tag commit | What it is |
+| --- | --- | --- | --- |
+| **0.5.0** | 2026-09-19 | `bf6c717` | **19 platforms** (gen 2–6, ~22k items) with **EU/JP regions** (NA by default, per-screen toggle); RetroGameCollector import; Box/Manual checkboxes on add; **performance pass** — background actors, stale-while-revalidate caches, byte-budgeted image cache |
+| **0.4.0** | 2026-09-18 | `a9e0c7f` | **Catalog in Supabase**: public + private (custom/variant) entries, admin catalog-wide exclusion, personal hide, review-candidates filter, PriceCharting cross-check tooling |
+| **0.3.0** | 2026-09-16 | `49fe328` | **Multi-device sync**: Supabase magic-link sign-in, last-write-wins merge with tombstones, verified end to end; real installs start with an empty collection |
+| **0.2.0** | 2026-09-14 | `47b3e71` | **Real catalog data**: IGDB + libretro ingest for the 10 launch platforms (~13k items), barcode scan, SwiftLint, accessibility audit ratchets, UX tap-friction pass |
+| **0.1.0** | 2026-09-07 | `e1da9bd` | **Local-first app**: Dashboard, Collection, Wishlist, Catalog, system drill-down, quick add / bulk add, JSON + CSV backup, pricing schema, static data feed, failure surfacing |
+
+Next: unreleased work accumulates in `BACKLOG.md` → here. **1.0.0** is a
+deliberate call — roughly "trusted with the whole collection, and ready for
+other people".
+
 ## Contents
 
 - Platform drill-down & adding to collection

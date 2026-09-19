@@ -10,6 +10,9 @@ EU/JP later.
 > `data.retrostacks.com` (GitHub Pages, custom domain via GoDaddy DNS) for the
 > price guide and as a build artifact.
 
+**Current version: 0.5.0** — see [`FEATURES.md`](FEATURES.md#version-history) for
+the version history (semver; tags are `v0.1.0`…).
+
 ## Layout
 
 | Path | What |
