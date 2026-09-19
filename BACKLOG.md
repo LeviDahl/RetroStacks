@@ -1149,14 +1149,12 @@ tooling):
     Browse Catalog one, matching `showHidden`'s existing precedent) — off
     by default, `regions == nil` always counts as NA regardless. Full app
     build passes.
-  - **Ingest done, live DB not yet updated (checked 2026-09-19)**: every
-    platform was re-ingested with `regions` (~97-100% of items per platform
-    in `api/data/generated/*.json`, 21,371 of 22,003 in the built catalog),
-    and the schema column exists — but a read-only check of the live table
-    found `regions` null on all 16,419 public rows and far fewer rows than the
-    built catalog (e.g. PlayStation 1,764 live vs 3,900 built): the last
-    `migrate-catalog-to-supabase.mjs` run predates the region ingest. Until
-    it's re-run, the EU/JP toggle has nothing to reveal.
+  - **Live as of 2026-09-19**: every platform was re-ingested with `regions`,
+    but the live table only got it after a fresh `migrate-catalog-to-supabase.mjs`
+    run on 2026-09-19 (a read-only check just before found `regions` null on all
+    16,419 public rows; after: 22,049 rows, ~97-100% per platform with regions).
+    That run also confirmed the `deleted_at` fix: the excluded count stayed
+    exactly 3,113 across re-upserting all 22,003 items.
   - **Second source, user's call 2026-09-18**: IGDB's region tagging is
     community-sourced and this codebase already found a gap in this exact
     field once (the old `region` property silently stopped populating —
