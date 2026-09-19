@@ -30,6 +30,11 @@ nonisolated struct FeedItem: Decodable, Sendable {
     var name: String
     var variant: String?
     var releaseYearNA: Int?
+    /// Which regions this specific release actually shipped in ("NA"/"EU"/
+    /// "JP", any subset) — `nil` means the ingest source had no region data
+    /// at all, distinct from a confirmed-nowhere empty list. See
+    /// `CatalogItem.regions` and `ingest/igdb.mjs`'s `toItem`.
+    var regions: [String]?
     var manufacturerOrPublisher: String?
     var developer: String?
     var genre: String?

@@ -72,10 +72,11 @@ struct AddToCollectionFlow: View {
             }
             #endif
             .sheet(item: $quickAddTarget) { catalogItem in
-                QuickAddSheet(catalogItem: catalogItem) { completeness, condition in
+                QuickAddSheet(catalogItem: catalogItem) { completeness, condition, hasBox, hasManual in
                     _ = CollectionActions.add(
                         catalogItem, status: .owned,
                         completeness: completeness, condition: condition,
+                        hasBox: hasBox, hasManual: hasManual,
                         in: modelContext
                     )
                     dismiss()
@@ -135,27 +136,31 @@ struct AddToCollectionFlow: View {
 /// first" default.
 struct CatalogPlatformRow: View {
     var platform: Platform
+    @Environment(\.modelContext) private var modelContext
+    @State private var overview: PlatformOverview?
 
     var body: some View {
         HStack(spacing: 14) {
             ItemThumbnail(
                 kind: .console,
                 platformSymbol: platform.iconSystemName,
-                imageURL: platform.consoles.first?.imageURL,
+                imageURL: overview?.heroImageURL,
                 size: 44, cornerRadius: 10, contentMode: .fit
             )
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(platform.name).font(.body.weight(.medium)).lineLimit(1)
-                let count = platform.visibleCatalogItems().count
-                Text("\(count) catalog \(count == 1 ? "entry" : "entries")")
-                    .font(.caption)
-                    .foregroundStyle(.mutedText)
+                if let count = overview?.entryCount {
+                    Text("\(count) catalog \(count == 1 ? "entry" : "entries")")
+                        .font(.caption)
+                        .foregroundStyle(.mutedText)
+                }
             }
         }
         .padding(.vertical, 3)
         .accessibilityElement(children: .combine)
+        .task { overview = await PlatformOverviewCache.overview(for: platform.slug, container: modelContext.container) }
     }
 }
 

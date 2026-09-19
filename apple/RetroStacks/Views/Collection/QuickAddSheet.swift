@@ -4,13 +4,50 @@ import SwiftData
 /// Small modal shown when you `+` a game into the collection — pick the two
 /// things you'd otherwise open the editor for (completeness + condition) and
 /// you're done. Everything else keeps its default and can be edited later.
+///
+/// `completeness` is what actually drives pricing (`CatalogItem
+/// .referenceValue(for:)` picks the PriceCharting-sourced loose/CIB/sealed
+/// tier from it — a real, meaningfully different number per tier, not just
+/// a checklist label), so it has to stay in sync with `hasBox`/`hasManual`,
+/// not just be a decorative preset next to them. Picking a Completeness
+/// preset sets both checkboxes to match it (quick path); toggling a
+/// checkbox independently afterward re-derives `completeness` to the
+/// closest fit (covers "box but no manual" and "manual but no box" — the
+/// latter has no exact `Completeness` case, so it falls back to `.loose`
+/// for pricing purposes while `hasManual` itself stays accurate).
 struct QuickAddSheet: View {
     var catalogItem: CatalogItem
-    var onConfirm: (_ completeness: Completeness, _ condition: ConditionGrade) -> Void
+    var onConfirm: (_ completeness: Completeness, _ condition: ConditionGrade, _ hasBox: Bool, _ hasManual: Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var completeness: Completeness = .loose
     @State private var condition: ConditionGrade = .good
+    @State private var hasBox = false
+    @State private var hasManual = false
+
+    private var hasBoxBinding: Binding<Bool> {
+        Binding(
+            get: { hasBox },
+            set: { newValue in
+                hasBox = newValue
+                completeness = Self.derivedCompleteness(hasBox: newValue, hasManual: hasManual)
+            }
+        )
+    }
+
+    private var hasManualBinding: Binding<Bool> {
+        Binding(
+            get: { hasManual },
+            set: { newValue in
+                hasManual = newValue
+                completeness = Self.derivedCompleteness(hasBox: hasBox, hasManual: newValue)
+            }
+        )
+    }
+
+    private static func derivedCompleteness(hasBox: Bool, hasManual: Bool) -> Completeness {
+        hasBox && hasManual ? .completeInBox : hasBox ? .boxedNoManual : .loose
+    }
 
     private var subtitle: String {
         var parts = [catalogItem.platformShortName]
@@ -45,6 +82,27 @@ struct QuickAddSheet: View {
                     Text("Sealed").tag(Completeness.sealed)
                 }
             }
+            .onChange(of: completeness) { _, newValue in
+                switch newValue {
+                case .loose: hasBox = false; hasManual = false
+                case .boxedNoManual: hasBox = true; hasManual = false
+                case .completeInBox, .sealed: hasBox = true; hasManual = true
+                case .graded: break // not offered by the picker above
+                }
+            }
+
+            // Independent of the preset above — picking "CIB" checks both for
+            // quick access, but a real collection has edge cases a 4-way
+            // preset can't express (box but no manual, or vice versa), so
+            // these stay separately toggleable rather than locked to whatever
+            // the picker last set.
+            HStack(spacing: 20) {
+                Toggle("Box", isOn: hasBoxBinding)
+                Toggle("Manual", isOn: hasManualBinding)
+            }
+            #if os(macOS)
+            .toggleStyle(.checkbox)
+            #endif
 
             field("Condition") {
                 Picker("Condition", selection: $condition) {
@@ -59,7 +117,7 @@ struct QuickAddSheet: View {
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Add") {
-                    onConfirm(completeness, condition)
+                    onConfirm(completeness, condition, hasBox, hasManual)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -94,7 +152,7 @@ struct QuickAddSheet: View {
         .first { $0.kind == .game }!
     Color.clear
         .sheet(isPresented: .constant(true)) {
-            QuickAddSheet(catalogItem: item) { _, _ in }
+            QuickAddSheet(catalogItem: item) { _, _, _, _ in }
         }
         .modelContainer(container)
 }

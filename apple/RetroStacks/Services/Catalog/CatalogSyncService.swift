@@ -62,6 +62,7 @@ final class CatalogSyncService {
             let feed = try await repository.fetchCatalog(forceReload: forceReload)
             try await reconcile(feed, into: context)
             if context.hasChanges { try context.save() }
+            SystemSummariesCache.invalidate()
             phase = .synced(.now)
             AppStatusCenter.shared.clear(.catalogSync)
         } catch {
@@ -145,6 +146,7 @@ final class CatalogSyncService {
             set(\.name, fi.name)
             set(\.variant, fi.variant)
             set(\.releaseYearNA, fi.releaseYearNA)
+            set(\.regions, fi.regions?.compactMap(Region.init(rawValue:)))
             set(\.manufacturerOrPublisher, fi.manufacturerOrPublisher)
             set(\.developer, fi.developer)
             set(\.genre, fi.genre)

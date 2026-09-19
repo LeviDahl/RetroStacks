@@ -4,14 +4,20 @@ import Testing
 
 @testable import RetroStacks
 
-/// `SystemGamesList.isReviewCandidate` — the two-signal (rare/missing
-/// publisher AND out-of-window/missing release year) heuristic for
-/// bootlegs/ROM hacks/homebrew that slipped into the IGDB import, requiring
-/// *both* signals deliberately so a real-but-obscure publisher or a hack
-/// that happens to credit a real company doesn't get flagged. Verified
-/// 2026-09-17 against real IGDB data before being built (see `BACKLOG.md`'s
-/// Phase 5 section) — these fixtures lock down the exact decision boundary
-/// that real check established, not a re-guess of it.
+/// `SystemGamesList.isReviewCandidate` — the heuristic for bootlegs/ROM
+/// hacks/homebrew that slipped into the IGDB import. Verified 2026-09-17
+/// against real IGDB data before being built (see `BACKLOG.md`'s Phase 5
+/// section) — these fixtures lock down the exact decision boundary that
+/// real check established, not a re-guess of it.
+///
+/// A release year past the platform's plausible lifetime is sufficient on
+/// its own, regardless of publisher — fixed 2026-09-18 after a live example
+/// (an N64 item, publisher "MorningStorm64", 2022) escaped detection
+/// because that publisher had crossed the rare-publisher count threshold
+/// with *other* homebrew releases, and the old logic required *both*
+/// signals together, letting a hard publisher-frequency veto suppress an
+/// otherwise-unambiguous late year. Publisher rarity now only matters as a
+/// fallback when the year is missing entirely.
 struct SystemGamesListReviewCandidateTests {
     @MainActor
     private func freshContext() throws -> ModelContext {
@@ -86,18 +92,30 @@ struct SystemGamesListReviewCandidateTests {
         #expect(SystemGamesList.isReviewCandidate(obscureButReal, publisherCounts: counts) == false)
     }
 
-    /// A late/missing year alone isn't enough — a common, well-established
-    /// publisher shouldn't get flagged just because one row is missing a
-    /// year or has a late one (e.g. a reissue).
-    @Test @MainActor func commonPublisherWithALateOrMissingYearIsNotACandidate() throws {
+    /// A missing year alone isn't enough — a common, well-established
+    /// publisher shouldn't get flagged just because one row has no release
+    /// year on file at all.
+    @Test @MainActor func commonPublisherWithAMissingYearIsNotACandidate() throws {
         let context = try freshContext()
         let platform = nes(in: context)
-        let lateReissue = item(context, platform: platform, name: "Nintendo Reissue", year: 2010, publisher: "Nintendo")
         let missingYear = item(context, platform: platform, name: "Nintendo No Year", year: nil, publisher: "Nintendo")
         let counts = ["Nintendo": 90]
 
-        #expect(SystemGamesList.isReviewCandidate(lateReissue, publisherCounts: counts) == false)
         #expect(SystemGamesList.isReviewCandidate(missingYear, publisherCounts: counts) == false)
+    }
+
+    /// The fix this file's header documents, locked down directly: a common
+    /// publisher does NOT protect a late release year — this is exactly the
+    /// shape of the real N64 item that escaped detection under the old
+    /// logic (a prolific homebrew alias crossing the rare-publisher count
+    /// threshold with unambiguously post-discontinuation release years).
+    @Test @MainActor func commonPublisherWithALateYearIsStillACandidate() throws {
+        let context = try freshContext()
+        let platform = nes(in: context)
+        let lateReissue = item(context, platform: platform, name: "Nintendo Reissue", year: 2010, publisher: "Nintendo")
+        let counts = ["Nintendo": 90]
+
+        #expect(SystemGamesList.isReviewCandidate(lateReissue, publisherCounts: counts) == true)
     }
 
     @Test @MainActor func publisherAtExactlyTheRareThresholdCounts() throws {

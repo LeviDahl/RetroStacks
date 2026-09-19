@@ -45,6 +45,26 @@ struct RootView: View {
         #endif
     }
 
+    /// Tried keeping all four sections mounted simultaneously (`ZStack` +
+    /// opacity) 2026-09-19, to fix `AsyncImage` visibly reloading on every
+    /// sidebar click (it re-runs its fetch/phase transition whenever its own
+    /// view identity is recreated, which the destructive `switch` below
+    /// does to the whole screen on every click, warm `URLCache` or not).
+    /// **Reverted** — real live testing (`performAccessibilityAudit()` on
+    /// iPad, where `splitLayout` actually runs, not the iPhone/`tabLayout`
+    /// destination this suite otherwise uses) found the other three
+    /// *hidden* sections' content — `CatalogSection`'s own description
+    /// text, Wishlist's counts — leaking into a scan that should have been
+    /// Dashboard-only (findings jumped 11 → 71). `.accessibilityHidden`
+    /// didn't reliably suppress it. Confirming whether that's a real
+    /// VoiceOver-facing regression or just this audit tool over-scanning
+    /// (this codebase has already found real cases of the latter — see
+    /// `BreakdownBar`'s contrast-check mystery) needed live Simulator
+    /// inspection, which wasn't available this session (device access not
+    /// yet granted). Rather than ship a real accessibility risk on a guess,
+    /// reverted to the plain `switch` and fixed the actual reported
+    /// symptom (images reloading) at its real source instead — see
+    /// `ItemThumbnail`'s image cache.
     private var splitLayout: some View {
         NavigationSplitView {
             SidebarView(selection: $selection)

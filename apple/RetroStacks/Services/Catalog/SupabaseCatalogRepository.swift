@@ -118,6 +118,7 @@ nonisolated struct SupabaseCatalogItemRow: Decodable, Sendable {
     var name: String
     var variant: String?
     var releaseYearNA: Int?
+    var regions: [String]?
     var manufacturerOrPublisher: String?
     var developer: String?
     var genre: String?
@@ -135,6 +136,7 @@ nonisolated struct SupabaseCatalogItemRow: Decodable, Sendable {
         case platformSlug = "platform_slug"
         case kind, name, variant
         case releaseYearNA = "release_year_na"
+        case regions
         case manufacturerOrPublisher = "manufacturer_or_publisher"
         case developer, genre, upc, summary
         case imageURLString = "image_url_string"
@@ -146,7 +148,7 @@ nonisolated struct SupabaseCatalogItemRow: Decodable, Sendable {
     var asFeedItem: FeedItem {
         FeedItem(
             slug: slug, platformSlug: platformSlug, kind: kind, name: name, variant: variant,
-            releaseYearNA: releaseYearNA, manufacturerOrPublisher: manufacturerOrPublisher,
+            releaseYearNA: releaseYearNA, regions: regions, manufacturerOrPublisher: manufacturerOrPublisher,
             developer: developer, genre: genre, upc: upc, summary: summary,
             imageURL: imageURLString, imageCredit: imageCredit, imageLicense: imageLicense,
             ownerUserID: ownerUserID

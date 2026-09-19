@@ -17,6 +17,18 @@ final class CatalogItem {
 
     var releaseYearNA: Int?
 
+    /// Which regions this specific release shipped in — `nil` means the
+    /// ingest source had no region data for this item at all (treated as
+    /// "assume NA" everywhere this is read, matching the old ingest
+    /// behavior of dropping anything unconfirmed), distinct from a
+    /// confirmed-nowhere empty array. Mirrors `catalog_items.regions`
+    /// server-side; see `ingest/igdb.mjs`'s `toItem`.
+    private var regionsRaw: [String]?
+    var regions: [Region]? {
+        get { regionsRaw?.compactMap(Region.init(rawValue:)) }
+        set { regionsRaw = newValue?.map(\.rawValue) }
+    }
+
     /// Manufacturer for hardware, publisher for games.
     var manufacturerOrPublisher: String?
     /// Games only.
@@ -86,6 +98,7 @@ final class CatalogItem {
         name: String,
         variant: String? = nil,
         releaseYearNA: Int? = nil,
+        regions: [Region]? = nil,
         manufacturerOrPublisher: String? = nil,
         developer: String? = nil,
         genre: String? = nil,
@@ -108,6 +121,7 @@ final class CatalogItem {
         self.name = name
         self.variant = variant
         self.releaseYearNA = releaseYearNA
+        self.regionsRaw = regions?.map(\.rawValue)
         self.manufacturerOrPublisher = manufacturerOrPublisher
         self.developer = developer
         self.genre = genre

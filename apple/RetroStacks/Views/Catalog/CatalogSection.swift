@@ -6,7 +6,7 @@ struct CatalogSection: View {
     var initialPlatformSlug: String?
     var initialKind: ItemKind?
 
-    @Query(sort: [SortDescriptor(\CatalogItem.name)]) private var allItems: [CatalogItem]
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \Platform.generation) private var platforms: [Platform]
 
     @State private var viewModel = CatalogBrowseViewModel()
@@ -14,7 +14,7 @@ struct CatalogSection: View {
     @State private var account = AccountService.shared
     @State private var isShowingCustomEntrySheet = false
 
-    /// `viewModel.apply(to: allItems)` filters/sorts up to ~13,150 items —
+    /// `viewModel.filter` filters/sorts up to ~13,150 items —
     /// same bug class as `SystemGamesList.cachedCatalog` (see its doc
     /// comment): as a plain computed property this re-ran on *every* body
     /// evaluation, including ones with nothing to do with this screen's own
@@ -25,17 +25,37 @@ struct CatalogSection: View {
     /// as collection entries change elsewhere — it re-filters on the next
     /// real dependency change instead of watching `CollectionItem` too.
     @State private var cachedItems: [CatalogItem] = []
+    @State private var hasLoadedItems = false
 
     private var itemsCacheKey: String {
         "\(viewModel.kindFilter?.rawValue ?? "-")|\(viewModel.platformSlugFilter ?? "-")|"
             + "\(viewModel.generationFilter.map(String.init) ?? "-")|\(viewModel.ownershipFilter.rawValue)|"
-            + "\(viewModel.searchText)|\(viewModel.sortField.rawValue)|\(viewModel.sortAscending)|\(viewModel.showHidden)"
+            + "\(viewModel.searchText)|\(viewModel.sortField.rawValue)|\(viewModel.sortAscending)|"
+            + "\(viewModel.showHidden)|\(viewModel.showNonNARegions)"
     }
 
     private var items: [CatalogItem] { cachedItems }
+
+    /// Filter/sort runs in `CatalogQueryActor` (off-main); only identifiers
+    /// come back. Skipped entirely on the by-system landing list, which
+    /// needs none of it. `hasLoadedItems` keeps the first filtered load from
+    /// flashing "No Matches" before the result arrives.
+    private func reloadItems() async {
+        guard viewModel.hasActiveFilters else {
+            cachedItems = []
+            hasLoadedItems = false
+            return
+        }
+        let container = modelContext.container
+        guard let ids = try? await CatalogQueryActor.browseIdentifiers(
+            container: container, filter: viewModel.filter
+        ), !Task.isCancelled else { return }
+        cachedItems = ids.compactMap { modelContext.model(for: $0) as? CatalogItem }
+        hasLoadedItems = true
+    }
     private var selectedItem: CatalogItem? {
         guard let selectedID else { return nil }
-        return allItems.first { $0.persistentModelID == selectedID }
+        return modelContext.model(for: selectedID) as? CatalogItem
     }
 
     private var navigationTitleText: String {
@@ -63,7 +83,7 @@ struct CatalogSection: View {
                     prompt: viewModel.platformSlugFilter == nil ? "Search the whole catalog" : "Search \(navigationTitleText)"
                 )
                 .toolbar { toolbarContent }
-                .task(id: itemsCacheKey) { cachedItems = viewModel.apply(to: allItems) }
+                .task(id: itemsCacheKey) { await reloadItems() }
                 .sheet(isPresented: $isShowingCustomEntrySheet) {
                     CustomCatalogItemSheet(initialPlatformSlug: viewModel.platformSlugFilter)
                 }
@@ -84,11 +104,6 @@ struct CatalogSection: View {
         .onAppear {
             if let initialPlatformSlug { viewModel.platformSlugFilter = initialPlatformSlug }
             if let initialKind { viewModel.kindFilter = initialKind }
-            // Seed synchronously, same frame as the filters above — arriving
-            // here already filtered (e.g. a platform tapped from Dashboard)
-            // would otherwise show a one-frame "No Matches" flash before
-            // `.task(id:)` catches up (it starts a beat after `onAppear`).
-            cachedItems = viewModel.apply(to: allItems)
         }
     }
 
@@ -103,6 +118,8 @@ struct CatalogSection: View {
     private var contentColumn: some View {
         if !viewModel.hasActiveFilters {
             platformList
+        } else if !hasLoadedItems {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if items.isEmpty {
             EmptyStateView(
                 title: "No Matches",
@@ -214,6 +231,9 @@ struct CatalogSection: View {
                 Divider()
                 Toggle(isOn: $viewModel.showHidden) {
                     Label("Show Hidden Items", systemImage: "eye.slash")
+                }
+                Toggle(isOn: $viewModel.showNonNARegions) {
+                    Label("Show EU / JP Releases", systemImage: "globe")
                 }
                 if viewModel.hasActiveFilters {
                     Divider()

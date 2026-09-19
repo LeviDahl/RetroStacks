@@ -33,10 +33,22 @@ struct SidebarView: View {
     }
 
     private func row(_ section: AppSection, badge: Int? = nil) -> some View {
-        Label(section.title, systemImage: section.symbol)
-            .badge(badge ?? 0)
-            .tag(section)
-            .accessibilityIdentifier(AccessibilityID.Sidebar.item(section))
+        // Manual icon+Text, not `Label(...)` — mirrors the fix already
+        // proven in `DashboardView`'s `BreakdownBar` header: `Label` was
+        // found (by sampling actual rendered pixels) to render its title
+        // visibly lighter than a plain `Text` at the same
+        // `.foregroundStyle(.primary)`, a genuine rendering bug independent
+        // of the OS accessibility audit's separate, still-unexplained
+        // "Contrast failed" findings on this same row shape (see
+        // AccessibilityAuditTests's doc comment for the fuller account).
+        HStack(spacing: 6) {
+            Image(systemName: section.symbol)
+                .accessibilityHidden(true) // decorative — Text carries the label, same as Label(...) would
+            Text(section.title)
+        }
+        .badge(badge ?? 0)
+        .tag(section)
+        .accessibilityIdentifier(AccessibilityID.Sidebar.item(section))
     }
 
     private var ownedCount: Int {

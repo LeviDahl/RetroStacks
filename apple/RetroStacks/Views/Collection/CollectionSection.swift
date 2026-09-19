@@ -59,16 +59,30 @@ struct CollectionSection: View {
         viewModel.apply(to: allItems)
     }
 
+    // Cached, not a plain computed property — same bug class already fixed
+    // for `CatalogSection.items`/`SystemGamesList.cachedCatalog`, just never
+    // applied to `systemSummaries` here (or in `DashboardView`, fixed
+    // alongside this): grouping every owned/wishlisted item by platform
+    // touches that platform's full `catalogItems` relationship per platform
+    // (`platform.games`/`.consoles`/`.accessories`), and this was
+    // recomputing that on *every* SwiftUI body pass. The search-text filter
+    // on top is cheap (string ops on already-computed structs), so only the
+    // expensive base list is cached — filtering still happens live.
+    @State private var cachedBaseSummaries: [CollectionStats.SystemSummary] = []
+    /// False until the first off-main summaries load lands — without it the
+    /// list's "no results" overlay flashed for ~1s on every visit.
+    @State private var hasLoadedSummaries = false
+    private var baseSummariesCacheKey: Int {
+        SystemSummariesCache.key(items: allItems, status: mode.status)
+    }
+
     private var summaries: [CollectionStats.SystemSummary] {
-        var list = CollectionStatsBuilder.systemSummaries(from: allItems, status: mode.status)
         let q = viewModel.searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        if !q.isEmpty {
-            list = list.filter {
-                $0.platformName.lowercased().contains(q)
-                    || $0.platformShortName.lowercased().contains(q)
-            }
+        guard !q.isEmpty else { return cachedBaseSummaries }
+        return cachedBaseSummaries.filter {
+            $0.platformName.lowercased().contains(q)
+                || $0.platformShortName.lowercased().contains(q)
         }
-        return list
     }
 
     var body: some View {
@@ -87,12 +101,17 @@ struct CollectionSection: View {
             .toolbar { toolbarContent }
             .searchable(text: $viewModel.searchText,
                         prompt: groupBySystem ? "Search systems" : "Search \(mode.title.lowercased())")
+            .task(id: baseSummariesCacheKey) {
+                await SystemSummariesCache.load(
+                    container: modelContext.container, status: mode.status, key: baseSummariesCacheKey
+                ) { cachedBaseSummaries = $0; hasLoadedSummaries = true }
+            }
             .sheet(isPresented: $showingCatalogPicker) {
                 AddToCollectionFlow(defaultStatus: mode.status)
             }
             .fileExporter(
                 isPresented: $showExporter,
-                document: CollectionDocument(archive: CollectionArchive.make(from: allItems)),
+                document: CollectionExport.archiveDocument(isPresented: showExporter, items: allItems),
                 contentType: .json,
                 defaultFilename: exportFilename
             ) { result in
@@ -104,7 +123,7 @@ struct CollectionSection: View {
             }
             .fileExporter(
                 isPresented: $showCSVExporter,
-                document: CollectionCSVDocument(text: CollectionCSV.string(from: allItems)),
+                document: CollectionExport.csvDocument(isPresented: showCSVExporter, items: allItems),
                 contentType: .commaSeparatedText,
                 defaultFilename: exportFilename
             ) { result in
@@ -204,7 +223,9 @@ struct CollectionSection: View {
         }
         .listStyle(.inset)
         .overlay {
-            if summaries.isEmpty {
+            if !hasLoadedSummaries {
+                ProgressView()
+            } else if summaries.isEmpty {
                 ContentUnavailableView.search
             }
         }

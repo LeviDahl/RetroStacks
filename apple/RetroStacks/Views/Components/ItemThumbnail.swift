@@ -8,8 +8,10 @@ import AppKit
 /// Thumbnail / hero art for a catalog or collection item.
 ///
 /// Resolution order: bundled asset (`imageName`) → remote photo (`imageURL`,
-/// loaded with `AsyncImage` + the shared `URLCache`) → a tinted SF Symbol
-/// placeholder so lists and grids always read well, even offline or mid-load.
+/// via `CachedAsyncImage` — an in-memory cache on top of `AsyncImage`/
+/// `URLCache`, so the image doesn't visibly reload every time this view's
+/// own identity is recreated) → a tinted SF Symbol placeholder so lists and
+/// grids always read well, even offline or mid-load.
 struct ItemThumbnail: View {
     var kind: ItemKind
     var platformSymbol: String?
@@ -45,19 +47,12 @@ struct ItemThumbnail: View {
         if let bundledImage {
             bundledImage.resizable().aspectRatio(contentMode: contentMode)
         } else if let imageURL {
-            AsyncImage(url: imageURL, transaction: Transaction(animation: .easeIn(duration: 0.2))) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().aspectRatio(contentMode: contentMode)
-                case .empty:
-                    placeholder.overlay {
-                        ProgressView().controlSize(.small).tint(.white)
-                    }
-                case .failure:
-                    placeholder
-                @unknown default:
-                    placeholder
+            CachedAsyncImage(url: imageURL, contentMode: contentMode, displaySize: size) {
+                placeholder.overlay {
+                    ProgressView().controlSize(.small).tint(.white)
                 }
+            } failure: {
+                placeholder
             }
         } else {
             placeholder

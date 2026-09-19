@@ -88,11 +88,12 @@ struct CatalogItemDetailView: View {
             CustomCatalogItemSheet(variantOf: item)
         }
         .sheet(item: $quickAddTarget) { catalogItem in
-            QuickAddSheet(catalogItem: catalogItem) { completeness, condition in
+            QuickAddSheet(catalogItem: catalogItem) { completeness, condition, hasBox, hasManual in
                 withAnimation {
                     _ = CollectionActions.add(
                         catalogItem, status: .owned,
                         completeness: completeness, condition: condition,
+                        hasBox: hasBox, hasManual: hasManual,
                         in: modelContext
                     )
                 }

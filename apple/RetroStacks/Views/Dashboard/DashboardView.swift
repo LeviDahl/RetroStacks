@@ -22,9 +22,19 @@ struct DashboardView: View {
     /// accessibility sizes like everything else on the screen."
     @ScaledMetric(relativeTo: .largeTitle) private var bigNumberSize: CGFloat = 46
 
-    private var stats: CollectionStats {
-        CollectionStatsBuilder.build(from: collectionItems)
-    }
+    // Cached, not a plain computed property — same real bug as
+    // `systemSummaries` below, just missed the first time: `stats.mostValuable`
+    // sorts every *owned* item by `estimatedValue`, a relationship-touching
+    // computed property re-evaluated on every comparison, not memoized — for
+    // ~950 owned items that's roughly n·log(n) (~9,500) relationship faults,
+    // done synchronously in `body` on *every* render. Unlike `systemSummaries`
+    // (only read when `showBreakdown` is on), `stats` feeds `statGrid`/
+    // `collectionHeader`, which are always visible — this was the actual
+    // dominant remaining cost behind "sidebar updates instantly, the right
+    // pane does nothing for 2-3 seconds": that's a synchronous `body`
+    // computation blocking the very first frame, before any `.task` even
+    // fires, not an async-task cost the earlier pass's fixes could reach.
+    @State private var cachedStats = CollectionStats()
 
     private var syncMenuLabel: String {
         switch sync.phase {
@@ -44,8 +54,24 @@ struct DashboardView: View {
         }
     }
 
-    private var systemSummaries: [CollectionStats.SystemSummary] {
-        CollectionStatsBuilder.systemSummaries(from: collectionItems, status: .owned)
+    // Cached, not a plain computed property — `systemSummaries` groups every
+    // owned item by platform and, per platform, touches that platform's full
+    // `catalogItems` relationship (`platform.games`/`.consoles`/
+    // `.accessories`) to compute completion ratios. Recomputing that on
+    // *every* SwiftUI body pass (this is `@Query`-driven, so any
+    // `CollectionItem` change anywhere in the app re-triggers it, not just a
+    // real navigation) is the same bug class already fixed for
+    // `CatalogSection.items`/`SystemGamesList.cachedCatalog` — just never
+    // applied here. Real user-reported symptom this was part of: sidebar
+    // navigation lag that "gets better after visiting a few areas" — which
+    // is this exact relationship-fault cost being paid, silently, on every
+    // single re-render of whichever screen happens to be up, not just once.
+    @State private var cachedSystemSummaries: [CollectionStats.SystemSummary] = []
+    private var summariesKey: Int { SystemSummariesCache.key(items: collectionItems, status: .owned) }
+    private var dashboardDataCacheKey: Int {
+        var hasher = Hasher()
+        for item in collectionItems { hasher.combine(item.persistentModelID) }
+        return hasher.finalize()
     }
 
     /// Self-contained, like every other section — `NavigationLink`s inside
@@ -65,8 +91,8 @@ struct DashboardView: View {
 
                     statGrid
 
-                    if showBreakdown && !systemSummaries.isEmpty {
-                        PlatformBreakdownCard(summaries: systemSummaries, platforms: platforms)
+                    if showBreakdown && !cachedSystemSummaries.isEmpty {
+                        PlatformBreakdownCard(summaries: cachedSystemSummaries, platforms: platforms)
                     }
 
                     twoColumnLists
@@ -77,6 +103,12 @@ struct DashboardView: View {
             .background(.background)
             .appNavigationDestinations()
             .navigationTitle("Dashboard")
+            .task(id: dashboardDataCacheKey) {
+                cachedStats = CollectionStatsBuilder.build(from: collectionItems)
+                await SystemSummariesCache.load(
+                    container: modelContext.container, status: .owned, key: summariesKey
+                ) { cachedSystemSummaries = $0 }
+            }
             .toolbar {
                 ToolbarItem {
                     Menu {
@@ -150,8 +182,8 @@ struct DashboardView: View {
     /// Trailing stat cluster drops out when the width is tight (phones) — the
     /// same figures are in the stat grid right below.
     private var collectionHeader: some View {
-        let games = stats.ownedByKind[.game] ?? 0
-        let systems = systemSummaries.count
+        let games = cachedStats.ownedByKind[.game] ?? 0
+        let systems = cachedSystemSummaries.count
 
         return ViewThatFits(in: .horizontal) {
             HStack(alignment: .center, spacing: 16) {
@@ -159,8 +191,8 @@ struct DashboardView: View {
                 Spacer(minLength: 8)
                 HStack(spacing: 22) {
                     headerStat("\(systems)", systems == 1 ? "system" : "systems")
-                    headerStat("\(stats.ownedCount)", "items")
-                    headerStat(Money.string(stats.estimatedValue), "est. value")
+                    headerStat("\(cachedStats.ownedCount)", "items")
+                    headerStat(Money.string(cachedStats.estimatedValue), "est. value")
                 }
             }
             bigNumber(games)
@@ -194,21 +226,21 @@ struct DashboardView: View {
 
     private var statGrid: some View {
         LazyVGrid(columns: LayoutMetrics.cardColumns(), spacing: LayoutMetrics.cardSpacing) {
-            StatTile(title: "Owned Items", value: "\(stats.ownedCount)",
+            StatTile(title: "Owned Items", value: "\(cachedStats.ownedCount)",
                      systemImage: "square.grid.2x2", tint: .indigo,
                      footnote: kindBreakdown,
                      action: { onSelectSection(.collection) })
                 .accessibilityIdentifier(AccessibilityID.Dashboard.ownedItemsTile)
-            StatTile(title: "Estimated Value", value: Money.string(stats.estimatedValue),
+            StatTile(title: "Estimated Value", value: Money.string(cachedStats.estimatedValue),
                      systemImage: "chart.line.uptrend.xyaxis", tint: .green,
-                     footnote: stats.totalInvested > 0
-                        ? "\(Money.signedString(stats.netGain)) vs. invested" : nil,
-                     footnoteColor: stats.netGain < 0 ? .accentRed : .accentGreen)
-            StatTile(title: "Total Invested", value: Money.string(stats.totalInvested),
+                     footnote: cachedStats.totalInvested > 0
+                        ? "\(Money.signedString(cachedStats.netGain)) vs. invested" : nil,
+                     footnoteColor: cachedStats.netGain < 0 ? .accentRed : .accentGreen)
+            StatTile(title: "Total Invested", value: Money.string(cachedStats.totalInvested),
                      systemImage: "creditcard", tint: .blue)
-            StatTile(title: "Wishlist", value: "\(stats.wishlistCount)",
+            StatTile(title: "Wishlist", value: "\(cachedStats.wishlistCount)",
                      systemImage: "star", tint: .yellow,
-                     footnote: stats.forSaleCount > 0 ? "\(stats.forSaleCount) marked for sale" : nil)
+                     footnote: cachedStats.forSaleCount > 0 ? "\(cachedStats.forSaleCount) marked for sale" : nil)
         }
     }
 
@@ -224,11 +256,11 @@ struct DashboardView: View {
 
         return LazyVGrid(columns: columns, alignment: .leading, spacing: LayoutMetrics.cardSpacing) {
             DashboardSection(title: "Recently Added", systemImage: "clock") {
-                MiniCollectionList(items: stats.recentlyAdded,
+                MiniCollectionList(items: cachedStats.recentlyAdded,
                                    emptyText: "Nothing added yet.")
             }
             DashboardSection(title: "Most Valuable", systemImage: "trophy") {
-                MiniCollectionList(items: stats.mostValuable,
+                MiniCollectionList(items: cachedStats.mostValuable,
                                    emptyText: "Add owned items to see your top pieces.")
             }
         }
@@ -236,7 +268,7 @@ struct DashboardView: View {
 
     private var kindBreakdown: String {
         let parts = ItemKind.allCases.compactMap { kind -> String? in
-            let count = stats.ownedByKind[kind] ?? 0
+            let count = cachedStats.ownedByKind[kind] ?? 0
             return count > 0 ? "\(count) \(count == 1 ? kind.displayName.lowercased() : kind.pluralName.lowercased())" : nil
         }
         return parts.isEmpty ? "No items yet" : parts.joined(separator: " · ")

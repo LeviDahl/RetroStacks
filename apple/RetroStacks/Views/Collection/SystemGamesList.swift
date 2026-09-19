@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import os
 
 /// The one screen for a single platform. A collapsible "about" header (the
 /// mini-wiki) sits on top of the platform's whole catalog, scoped **Owned /
@@ -88,8 +89,16 @@ struct SystemGamesList: View {
     /// period date won't match, and neither will a hack that happens to
     /// credit a real company by mistake.
     @AppStorage("system.reviewCandidatesOnly") private var reviewCandidatesOnly = false
+    /// Off by default, own `@AppStorage` key — matches `showHidden`'s
+    /// already-separate-per-view precedent, not shared with
+    /// `CatalogBrowseViewModel.showNonNARegions`.
+    @AppStorage("system.showNonNARegions") private var showNonNARegions = false
 
-    enum SortField: String, CaseIterable, Identifiable {
+    // `nonisolated` — pure value types with no MainActor state, but nested
+    // inside a View so they'd otherwise inherit its MainActor isolation
+    // under `-default-isolation=MainActor`. Needed so `CatalogQueryActor`
+    // (a background actor) can pass/use these without a data-race error.
+    nonisolated enum SortField: String, CaseIterable, Identifiable {
         case title, releaseYear, publisher, value
         var id: String { rawValue }
         var label: String {
@@ -118,7 +127,7 @@ struct SystemGamesList: View {
         var addStatus: CollectionStatus { self == .wanted ? .wishlist : .owned }
     }
 
-    enum KindFilter: String, CaseIterable, Identifiable {
+    nonisolated enum KindFilter: String, CaseIterable, Identifiable {
         case games, consoles, accessories, all
         var id: String { rawValue }
         var label: String {
@@ -162,16 +171,19 @@ struct SystemGamesList: View {
     /// not blocking the main thread on navigation.
     @State private var hasLoadedCatalog = false
 
-    private var catalogCacheKey: String {
-        "\(platform.slug)|\(kindFilter.rawValue)|\(searchQuery)|\(sortField.rawValue)|\(sortAscending)|\(showHidden)|\(reviewCandidatesOnly)"
+    private var filterOptions: CatalogFilterOptions {
+        CatalogFilterOptions(
+            kindFilter: kindFilter, searchText: searchQuery, sortField: sortField, sortAscending: sortAscending,
+            showHidden: showHidden, reviewCandidatesOnly: reviewCandidatesOnly, showNonNARegions: showNonNARegions
+        )
     }
 
-    private func recomputeCatalog() {
-        cachedCatalog = Self.computeCatalog(
-            platform: platform, kindFilter: kindFilter, searchText: searchQuery,
-            sortField: sortField, sortAscending: sortAscending, showHidden: showHidden,
-            reviewCandidatesOnly: reviewCandidatesOnly
-        )
+    private var catalogCacheKey: String {
+        Self.catalogCacheKey(platform: platform, options: filterOptions)
+    }
+
+    private func recomputeCatalog() async {
+        cachedCatalog = await Self.loadCatalog(platform: platform, options: filterOptions, modelContext: modelContext)
         hasLoadedCatalog = true
     }
 
@@ -207,7 +219,7 @@ struct SystemGamesList: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .task(id: catalogCacheKey) { recomputeCatalog() }
+            .task(id: catalogCacheKey) { await recomputeCatalog() }
             .task { isAdmin = await AdminCatalogCurationService().checkIsAdmin() }
             .searchable(text: $searchQuery, prompt: "Search \(platform.shortName)")
             .toolbar {
@@ -227,13 +239,15 @@ struct SystemGamesList: View {
             }
             .onChange(of: scope) { _, _ in if selecting { picked.removeAll() } }
             .sheet(item: $quickAddTarget) { item in
-                QuickAddSheet(catalogItem: item) { completeness, condition in
+                QuickAddSheet(catalogItem: item) { completeness, condition, hasBox, hasManual in
                     withAnimation {
                         _ = CollectionActions.add(
                             item,
                             status: .owned,
                             completeness: completeness,
                             condition: condition,
+                            hasBox: hasBox,
+                            hasManual: hasManual,
                             in: modelContext
                         )
                     }
@@ -478,6 +492,10 @@ struct SystemGamesList: View {
             Toggle(isOn: $reviewCandidatesOnly) {
                 Label("Review Candidates Only", systemImage: "questionmark.circle")
             }
+            Divider()
+            Toggle(isOn: $showNonNARegions) {
+                Label("Show EU / JP Releases", systemImage: "globe")
+            }
         } label: {
             Label("\(kindFilter.label) · \(sortField.label) \(sortAscending ? "↑" : "↓")",
                   systemImage: "line.3.horizontal.decrease.circle")
@@ -489,8 +507,8 @@ struct SystemGamesList: View {
 
     private func toggleHidden(_ catalogItem: CatalogItem) {
         catalogItem.isHidden.toggle()
-        modelContext.saveLoggingErrors(reportingAs: .localSave)
-        recomputeCatalog()
+        modelContext.saveInvalidatingSummaries()
+        Task { await recomputeCatalog() }
     }
 
     private func handleAdd(_ catalogItem: CatalogItem, status: CollectionStatus) {
@@ -734,12 +752,12 @@ struct SystemGamesList: View {
                         item.isHidden = true
                     }
                 }
-                modelContext.saveLoggingErrors(reportingAs: .localSave)
+                modelContext.saveInvalidatingSummaries()
                 withAnimation {
                     picked.removeAll()
                     selecting = false
                 }
-                recomputeCatalog()
+                await recomputeCatalog()
                 successToast = "Excluded \(slugs.count) from the catalog for everyone"
             } catch {
                 successToast = "Couldn't exclude: \((error as? CatalogError)?.userMessage ?? error.localizedDescription)"

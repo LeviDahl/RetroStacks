@@ -50,6 +50,30 @@ also live in [`api/README.md`](api/README.md) and [`apple/README.md`](apple/READ
   checkbox/button per field to flag "incomplete/partial" alongside the
   existing yes/no would cover this without a bigger redesign of the
   completeness model.
+- ~~**Real bug, user-reported 2026-09-19: `QuickAddSheet` (the "+" add
+  modal) never actually set `hasBox`/`hasManual`.**~~ Fixed. The modal only
+  ever had a "Completeness" preset picker (Loose/Boxed/CIB/Sealed) —
+  `CollectionActions.add` had no `hasBox`/`hasManual` parameters at all, so
+  picking "CIB" left the item's actual checklist booleans `false`
+  regardless, disconnected from the full edit view's real "Box"/"Manual"
+  toggles. Mattered for a concrete reason, not just checklist cosmetics —
+  user's own point: "each piece has different pricing on PriceCharting" —
+  `CatalogItem.referenceValue(for:)` picks the loose/CIB/sealed price tier
+  straight from `completeness`, so getting this right is a real pricing-
+  accuracy bug, not just a display one. Fixed both directions, since a
+  preset alone can't express every real case (box but no manual, or the
+  reverse, which has no clean `Completeness` case at all): `CollectionActions
+  .add` gained `hasBox`/`hasManual` parameters (threaded through to
+  `CollectionItem`'s own init, which already had them); `QuickAddSheet`
+  gained explicit Box/Manual toggles alongside the existing preset picker —
+  picking a preset sets both to match (quick path, user's own ask: "pick
+  CIB and it auto-fills the checkboxes"), and each toggle stays
+  independently changeable afterward, re-deriving `completeness` to the
+  closest fit (falls back to `.loose` for the no-exact-match "manual only"
+  case — `hasManual` itself still stays accurate even though the price
+  tier can't represent it exactly). New `CollectionActionsTests.swift`
+  locks down `add` actually persisting what it's given. Full suite clean,
+  both platforms build.
 - ~~**CSV export**~~ — done: `CollectionCSV` + "Export as CSV…" in the Backup menu.
 - Per-item **price sparkline** + collection **value-over-time chart** — both need
   the feed to carry price history / periodic snapshots.
@@ -877,9 +901,11 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
     PriceCharting's live `/api/products` for each candidate, and writes a
     report (`api/data/pricecharting-match-<platform>.json`, gitignored —
     point-in-time, not source data) suggesting keep/exclude per item.
-    Doesn't touch `catalog_items` itself — same "assists, doesn't replace"
-    reasoning as the client-side toggle; the resulting slugs still go
-    through the app's own admin-exclude flow by hand.
+    Grew a real `--execute` flag the same day (see below) that PATCHes
+    `deleted_at` directly via the service-role key — the RPC path
+    (`admin_exclude_catalog_items`) can't be called this way since
+    `auth.uid()` is null for service-role requests, so this bypasses RLS
+    directly instead, same end state.
     - First real run against NES's *current* (already-cleaned-up) catalog:
       only 6 review candidates remained (down from ~562 before the user's
       earlier bulk-exclude pass — a real confirmation that pass worked).
@@ -906,6 +932,42 @@ account, commit `72aae82` for the schema and `f0d521f` for the migration.
       tier, a separate logged-in-website download, not a token-authenticated
       URL) if this ever needs to check the *whole* catalog rather than just
       the flagged subset.
+    - **Real bug found 2026-09-18 from a live example, not a guess:** user
+      spotted N64 item `n64-15` ("15" by "MorningStorm64", 2022) still in
+      the public catalog and asked how it survived review. Traced it to
+      `findReviewCandidates`'s AND-gate — `publisherIsRare AND (yearMissing
+      OR yearLate)` — where a hard `≤3` publisher-count veto could suppress
+      an unambiguous late-year signal entirely. MorningStorm64 had 6 N64
+      entries, one over the threshold, so the 2022 release year (vs. N64's
+      2002 `discontinuedYearNA`) never got consulted. Checked the blast
+      radius before fixing: 289 more N64 items fit the same shape, all
+      under a handful of prolific ROM-hacker aliases (Kurko Mods ×18, Kaze
+      Emanuar, GomePlayTV, Aglab2, …) invisible to the old heuristic for
+      the same reason. Fixed in both `SystemGamesListCatalog
+      .isReviewCandidate` (the in-app filter) and the script's
+      `findReviewCandidates`: a release year past the platform's
+      discontinuation is now sufficient on its own, regardless of
+      publisher frequency; the rare/missing-publisher check only applies
+      as a fallback when the year is missing. Spot-checked the newly-caught
+      N64 items before trusting it — all 8 sampled had no PriceCharting
+      listing at all, and the Banjo-Kazooie fan-hack titles correctly fall
+      into "uncertain" (partial title match) rather than auto-excluding.
+    - **Full `--execute` run across all 10 existing platforms, 2026-09-18**
+      (first under the buggy AND-heuristic, then re-run against every
+      platform under the corrected one — idempotent, re-excluding an
+      already-excluded item is a no-op). Final additional exclusions from
+      the corrected pass: NES 87, Atari 2600 32, SNES 215, Genesis 122,
+      Game Boy 23, N64 236, PlayStation 5, Dreamcast 79, GameCube 74,
+      PS2 73 — 946 more soft-deletes on top of the earlier NES/Atari 2600
+      passes done before the fix. Sizable "uncertain" piles left for human
+      review on every platform (partial-title-match items, never
+      auto-excluded): NES 15, Atari 2600 21, SNES 39, Genesis 56,
+      Game Boy 23, N64 53, PlayStation 38, Dreamcast 11, GameCube 80,
+      PS2 27. A handful of PriceCharting searches (1 on Game Boy, 8 on
+      N64) failed with transient HTTP 500s during the run and were treated
+      as "not found" (the safer failure direction, but means a few items
+      were excluded on a search failure rather than a confirmed absence —
+      worth a retry-on-500 if this script gets run again).
   - **Admin surface for viewing/restoring excluded items — not started,
     not urgent, flagged 2026-09-18 for whenever admin tools come up
     again.** Right now `admin_restore_catalog_items` can only be reached
@@ -993,12 +1055,18 @@ tooling):
   intentional decision (documented inline); it's a bug waiting to be found
   when it's really "I didn't want to handle this error." Worth a occasional
   `grep -rn "try?" apple/RetroStacks` pass to confirm each one is still the
-  former.
+  former. Re-swept 2026-09-18 (~35 real sites, i.e. excluding lines the
+  pattern only matched incidentally): every one is either a `Task.sleep`
+  cancellation (always safe to ignore), a documented fallback-to-default
+  (anon key, `false`, `0`, cached data), or lenient third-party-API decoding
+  — no new undocumented "didn't want to handle this" sites found.
 - **Xcode's own static analyzer** (Product → Analyze, or `xcodebuild analyze`)
   catches a real class of bugs (retain cycles, unreachable code, misused
-  APIs) for zero setup cost — not currently run anywhere in this project's
-  workflow. Cheap to add as an occasional manual check before a release, or
-  wired into `Scripts/` alongside `leak-check.sh`.
+  APIs) for zero setup cost. Run for the first time 2026-09-18
+  (`xcodebuild ... analyze`, iOS Simulator destination) — **clean, zero
+  findings**. Cheap to re-run as an occasional manual check before a
+  release, or wired into `Scripts/` alongside `leak-check.sh`, but not
+  worth a standing CI step off one clean run.
 - ~~**SwiftLint**~~ — done 2026-09-13: `.swiftlint.yml` (repo root) +
   `Scripts/lint.sh` (`--fix` for auto-fixable violations, then report). Not
   wired into an Xcode Build Phase or SPM plugin — both would mean editing
@@ -1052,32 +1120,67 @@ tooling):
   corner `AppStatusBadge`. Wired for catalog sync + price refresh + collection
   sync (`SyncCoordinator` reports/clears `.collectionSync`, same pattern).
 - iPad: a proper 3-column layout for the collection drill-down.
-- **EU / JP region switch (`Region` already modeled, but only per-*platform*
-  today — `Platform.regionsAvailable`, never wired to any UI). Flagged again
-  2026-09-18** while pruning NES bootlegs: the user is currently excluding
-  anything not released in NA as part of that cleanup, on the explicit
-  understanding some of it may need to come back once real region data
-  exists — not a permanent judgment that non-NA titles don't belong.
-  Concretely closer than it looks: `api/build/ingest/igdb.mjs` already
-  fetches `release_dates.release_region` per release (confirmed reading the
-  script, not guessed — see its `NA_REGIONS`/`datesWithRegion` handling), it
-  just collapses that into a binary NA-or-drop decision at ingest time and
-  discards the rest rather than keeping it. A real region filter needs:
-  1. Ingest keeps the full per-item region set instead of collapsing it
-     (`CatalogItem`/`FeedItem`/the Supabase `catalog_items` row all need a
-     region field — doesn't exist today, only the platform-level one does).
-  2. A region filter in the UI (`CatalogBrowseViewModel`/`SystemGamesList`
-     already have the filter-menu pattern down — `showHidden`,
-     `reviewCandidatesOnly` — this would slot in the same way).
-  3. Some way to tell "genuinely EU/JP-only" apart from "IGDB just has no
-     region data for this one" (the ingest script's own current fallback:
-     no region data at all → keep it — meaning some non-NA-only titles may
-     already be sitting in the catalog uncaught by the NA filter, and could
-     be showing up in the review-candidates heuristic for the wrong reason).
-  Bringing a wrongly-excluded item back in the meantime doesn't need new
-  plumbing — `admin_restore_catalog_items` (Phase 5) already does exactly
-  that, by slug, whenever a specific one turns out to be worth restoring
-  before the real region feature exists.
+- ~~**EU / JP region switch**~~ Plumbing built 2026-09-18 — real data still
+  needs the user to run two things by hand (see below). `Region` was
+  already modeled but only per-*platform* (`Platform.regionsAvailable`),
+  never wired to any UI; flagged again while pruning NES bootlegs, since the
+  user was excluding anything not released in NA on the explicit
+  understanding some of it might need to come back once real region data
+  existed.
+  - **Ingest (`api/build/ingest/igdb.mjs`)**: `toItem` no longer collapses
+    `release_dates.release_region` into a binary NA-or-drop decision — it
+    now keeps every item and records which of NA/EU/JP it actually shipped
+    in (`regions: ["NA","EU"]`, etc.), `null` when the source had no region
+    data at all (treated as "assume NA" everywhere this is read, same as
+    the old drop behavior for anything unconfirmed).
+  - **Schema** (`supabase/schema.sql`): `catalog_items` gets a `regions
+    text[]` column (`alter table ... add column if not exists`, since
+    `create table if not exists` is a no-op against the already-live
+    table), and `upsert_public_catalog_items` carries it through.
+    **User needs to re-run this file in the Supabase SQL Editor** — no RPC
+    this session has access to can run arbitrary DDL, only
+    `migrate-catalog-to-supabase.mjs`'s already-defined function calls.
+  - **App**: `CatalogItem.regions: [Region]?` (SwiftData, mirrors the
+    `regionsAvailable`/`Region` pattern `Platform` already used),
+    `FeedItem`/`SupabaseCatalogItemRow` carry it, `CatalogSyncService
+    .reconcile` maps it down. New toggle in both filter menus — Browse
+    Catalog (`CatalogBrowseViewModel.showNonNARegions`) and the per-system
+    drill-down (`SystemGamesList`'s own `@AppStorage`, independent of the
+    Browse Catalog one, matching `showHidden`'s existing precedent) — off
+    by default, `regions == nil` always counts as NA regardless. Full app
+    build passes.
+  - **Not done yet, needs the user**: none of the ~13,150 already-ingested
+    items have real `regions` data — the toggle exists but has nothing to
+    reveal until a re-ingest runs (same IGDB credentials the platform
+    expansion below needs) and the schema migration above is applied.
+  - **Second source, user's call 2026-09-18**: IGDB's region tagging is
+    community-sourced and this codebase already found a gap in this exact
+    field once (the old `region` property silently stopped populating —
+    see `igdb.mjs`'s own comment history). Considered MobyGames (a
+    purpose-built release-tracking API) but that's new integration work,
+    **moved to its own backlog item below, not started**. Instead:
+    `api/build/pricecharting-region-check.mjs` — cross-checks a platform's
+    catalog against PriceCharting's regional console-name listings (the
+    same `CONSOLE_NAMES` signal `pricecharting-catalog-match.mjs` already
+    verified live per platform), report-only, doesn't write `regions`
+    itself. Smoke-tested live on 3 NES items (10-Yard Fight confirmed
+    NA+EU+JP, 1942 and 1943 NA-only) — correct, plausible results. User's
+    reasoning for going wide rather than spot-checking: the NES/SNES/etc.
+    libraries are finite and not growing, so a full per-platform pass is
+    worth doing once and treating as durable. **Not run at scale yet** —
+    only useful once a real re-ingest gives IGDB-derived `regions` data to
+    corroborate against; reconciling the two sources is a deliberate
+    separate, reviewed step, not something to auto-merge.
+  - Bringing a wrongly-excluded item back in the meantime still doesn't
+    need any of this — `admin_restore_catalog_items` (Phase 5) already does
+    that by slug.
+- **MobyGames as a second catalog-metadata source — not started, flagged
+  2026-09-18** alongside the region-switch work above. A purpose-built,
+  well-regarded release-tracking database with its own API; would need a
+  new account/API key (the user's own, same pattern as IGDB/PriceCharting)
+  and new integration code (`api/build/ingest/mobygames.mjs`-shaped, not
+  started). Deferred in favor of the PriceCharting cross-check above, which
+  reuses infrastructure already built and paid for this session.
 - Revisit the `GeometryReader` breakdown bar if the `_NSDetectedLayoutRecursion`
   log ever turns into visible jank.
 
@@ -1092,25 +1195,200 @@ tooling):
   changes, seeded synchronously in `.onAppear` too (avoids a one-frame
   "No Matches" flash when arriving with a platform already picked, e.g. from
   Dashboard's breakdown row).
-- **Sidebar navigation lag (~2s per click, macOS) — partially investigated,
-  not fully explained.** Measured for real rather than guessed: a scratch
-  test opened the actual on-disk dev store (13k+ `CatalogItem` rows) fresh
-  and timed `context.fetch` for `CatalogItem`/`Platform`/`CollectionItem`
-  plus touching every item's `.platform` relationship — **under 1 second
-  total**, so the raw fetch isn't the ~2s cost by itself. Leading
-  hypothesis, not yet confirmed: `RootView.sectionView`'s `switch` returns a
-  different concrete view type per `AppSection` case, so every sidebar
-  click fully tears down and reconstructs whichever screen you're
-  leaving/entering — no `@Query`/`@State` survives across a switch, all of
-  it re-runs from scratch every time, on every destination (matches the
-  report that it's not just Catalog that's slow). A real fix would mean
-  keeping all section views alive simultaneously (e.g. a `ZStack` +
-  `.hidden()`/opacity instead of a destructive `switch`) rather than
-  rebuilding on every click — a real architecture change with a real
-  tradeoff (filters/scroll position would then persist across tab switches
-  instead of always starting fresh), so not done without discussing it
-  first. The `CatalogSection.items` fix above is real and worth keeping
-  regardless, but shouldn't be assumed to be the whole story here.
+- ~~**Sidebar navigation lag (~2s per click, macOS)**~~ **Real cause found
+  2026-09-18, from a concrete new data point: the user reported it "gets
+  better after visiting a few areas."** That single observation ruled out
+  the leading hypothesis from the previous investigation (`RootView
+  .sectionView`'s destructive `switch` fully rebuilding every screen on
+  every click) as the *dominant* cause — a destructive rebuild would cost
+  the same every time regardless of prior visits, not improve with
+  "warm-up." The real explanation: SwiftData caches a relationship fault in
+  the `ModelContext`'s identity map for the lifetime of that context, which
+  (being injected once via `.modelContainer` at the app root) outlives any
+  individual view's destruction/rebuild — so a *screen's* relationship-fault
+  cost is genuinely one-time per platform/area, exactly matching "improves
+  after a few areas." Direct measurement against the real on-disk store was
+  attempted but blocked: a bundled `XCTest` can't reach the macOS app's own
+  sandboxed container path (confirmed live — instant failure, not a timing
+  issue), so this diagnosis rests on the already-measured 1.4-3.4s
+  `SystemGamesList` cost from the earlier investigation, on finding the
+  *actual* mechanism (below), and on sound, well-established SwiftData/
+  CoreData fault-caching behavior, not a fresh scratch measurement.
+  - **Found and fixed the dominant real cost**: `DashboardView
+    .systemSummaries` and `CollectionSection.summaries` were plain,
+    *uncached* computed properties — `CollectionStatsBuilder
+    .systemSummaries` groups every owned/wishlisted item by platform and,
+    per platform, touches that platform's full `catalogItems` relationship
+    (`platform.games`/`.consoles`/`.accessories`) to compute completion
+    ratios. Being a plain `var`, this re-ran on *every* SwiftUI body pass —
+    not once per navigation, but potentially dozens of times while just
+    sitting on Dashboard or Collection, since both are driven by an
+    unscoped `@Query` that re-triggers on any `CollectionItem` change
+    anywhere in the app. Exact same bug class already fixed for
+    `CatalogSection.items`/`SystemGamesList.cachedCatalog`, just never
+    applied here — worse here, since those two recomputed once per real
+    filter change, not once per render. Fixed the same way: cached into
+    `@State`, refreshed via `.task(id:)` keyed on a hash of the source
+    items' `persistentModelID`s (not the filter-string-concatenation key
+    the other two use, since here the *data* is what invalidates the
+    cache, not a filter setting).
+  - **Also moved `SystemGamesList`'s already-known 1.4-3.4s cost fully off
+    the main thread** (the deferred-but-still-synchronous mitigation from
+    the earlier pass only moved it past the nav animation, not off
+    `@MainActor`) — new `CatalogQueryActor` (`Services/Catalog
+    /CatalogQueryActor.swift`), a `@ModelActor` with its own `ModelContext`
+    on the same store. `computeCatalog` itself needed no logic changes,
+    just `nonisolated` (it and its helpers were implicitly `@MainActor`-
+    isolated purely from being nested in a View, under this project's
+    `-default-isolation=MainActor` build flag, despite never touching
+    `self`) so a background actor can call it against its *own* freshly-
+    fetched `Platform`. Only `PersistentIdentifier`s (`Sendable`) cross back
+    to `@MainActor`, resolved to live `@Model` references there. New
+    `CatalogFilterOptions` struct bundles the filter/sort settings that
+    `computeCatalog`/`catalogCacheKey`/`loadCatalog`/
+    `catalogItemIdentifiers` all need — added when the actor version's
+    parameter list crossed `function_parameter_count`'s error threshold
+    (9), and a genuine improvement on its own, not just a lint dodge, since
+    all four functions wanted the identical bundle.
+  - Full regression coverage: new `CatalogQueryActorTests.swift` (3 tests —
+    matches the synchronous path exactly for the same inputs, respects
+    search/sort, unknown platform returns empty rather than throwing).
+    `SystemGamesListReviewCandidateTests` (stale before this pass — see
+    "Platform expansion" section, unrelated fix landed the same session)
+    and both accessibility ratchets exercised by the same screens
+    (`AccessibilityAuditTests`/Dashboard, `CollectionSectionAccessibilityAuditTests`)
+    all still pass. Full suite + both macOS and iOS builds clean, only the
+    2 pre-existing known-by-destination-mismatch failures
+    (`SidebarViewAccessibilityAuditTests` needs iPad, `AppWalkthroughTests`
+    is macOS-only) remain.
+- **Follow-up, 2026-09-19: lag was still noticeable, plus a concrete new
+  tell — "images reload every time I switch between the sidebars."** That's
+  a real, distinctive symptom of view-*identity* loss (not a data-cost
+  problem — the previous pass fixed those), and it directly re-implicated
+  `RootView.sectionView`'s destructive `switch`: `AsyncImage` re-runs its
+  whole fetch-and-phase-transition on every fresh instantiation regardless
+  of a warm `URLCache`, and a `switch` returning a different concrete type
+  per `AppSection` destroys/rebuilds the entire screen (every image inside
+  it included) on each click.
+  - **Tried**: keeping all four sections mounted simultaneously (`ZStack` +
+    `.opacity`/`.accessibilityHidden`/`.allowsHitTesting` instead of the
+    `switch`), matching `tabLayout`'s existing `TabView`+`ForEach` pattern
+    below (which never had this problem — `TabView` already keeps every
+    tab's view alive). **Reverted** — live testing on iPad (where
+    `splitLayout` actually runs; `AccessibilityAuditTests` and its siblings
+    had only ever run against the iPhone/`tabLayout` destination before)
+    found the other three *hidden* sections' real content — `CatalogSection`'s
+    own description text, Wishlist's counts — leaking into
+    `performAccessibilityAudit()` scans that should have been scoped to one
+    screen (Dashboard's count jumped 11 → 71). `.accessibilityHidden`
+    didn't reliably suppress it. Live Simulator inspection to tell whether
+    that's a real VoiceOver-facing regression or just this audit tool
+    over-scanning (this codebase has already found real cases of the
+    latter — see `BreakdownBar`'s contrast-check mystery, above) wasn't
+    available this session (iPad simulator device access not yet granted).
+    Rather than ship a real accessibility risk on a guess, reverted to the
+    plain `switch` rather than chase the a11y-tree question further.
+  - **Fixed the actual reported symptom at its real source instead**: new
+    `ImageMemoryCache` (`Views/Components/ImageMemoryCache.swift`, an
+    `NSCache<NSURL, PlatformImage>`, in-memory only — `URLCache` already
+    covers the byte-level/offline case, this is purely about smoothing
+    repeat navigation within a session) + `CachedAsyncImage`
+    (`Views/Components/CachedAsyncImage.swift`), a drop-in `AsyncImage`
+    replacement `ItemThumbnail` now uses — checks the cache first, and a
+    hit sets the image with no network round trip and no visible
+    placeholder flash, even though the view itself still gets recreated on
+    every switch. Narrower fix, same real payoff (no more image pop-in),
+    without touching `RootView`'s architecture or its accessibility surface
+    at all.
+  - **Real, pre-existing gap found along the way, not caused by any of
+    this**: `AccessibilityAuditTests`/`CatalogSectionAccessibilityAuditTests`/
+    `CollectionSectionAccessibilityAuditTests` have never been run against
+    iPad/regular-width before tonight — confirmed by re-running Dashboard's
+    audit on iPad *after* the `switch` revert: still 56 findings, not 11.
+    The sidebar legitimately renders alongside the detail pane on
+    regular-width layout (`SidebarViewAccessibilityAuditTests`'s own doc
+    comment already described this — it's *why* that test has to filter
+    down to just its own `sidebar.*`-identified rows), and these three
+    tests simply predate ever being pointed at a destination where that's
+    true. Not fixed this pass (out of scope — a testing-coverage gap, not
+    an app regression), but worth doing the same `sidebar.*`-style
+    filtering for these three if they ever need to run cross-destination.
+  - Full suite (iPhone) verified clean afterward — only the same 2
+    known-by-destination-mismatch failures remain. Both macOS and iOS
+    builds pass, lint clean.
+- **Follow-up, same day: user reported it was "actually worse" after the
+  above — a real pinwheel on every switch, and a specific tell: "the
+  sidebar icon moves immediately, but the right pane does nothing for 2-3
+  seconds."** That pins the cost to something *synchronous in the new
+  screen's `body`*, before any `.task` even fires — an async-task cost
+  (which is all the `ItemThumbnail`/`CachedAsyncImage` change above could
+  possibly be) wouldn't block the view's first appearance like that.
+  Found a second real gap in `DashboardView`, same bug class as
+  `systemSummaries`, just missed the first pass: `stats` (feeding
+  `statGrid`/`collectionHeader` — *always* visible, unlike
+  `systemSummaries`, which only renders when the breakdown toggle is on)
+  was still a plain, uncached computed property. `stats.mostValuable`
+  sorts every owned item (~950 now) by `estimatedValue`, a relationship-
+  touching computed property re-evaluated on every comparison, not
+  memoized — done synchronously in `body` on every render. A synthetic
+  in-memory timing test put the sort itself at ~160ms for 950 items, which
+  alone doesn't explain 2-3s — but that test can't replicate the on-disk
+  relationship-fault cost, and this project's own earlier real measurement
+  of the *same class* of cost against the actual on-disk store
+  (`SystemGamesList`'s `platform.catalogItems` fault, above) found 1.4-3.4s
+  for a similarly-shaped operation — so real disk-backed I/O, not the sort
+  algorithm, is the likely dominant factor here too. Fixed the same way as
+  `systemSummaries`: cached into `@State`, refreshed alongside it in the
+  same `.task(id:)` (renamed `systemSummariesCacheKey` →
+  `dashboardDataCacheKey` since it now drives both). **Not yet confirmed
+  fixed by the user** — full suite, lint, and both platform builds clean,
+  but this needs a real re-test on the live app, not just automated
+  coverage, given the previous round's fix looked clean by the same
+  measures and still didn't resolve the real symptom.
+  - Also found, not yet fixed: `CollectionSection.flatItems` (`CollectionListViewModel
+    .apply`) has the identical `estimatedValue`-sort-comparator shape when
+    its `.estimatedValue` sort field is selected — same bug class, lower
+    priority since it's only reachable via the "All Games" flat toggle
+    (off by default), not on by default like Dashboard's `stats`.
+- **Follow-up, same day: user reported the `stats` fix was "maybe a small
+  amount better" but clicking got progressively worse, then Browse Catalog
+  fully locked up — "seems indicative of a memory leak."** Real bug, not a
+  leak in the technical sense (nothing unreachable — `NSCache` does evict
+  under pressure) but just as bad in practice: `ImageMemoryCache`'s first
+  version stored whatever `CachedAsyncImage` decoded at full remote
+  resolution (Wikimedia/Libretro images, commonly ~800px) for thumbnails
+  actually rendered at 52-120pt, bounded only by `NSCache.countLimit`
+  (object count, not memory size) — an 800×800 decoded RGBA bitmap is
+  ~2.5MB, and Browse Catalog alone has 16,000+ items, so unbounded growth
+  into real gigabytes was possible, worse the more distinct items' images
+  you'd triggered a decode for (exactly "progressively worse"), worst on
+  Catalog specifically (by far the largest item count, so the biggest
+  single burst of new decodes). Fixed properly, not just patched:
+  - `CachedAsyncImage.downsample` (`Views/Components/CachedAsyncImage.swift`,
+    new) uses `ImageIO`/`CGImageSourceCreateThumbnailAtIndex` to decode a
+    *small* bitmap directly from the compressed data at the actual display
+    size (×3 for Retina, a fixed buffer rather than reading real screen
+    scale) — the standard, memory-safe pattern; never fully decodes the
+    large remote original at all, unlike a decode-then-resize approach.
+    Runs inside `Task.detached`, off the main actor (CPU-bound synchronous
+    work, would otherwise run on `@MainActor` like everything else under
+    this project's `-default-isolation=MainActor` flag).
+  - `ImageMemoryCache` now keys on url *and* requested pixel size (a small
+    row thumbnail and a large detail-view header for the same URL are
+    deliberately different cache entries — a downsampled-small bitmap
+    can't be upscaled back to sharp) and tracks a real
+    `NSCache.totalCostLimit` (80MB) via each entry's actual decoded byte
+    size, not object count.
+  - New `CachedAsyncImageTests.swift` — real PNGs (not mocks), locks down
+    that an 800px synthetic image downsamples to a small pixel size and a
+    correspondingly small byte cost, and that garbage data returns `nil`
+    rather than crashing.
+  - Full suite clean (only the 2 known-by-destination-mismatch failures),
+    lint clean, both platform builds pass. **User is independently
+    verifying with Instruments (Allocations)** — real profiling data, not
+    just automated coverage, given how the previous two rounds each looked
+    clean by every measure available here and still missed the real
+    problem on the live app.
 - ~~**macOS Browse Catalog toolbar: "+"/Kind picker/Filter menu visibly
   clipped.**~~ Attempted fix, **not yet visually confirmed** — no safe way
   to screenshot the live macOS app from this session (screen capture here
@@ -1158,20 +1436,10 @@ tooling):
   immediately — but the underlying fault+sort still takes the same 1-3+
   seconds once it starts running; it's deferred off the critical path of
   the push animation, not made faster.
-- **Follow-up, not done: the actual non-blocking fix (background `ModelActor`)
-  and a possible catalog/collection store split.** Two related but distinct
-  pieces of real work, both flagged rather than rushed into this pass given
-  their size/risk:
-  - Move `SystemGamesList`'s catalog fault+sort (and anywhere else with the
-    same shape) to a background `ModelActor` with its own `ModelContext` on
-    the same store, fetching via a predicate (`#Predicate<CatalogItem> {
-    $0.platform?.slug == someSlug }`, matching `CatalogBrowseViewModel
-    .apply`'s existing pattern) instead of touching the live `platform
-    .catalogItems` relationship on the main actor at all — resolving back to
-    live `@Model` references via `PersistentIdentifier` once back on
-    `@MainActor`. This is the piece that would make the 1-3s cost actually
-    disappear (or at least move off the main thread) rather than just being
-    deferred past the navigation animation.
+- ~~**Follow-up: the actual non-blocking fix (background `ModelActor`)**~~
+  Done 2026-09-18 — see the sidebar-lag entry above for the full account
+  (`CatalogQueryActor`). The possible catalog/collection store split below
+  is still open:
   - `CollectionActions.add`'s `~1s` save is harder to fix the same way —
     SwiftData saves generally need to happen on the context's own actor, and
     a lot of code assumes `CollectionActions.add`/`.remove` complete
@@ -1184,7 +1452,7 @@ tooling):
     needs its own real measurement before committing to the bigger
     persistent-store-split architecture change it implies.
 
-## Platform expansion (scoped 2026-09-18, not started)
+## Platform expansion (scoped 2026-09-18, plumbing done, ingest not run)
 
 Same shape of work as the disc-system catalogs import (PS1/PS2/Dreamcast/
 GameCube, "Data feed & backend" above) — real bugs surfaced there
@@ -1222,9 +1490,141 @@ script/NES cleanup, per the user's own call.
   from whatever's in the feed, so no client-side model/UI change is needed
   just to add a platform; only the ingest + migration pipeline is real
   work here.
-- Not yet scoped: exact IGDB platform IDs for any of the 9 (need
-  confirming live, not guessed, same discipline as every other real IGDB
-  fact recorded in this document); whether each of these needs its own
-  curated seed entries (icon, summary, region availability) the way the
-  original 10 platforms got, or can lean more heavily on IGDB's own data
-  from the start.
+- **Done 2026-09-18**: all 9 added to `api/data/curated.json` (discontinued/
+  release years, generation, manufacturer, icon, summary — same shape as
+  the original 10), full local build (`api/build/build.mjs`) confirmed
+  clean at 19 platforms. Web search for the 9 numeric IGDB platform ids
+  turned up genuinely conflicting numbers for Sega Saturn and Atari Jaguar
+  across different sources — rather than trust either, `igdb.mjs` now
+  resolves these 9 live by exact platform name (`PLATFORMS_BY_NAME` +
+  `resolvePlatformId`, one extra `/platforms` lookup per run, erroring
+  loudly on zero or multiple matches) instead of a hardcoded id, so a wrong
+  guess can't silently pull an entirely different platform's games — names
+  confirmed against igdb.com/platforms's own listing, not guessed. Existing
+  10 platforms keep their already-verified hardcoded ids unchanged.
+- **Still needs the user**: the actual ingest run needs `IGDB_CLIENT_ID`/
+  `IGDB_CLIENT_SECRET` (create an app at
+  https://dev.twitch.tv/console/apps, per `igdb.mjs`'s own header comment)
+  — not held by this session. Once set:
+  `IGDB_CLIENT_ID=… IGDB_CLIENT_SECRET=… node api/build/ingest/igdb.mjs colecovision intellivision sega-master-system turbografx-16 neo-geo saturn 3do cd-i jaguar`
+  (or with no platform args, re-runs *every* platform including the
+  original 10 — safe/idempotent, but slower). Then `node api/build/build.mjs`
+  and `SUPABASE_SERVICE_ROLE_KEY=… node api/build/migrate-catalog-to-supabase.mjs`
+  to push the result live, same pipeline every platform already goes
+  through. Whether each of these 9 needs its own hand-curated seed items
+  (hardware, notable variants) the way the original 10 did, or can lean
+  more heavily on IGDB's own data from the start, is still open.
+- **Real regression, found and fixed 2026-09-18, same day the 9-platform
+  ingest first ran for real**: the user ran the 10-original-platform
+  region-data re-ingest above, then reported it "imported all the games we
+  removed previously." Root cause: `upsert_public_catalog_items`'s `ON
+  CONFLICT ... DO UPDATE` unconditionally reset `deleted_at = null` on
+  every re-synced slug ("a re-synced item should never stay tombstoned") —
+  written before the admin-exclude feature existed, so it had no way to
+  tell "reappeared legitimately" apart from "an admin deliberately excluded
+  this and a routine ingest re-run knows nothing about that." Confirmed
+  live: `n64-15` (the very item that started the review-candidate heuristic
+  investigation) was back with `deleted_at: null`. Fixed by removing that
+  reset entirely — `admin_restore_catalog_items`, by explicit slug, is now
+  the only path that clears it server-side. **User needs to re-run
+  `schema.sql` in the SQL Editor once more** to pick up the corrected
+  function. Recovery: `api/build/restore-pricecharting-exclusions.mjs`
+  (new) re-applied the 946 exclusions the most recent report files on disk
+  recorded, zero PriceCharting API calls needed — but those reports only
+  reflect each platform's *last* run, and several platforms had an earlier
+  pass too (Genesis/Game Boy/N64/PlayStation/Dreamcast/GameCube/PS2 were
+  first swept under the pre-fix heuristic, found more later under the
+  corrected one) whose results were never saved anywhere the report files
+  still hold, so a full `pricecharting-catalog-match.mjs --execute` pass
+  was also re-kicked off across all 10 platforms to catch whatever the
+  partial restore missed. **Worth remembering**: any future re-ingest is
+  now safe by construction (the reset is gone), but if this ever needs
+  auditing again, the "assume the freshest report file has everything"
+  shortcut is specifically not always true — check the platform's full
+  history in this file, not just the file on disk from its most recent run.
+  **Fully resolved**: the partial-restore theory was confirmed correct —
+  the follow-up full `--execute` pass (computed fresh against the
+  regression's fully-resurrected live catalog, so it necessarily captured
+  every historical exclusion in one pass, not just the last report's) found
+  and re-excluded far more than the 946 the report-based restore alone
+  caught: NES 415, Atari 2600 160, SNES 552, Genesis 260, Game Boy 332,
+  N64 315, PlayStation 133 (2,167 more on top of the 946 already restored —
+  2,634 combined for the evening's full recovery, though these two figures
+  overlap somewhat since the second pass necessarily re-touched everything
+  the first already fixed). Dreamcast/GameCube/PS2 needed nothing further
+  in this pass — apparently no earlier-pass gap existed for those three.
+  Verified live: `n64-15` (the item that started this whole investigation)
+  carries a fresh `deleted_at` again.
+
+## RetroGameCollector import (2026-09-18) — done
+
+User's existing collection lived on a third-party site
+(my.puregaming.org/RetroGameCollector) — public, no-login collection view,
+paginated per-system. Scraped (`export_rgc_collection.py`, session
+scratchpad, not committed — one-off) rather than clicked through 30+
+systems by hand: 1,376 owned items across 33 RGC systems.
+
+- Scope: only the 10 platforms RetroStacks already supported at the time
+  (1,006 of the 1,376 items) — user's own call, matching the earlier
+  scoping decision to skip handhelds/Xbox/post-PS2 PlayStation/Switch
+  entirely and to wait on the (then-unbuilt) 9-platform expansion above
+  rather than import placeholder data for it. The other 370 are kept in the
+  scratchpad CSV for whenever those platforms get real ingest.
+- `api/build/rgc-collection-import.mjs`: matches by normalized title
+  (exact, numeral-variant — "2" ↔ "II", a real and common NES/SNES sequel-
+  naming mismatch — unique base-title, then a directional word-subset
+  fallback for publisher-prefix/subtitle differences like "DuckTales" →
+  "Disney's DuckTales"). The word-subset tier was checked both directions
+  before trusting it — the reverse direction (catalog words ⊆ RGC words)
+  looked right for stripping RGC's own "Round Seal" noise but live-matched
+  real sequels onto their unrelated base game ("Back to the Future 2 & 3" →
+  "Back to the Future", "Gauntlet 2" → "Gauntlet") since a short title is
+  trivially a subset of almost anything sharing its words — dropped
+  entirely rather than patched further. A second live catch: a catalog
+  match whose only "extra" word was a bare sequel number
+  ("Infiltrator" → "Infiltrator II") is real risk, not noise — those are
+  known distinct games — so that shape gets deferred to "ambiguous" instead
+  of auto-matched, same posture as every other real-vs-guessed judgment
+  call this session. Wrote 945 `collection_items` rows + 92 new private
+  `catalog_items` (things the shared catalog didn't have — mostly "Round
+  Seal"/variant carts). 16 genuinely ambiguous titles and 42 items that
+  read as hardware, not games (RGC doesn't distinguish kind), left for a
+  human/handled separately rather than guessed.
+- **Real duplicate-import bug, found from the user's own "check the N64
+  list" prompt, not caught beforehand**: RGC lists Player's Choice/5-screw
+  reprint variants as separate rows ("GoldenEye 007" and "GoldenEye 007
+  (Player's Choice)"), but the catalog only has one slug for the base game
+  — both rows resolved to the same `catalog_slug`, and the import's own
+  dedup check only compared against collection rows that existed *before*
+  the run started, not against other rows created earlier in the *same*
+  run. 47 duplicate pairs (23 NES, 24 N64) — fixed by tombstoning the
+  worse-completeness copy of each pair (`deleted_at`, not a hard delete —
+  matches the app's own soft-delete convention, and a bulk hard-delete was
+  in fact blocked by this environment's own safety classifier). Worth
+  remembering for any future bulk-collection-import work: dedup against
+  the batch being written, not just against what already existed.
+- `api/build/rgc-hardware-import.mjs`: the 42 hardware items, by hand — 12
+  matched existing console/accessory catalog entries (verified against the
+  live catalog, not guessed), 28 became new private `catalog_items` with
+  real `kind` (console/accessory), 2 turned out to be misfiled games (a
+  reissue variant and a punctuation-tokenization miss on an existing game)
+  and were routed back to their real catalog entries instead.
+
+## Sidebar-switch lag: findings from a live `sample` (2026-09-19)
+
+Memory was flat (~190-210MB), so not a leak. A 30s main-thread `sample` while
+clicking showed ~5.6s of SwiftUI layout stalls driven by `CollectionSection`:
+- `fileExporter(document:)` args were rebuilt every `body` pass (full JSON archive + CSV) -> now lazy via `CollectionExport`, guarded by `CollectionExportTests`.
+- `systemSummaries` ran `isHidden` (expensive persisted getter) over ~16k catalog items in several passes on main -> single pass, now computed off-main by `CollectionSummariesActor`.
+- Still open: `DashboardView` `CollectionStatsBuilder.build` runs on main; `CollectionSection.flatItems` `estimatedValue` sort (All Games); `RootView` switch identity loss. Re-sample after the next build to see what's left.
+
+### Lag — status after the 2026-09-19 session (low priority now)
+Fixed: exporter docs built every render; `@ModelActor`s were running on main (now built via `@concurrent` helpers); Catalog browse filter/sort off-main (`CatalogBrowseFilter`); shared stale-while-revalidate caches (`SystemSummariesCache`, `PlatformOverviewCache`) invalidated on sync/hide; image cache byte-budgeted.
+Remaining ideas, all minor:
+- First visit after launch still pays ~1-2s for summaries (faults every catalog item per owned platform). Cheaper: SQL `fetchCount` per platform/kind instead of loading items; or warm the cache at launch.
+- `DashboardView` `CollectionStatsBuilder.build` still runs on main (fast enough now).
+- `CollectionSection.flatItems` `estimatedValue` sort on All Games.
+- Opening a platform / Catalog search+filter still uses the background filter over the full catalog fetch; could push predicates into the fetch.
+- Catalog no longer live-refreshes on sync while a filtered list is open (updates on next filter change).
+- `RootView` destructive `switch` loses view identity on every sidebar switch (keep-alive attempt broke the accessibility audit).
+- Debug builds are much slower than Release for SwiftData getters — measure a Release build before chasing more.

@@ -14,6 +14,8 @@ enum CollectionActions {
         status: CollectionStatus = .owned,
         completeness: Completeness? = nil,
         condition: ConditionGrade? = nil,
+        hasBox: Bool = false,
+        hasManual: Bool = false,
         in context: ModelContext
     ) -> CollectionItem {
         if let existing = catalogItem.entry(for: status) { return existing }
@@ -23,6 +25,8 @@ enum CollectionActions {
             status: status,
             condition: condition ?? (owned ? .good : nil),
             completeness: completeness ?? (owned ? .loose : nil),
+            hasBox: hasBox,
+            hasManual: hasManual,
             playStatus: catalogItem.kind == .game && owned ? .backlog : nil
         )
         context.insert(entry)

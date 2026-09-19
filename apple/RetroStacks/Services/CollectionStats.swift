@@ -18,7 +18,7 @@ struct CollectionStats {
 
     /// One row of the system-first Collection view: how much of a platform you
     /// have, how complete it is, and what it's worth.
-    struct SystemSummary: Identifiable {
+    nonisolated struct SystemSummary: Identifiable, Sendable {
         var id: String { platformSlug }
         var platformSlug: String
         var platformName: String
@@ -89,7 +89,7 @@ enum CollectionStatsBuilder {
     /// System-first breakdown for the Collection view: one `SystemSummary` per
     /// platform the user has at least one item on (for the given status).
     /// Sorted by item count, then value, descending.
-    static func systemSummaries(
+    nonisolated static func systemSummaries(
         from items: [CollectionItem],
         status: CollectionStatus
     ) -> [CollectionStats.SystemSummary] {
@@ -104,13 +104,28 @@ enum CollectionStatsBuilder {
         return groups.compactMap { slug, group -> CollectionStats.SystemSummary? in
             guard let platform = group.first?.catalogItem?.platform else { return nil }
             let ownedGames = group.filter { $0.kind == .game }.count
-            let games = platform.games
+            // One pass over the platform's visible catalog, partitioned by kind
+            // — this used to call `platform.games`/`.consoles`/`.accessories`
+            // separately (each a full `visibleCatalogItems()` filter, i.e. a
+            // `CatalogItem.isHidden` getter call per item), ~4 full passes per
+            // platform. A real `sample` of the live app 2026-09-19 put that at
+            // ~6s of a 30s window of Collection/Wishlist clicking.
+            var games: [CatalogItem] = []
+            var consoles: [CatalogItem] = []
+            var accessoryCount = 0
+            for item in platform.visibleCatalogItems() {
+                switch item.kind {
+                case .game: games.append(item)
+                case .console: consoles.append(item)
+                case .accessory: accessoryCount += 1
+                }
+            }
             let ownedSlugs = Set(group.compactMap { $0.catalogItem?.slug })
             let remaining = games
                 .filter { !ownedSlugs.contains($0.slug) }
                 .compactMap(\.headlineValue)
                 .reduce(Decimal(0), +)
-            let hero = (platform.consoles.first { $0.imageURL != nil } ?? platform.consoles.first)?.imageURL
+            let hero = (consoles.first { $0.imageURL != nil } ?? consoles.first)?.imageURL
             return CollectionStats.SystemSummary(
                 platformSlug: slug,
                 platformName: platform.name,
@@ -121,9 +136,9 @@ enum CollectionStatsBuilder {
                 ownedGameCount: ownedGames,
                 catalogGameCount: games.count,
                 ownedConsoleCount: group.filter { $0.kind == .console }.count,
-                catalogConsoleCount: platform.consoles.count,
+                catalogConsoleCount: consoles.count,
                 ownedAccessoryCount: group.filter { $0.kind == .accessory }.count,
-                catalogAccessoryCount: platform.accessories.count,
+                catalogAccessoryCount: accessoryCount,
                 value: group.compactMap(\.estimatedValue).reduce(0, +),
                 remainingValue: remaining,
                 completionRatio: games.count > 0
