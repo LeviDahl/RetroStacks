@@ -1,13 +1,16 @@
 # api — RetroStacks data feed
 
-Reference data for the app: the catalog (consoles / games / accessories for major
-US systems) and pricing.
+Reference data for the app: the catalog (consoles / games / accessories for 19
+systems, gen 2–6) and pricing.
 
-**The `/v1/*.json` contract is the whole interface.** Right now those files are
-static, built by CI and served free from GitHub Pages — plenty for a solo user,
-scales to millions of reads for ~$0. When it needs to become dynamic (a MySQL DB
-at GoDaddy, a Postgres DB at Supabase, whatever), only the *source* of the build
-changes; the emitted JSON, the URLs, and the entire app stay the same.
+**Where the app reads from today:** the catalog comes from **Supabase**
+(`public.catalog_items`, via `SupabaseCatalogRepository`) — see
+[`../supabase/README.md`](../supabase/README.md). This directory is the *pipeline
+that feeds it*: ingest → `api/data/generated/*.json` → `build.mjs` →
+`migrate-catalog-to-supabase.mjs`. The static `/v1/*.json` feed built here is
+still published to GitHub Pages and the app still reads `price-guide.json` from
+it (`RemoteCatalogRepository.fetchPriceGuides`), but `catalog.json` is no longer
+what the app syncs its catalog from.
 
 Personal `CollectionItem` data never touches this — see *Collection data* below.
 
@@ -29,20 +32,24 @@ data source  ──▶  build.mjs  ──▶  api/dist/            (gitignored; 
   `PRICECHARTING_TOKEN` are env vars (wired to repo variables/secrets in the
   workflow).
 - **`api/build/sources/`** — the swap point. `local-file.mjs` merges
-  `api/data/curated.json` + `api/data/generated/*.json`. `mysql.mjs` /
-  `supabase.mjs` are **skeletons**: implement `loadCatalog()` to return the shape
-  `local-file.mjs` documents and the rest of the pipeline is unchanged.
+  `api/data/curated.json` + `api/data/generated/*.json` (the generated files are
+  **minified, one line each**, and marked `-diff` in `.gitattributes` — the
+  ingesters write them that way). `mysql.mjs` / `supabase.mjs` are
+  **skeletons**: implement `loadCatalog()` to return the shape `local-file.mjs`
+  documents and the rest of the pipeline is unchanged.
 - **`api/build/ingest/libretro.mjs`** — pulls a US game catalog per platform from
   **libretro-database** (No-Intro / Redump lists + genre/year/publisher/developer
   metadata) → `api/data/generated/<platform>.json`. Cartridge systems only
-  (NES, SNES, Genesis, N64, Game Boy, Atari 2600); libretro-database has no
-  genre/year/publisher for disc systems, so those come from IGDB instead (below).
+  (the original six: NES, SNES, Genesis, N64, Game Boy, Atari 2600);
+  libretro-database has no genre/year/publisher for disc systems, so those come
+  from IGDB instead (below). Superseded for those six by the IGDB re-ingest.
   Filters to licensed US releases (drops proto/beta/homebrew/multicart/re-release
   compilations; keeps only titles with metadata). Box art URLs point at the
   Libretro thumbnails CDN.
 - **`api/build/ingest/igdb.mjs`** — the same job from the **IGDB API** (Twitch),
-  which *does* have metadata + region-aware release dates, used for the 4 disc
-  systems (PS1/PS2/Dreamcast/GameCube) and to re-enrich the 6 cartridge ones.
+  which *does* have metadata + region-aware release dates, used for every
+  platform in its `PLATFORMS` map (platform ids are resolved live by name). Each
+  item carries `regions` (`NA`/`EU`/`JP`, from `release_dates.release_region`).
   Writes the identical `generated/<platform>.json` shape. Needs `IGDB_CLIENT_ID` +
   `IGDB_CLIENT_SECRET` (free — an app at dev.twitch.tv); `--dry-run` prints the
   APICalypse queries without a token. **Not wired into CI** — IGDB's 4 req/sec cap
@@ -54,6 +61,21 @@ data source  ──▶  build.mjs  ──▶  api/dist/            (gitignored; 
   `release_dates.region` is a dead, deprecated field — the live one is
   `release_region`. Both are handled in the query/filter now, with the
   reasoning in a code comment at each spot.
+- **`api/build/migrate-catalog-to-supabase.mjs`** — loads `dist/v1/catalog.json`
+  (run `build.mjs` first) into Supabase as public `catalog_items` rows through the
+  service-role-only `upsert_public_catalog_items()` function. Needs
+  `SUPABASE_SERVICE_ROLE_KEY` (keep it in the gitignored `api/.env`, never in
+  chat/commits). Re-runnable; a re-sync no longer un-excludes items an admin
+  excluded (`deleted_at` is preserved). `--dry-run`, `--limit N`.
+- **One-off / curation tooling** (all `--dry-run` capable, all read secrets from
+  the environment): `pricecharting-catalog-match.mjs` (flags items PriceCharting
+  has never heard of as exclusion candidates; writes gitignored
+  `api/data/pricecharting-match-*.json`), `pricecharting-region-check.mjs`
+  (second, PriceCharting-based region signal — a report, doesn't write),
+  `restore-pricecharting-exclusions.mjs` (re-applies exclusions from those
+  reports), `rgc-collection-import.mjs` / `rgc-hardware-import.mjs` (one-time
+  RetroGameCollector import; header comments describe its original 10-platform
+  scope, since widened).
 - **`api/data/curated.json`** — the hand-authored set: prices, rich summaries,
   consoles + accessories, verified art. **This is the source of truth** — edit it
   directly. `node api/build/sync-seed.mjs` copies it into the app bundle as
@@ -71,17 +93,17 @@ data source  ──▶  build.mjs  ──▶  api/dist/            (gitignored; 
 
 ## Client
 
-`apple/RetroStacks/Services/Catalog/` — `CatalogRepository` /
-`RemoteCatalogRepository` (fetch + `URLCache`/ETag), `CatalogSyncService`
-(`@MainActor @Observable`, upserts platforms + items into SwiftData by `slug`,
-additive, never throws out), and `Services/Pricing/RemotePricingProvider`
-(actor, reads `price-guide.json`, top of the provider chain). `SampleData` is the
+`apple/RetroStacks/Services/Catalog/` — `CatalogRepository` (protocol),
+`SupabaseCatalogRepository` (the live catalog source; the price guide it
+delegates to `RemoteCatalogRepository`, which fetches `price-guide.json` with
+`URLCache`/ETag), `CatalogSyncService` (`@MainActor @Observable`, upserts
+platforms + items into SwiftData by `slug`, additive, never throws out), and
+`Services/Pricing/RemotePricingProvider` (actor, reads `price-guide.json`). `SampleData` is the
 first-launch seed + offline fallback + previews. Kicked off from
 `RetroStacksApp` `.task`; "Sync catalog now" is in the Dashboard's View Options.
 
-`BackendConfig.feedBaseURL` is the single knob. A dynamic backend just needs to
-serve the same `/v1/*.json` at its own base URL — the repository/provider code
-doesn't change.
+`BackendConfig.feedBaseURL` still points at the static feed (used for the price
+guide). The catalog's origin is `SupabaseConfig` + `SupabaseCatalogRepository`.
 
 ## Custom domain: data.retrostacks.com
 
@@ -97,15 +119,14 @@ doesn't change.
 HTTPS* in Settings → Pages once GitHub enables it.
 
 ## TODO
-- [x] Grow the real catalog beyond the 6 cartridge systems — done 2026-09-14:
-      `ingest/igdb.mjs` ran for real, added PS1/PS2/Dreamcast/GameCube and
-      re-enriched the 6 cartridge systems. ~13,150 items total, verified via
-      the actual merged build output (zero duplicate slugs, zero orphaned
-      platform refs). See `BACKLOG.md`'s Data feed section for what that run
-      actually found and fixed.
+- [x] Grow the real catalog beyond the 6 cartridge systems — done 2026-09-14
+      (PS1/PS2/Dreamcast/GameCube) and expanded 2026-09-18/19 to 19 platforms
+      (~22,000 generated items). See `BACKLOG.md`'s Data feed and Platform
+      expansion sections for what those runs found and fixed.
+- [x] Catalog in Supabase instead of only static JSON — done 2026-09-17.
 - [ ] Nightly PriceCharting CSV ingest (Legendary tier) instead of per-item calls
-- [ ] Implement a DB source (`sources/mysql.mjs` or `sources/supabase.mjs`) when the
-      catalog outgrows a hand-maintained file
+- [ ] Implement a DB source (`sources/supabase.mjs`) so the static feed can be
+      built *from* Supabase (today the flow is JSON → Supabase, one way)
 
 ## Collection data (no iCloud)
 

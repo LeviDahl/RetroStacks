@@ -388,8 +388,8 @@ contrast from actual sampled/known sRGB values:
 Each `*AccessibilityAuditTests.test*AccessibilityAudit` (Dashboard,
 SystemGamesList, CollectionSection, CatalogSection, AddToCollectionFlow,
 SidebarView — all in `NavigationTests.swift`) asserts
-`findings.count <= knownFindingBaseline` (10 / 52 / 26 / 11 / 10 / 8
-respectively) instead of only logging — catches any *new* regression on any
+`findings.count <= knownFindingBaseline` (11 / 52 / 28 / 11 / 10 / 4
+respectively — current as of 2026-09-19) instead of only logging — catches any *new* regression on any
 of the six immediately, without requiring the screens to be perfectly clean
 first (Phase 5 hasn't happened yet). Lower each baseline as its findings get
 fixed for real.
@@ -1149,10 +1149,11 @@ tooling):
     Browse Catalog one, matching `showHidden`'s existing precedent) — off
     by default, `regions == nil` always counts as NA regardless. Full app
     build passes.
-  - **Not done yet, needs the user**: none of the ~13,150 already-ingested
-    items have real `regions` data — the toggle exists but has nothing to
-    reveal until a re-ingest runs (same IGDB credentials the platform
-    expansion below needs) and the schema migration above is applied.
+  - **Done since (2026-09-18)**: every platform, the original 10 included,
+    was re-ingested with `regions` (verified 2026-09-19: ~97-100% of items
+    per platform carry region data in `api/data/generated/*.json`) and the
+    schema migration was applied — the toggle has real data behind it. The
+    small remainder with no region data counts as NA, as designed.
   - **Second source, user's call 2026-09-18**: IGDB's region tagging is
     community-sourced and this codebase already found a gap in this exact
     field once (the old `region` property silently stopped populating —
@@ -1452,7 +1453,7 @@ tooling):
     needs its own real measurement before committing to the bigger
     persistent-store-split architecture change it implies.
 
-## Platform expansion (scoped 2026-09-18, plumbing done, ingest not run)
+## Platform expansion (scoped 2026-09-18) — done: all 9 ingested 2026-09-18, catalog is 19 platforms
 
 Same shape of work as the disc-system catalogs import (PS1/PS2/Dreamcast/
 GameCube, "Data feed & backend" above) — real bugs surfaced there
@@ -1502,7 +1503,7 @@ script/NES cleanup, per the user's own call.
   guess can't silently pull an entirely different platform's games — names
   confirmed against igdb.com/platforms's own listing, not guessed. Existing
   10 platforms keep their already-verified hardcoded ids unchanged.
-- **Still needs the user**: the actual ingest run needs `IGDB_CLIENT_ID`/
+- **Done (ingested 2026-09-18; kept for the how-to)**: the actual ingest run needs `IGDB_CLIENT_ID`/
   `IGDB_CLIENT_SECRET` (create an app at
   https://dev.twitch.tv/console/apps, per `igdb.mjs`'s own header comment)
   — not held by this session. Once set:

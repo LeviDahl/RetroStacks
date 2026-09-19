@@ -1,7 +1,8 @@
-# Supabase (Phase 1 — multi-device collection sync)
+# Supabase (collection sync + the shared catalog)
 
-**Wired up and live** (2026-09-12). This doc originally described the plan
-before the project existed; it now describes what's actually built. See the
+**Collection sync wired up and live** (2026-09-12); **the catalog moved into
+Supabase 2026-09-17** (see *The catalog* below). This doc describes what's
+actually built. See the
 root [`BACKLOG.md`](../BACKLOG.md#multi-user-phase-1) for what's still
 pending (a real end-to-end sign-in test, Photos upload) and how this fits
 the rest of the roadmap.
@@ -15,24 +16,27 @@ an email magic link, and the same collection follows you to another device.
 Nothing about the local-first behavior changes — signed out is still a fully
 functional mode.
 
-**Scope check:** Supabase only ever holds *your personal collection* (ownership,
-condition, notes, photos) — never the reference catalog. The catalog stays the
-free static JSON feed at `data.retrostacks.com`; Supabase and that feed don't
-know about each other.
+**Scope check:** two separate concerns share this project. *Collection sync*
+holds only your personal collection (ownership, condition, notes, photos), in
+`collection_items` / `collection_item_photos`, RLS-scoped to `auth.uid()`. The
+*catalog* (`catalog_items`) is reference data: public rows (`owner_user_id`
+null) readable by everyone, plus a user's own private custom rows.
 
 ## Setup (done — for reference)
 
 1. **Project created** at [supabase.com](https://supabase.com) — free tier
    (500 MB DB, 1 GB storage, 50k monthly active users), plenty for a solo user.
 2. **Schema applied**: [`schema.sql`](schema.sql) run via Dashboard → SQL
-   Editor. Created `collection_items` + `collection_item_photos`, a private
-   `collection-photos` storage bucket, and RLS policies scoping every
-   row/object to `auth.uid()`.
+   Editor (idempotent — re-run it whenever the file changes). Creates
+   `collection_items` + `collection_item_photos`, a private `collection-photos`
+   storage bucket, RLS policies scoping every row/object to `auth.uid()`, and
+   the catalog objects described below.
 3. **Email auth on**: Dashboard → Authentication → Providers → Email. Magic
    link, not password — matches `AccountService.sendMagicLink(to:)`.
-4. **Project URL + anon (public) key** are in `SupabaseConfig.swift` — the
-   anon key is safe to ship in the app, RLS is what actually protects the
-   data, not the key being secret.
+4. **Project URL + publishable (anon) key** are in `SupabaseConfig.swift` — safe
+   to ship in the app, RLS is what actually protects the data, not the key being
+   secret. The **service-role key** is different: it bypasses RLS, lives only in
+   the gitignored `api/.env`, and is used only by the `api/build/*` scripts.
 
 ## What's built
 
@@ -87,15 +91,30 @@ above needs an actual email sent and an actual link pasted back, not another
 guess at the REST response shape. That's the one remaining gap between
 "built and tested" and "trust it with your real collection."
 
-## Later: `sources/supabase.mjs`
+## The catalog (`catalog_items`)
 
-Separate from the above — a *build-time* option, not app-time. Right now
-`api/build/build.mjs` reads the catalog from `api/data/curated.json` +
-`generated/*.json` (`SOURCE=local-file`, the default). If the catalog ever
-outgrows hand-maintained JSON files, `api/build/sources/supabase.mjs` (skeleton
-already there) would let the *feed* be generated from a Supabase table instead —
-a completely separate concern from collection sync above, and not needed yet at
-~13,000 items.
+- **One table, split by owner**: `owner_user_id is null` = public/shared,
+  otherwise private to that user (custom entries, e.g. a variant the catalog
+  lacks). Users can only write their own rows.
+- **Loading it**: `node api/build/migrate-catalog-to-supabase.mjs` (service-role
+  key) upserts the built catalog through `upsert_public_catalog_items(jsonb)` —
+  a `SECURITY DEFINER` function, `service_role` only (PostgREST's own upsert
+  can't target the partial unique index). It preserves `deleted_at`, so a
+  re-sync never un-excludes an item.
+- **Admin curation**: an `admins` table plus `is_admin()`,
+  `admin_exclude_catalog_items(slugs)` / `admin_restore_catalog_items(slugs)`
+  (soft-delete via `deleted_at`, tombstones sync to every device) and
+  `promote_catalog_item_to_public()`. These check `auth.uid()`, so they only work
+  as a signed-in admin — not with the service-role key (use a direct `PATCH` of
+  `deleted_at` for scripts).
+- **App side**: `SupabaseCatalogRepository` pages the item rows into
+  `CatalogFeed` (the *platform* list is not in Supabase — it comes from the
+  bundled `CatalogSeed.json`, synced from `curated.json`); `CatalogSyncService`
+  upserts both into SwiftData. Items carry
+  `regions`; the app filters to North America by default.
+
+Still available but unused: `api/build/sources/supabase.mjs` (a skeleton for
+building the *static* feed from this table instead of from JSON files).
 
 ## Later: companion website
 

@@ -8,7 +8,7 @@ import os
 /// drop-in `CatalogRepository`, same contract, different origin.
 ///
 /// Platforms stay bundled/local-only (see the schema's own note on why —
-/// still the small, stable, ~10-row set) — this reads them from the same
+/// still the small, stable, ~19-row set) — this reads them from the same
 /// bundled seed `CatalogSeedStore` already uses, so `reconcile`'s platform
 /// handling keeps working unchanged. Only `items` actually comes from
 /// Supabase.
@@ -27,7 +27,7 @@ nonisolated struct SupabaseCatalogRepository: CatalogRepository {
     private let priceGuides = RemoteCatalogRepository()
 
     /// PostgREST caps a single response at 1,000 rows regardless of `limit`;
-    /// paging through `catalog_items` (~13,150 rows today, growing as users
+    /// paging through `catalog_items` (~22,000 rows today, growing as users
     /// add their own) needs real pagination, not one big request.
     private static let pageSize = 1000
 

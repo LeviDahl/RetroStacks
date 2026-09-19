@@ -12,7 +12,7 @@ Everything below is relative to this `apple/` directory. Sources live in
 | Area | State |
 | --- | --- |
 | Data model (SwiftData) | ✅ `Platform`, `CatalogItem`, `CollectionItem` |
-| Seed catalog | ✅ 10 US platforms · ~66 curated entries as the first-launch seed (`api/data/curated.json` → `Resources/CatalogSeed.json` via `CatalogSeedStore`); the full ~13,000-item catalog syncs in afterward from the live feed |
+| Seed catalog | ✅ 19 platforms (gen 2–6) · ~66 curated entries as the first-launch seed (`api/data/curated.json` → `Resources/CatalogSeed.json` via `CatalogSeedStore`); the full ~22,000-item catalog syncs in afterward from Supabase (`SupabaseCatalogRepository`) |
 | Dashboard | ✅ stats, value-by-platform, recent / most valuable |
 | My Collection | ✅ list (iOS) / sortable `Table` (macOS), filters, detail, edit form |
 | Wishlist | ✅ same surface, `.wishlist` status |
@@ -24,7 +24,10 @@ Everything below is relative to this `apple/` directory. Sources live in
 | Multi-device sync | ✅ optional Supabase sign-in (email magic link, paste-back) syncs the collection across devices; local-first either way — see [`../supabase/README.md`](../supabase/README.md) |
 | Failure surfacing | ✅ `AppStatusCenter` + a corner `AppStatusBadge` — background failures (catalog sync, price refresh, collection sync) show one small icon with detail + Retry; auto-clears on the next success |
 | Accessibility | 🚧 in progress, driven by real `performAccessibilityAudit()` runs (not guesses) — see `BACKLOG.md`'s Accessibility section for current findings per screen |
-| Valuation API, EU/JP regions | ⛔️ `PriceChartingProvider` is mapping-complete but needs a paid token to activate; region switch is modeled but not wired to UI |
+| Regions | ✅ catalog items carry `regions`; North America only by default, a per-screen "non-NA regions" toggle (`system.showNonNARegions`) shows EU/JP. All 19 platforms were ingested with region data (2026-09-18); PriceCharting cross-checking is a possible second source (`BACKLOG.md`) |
+| Catalog curation | ✅ hide items personally, or (admins) exclude them catalog-wide; a "review candidates" filter surfaces likely bootlegs/hacks |
+| Valuation API | ⛔️ `PriceChartingProvider` is mapping-complete but needs a paid token to activate |
+| Performance | ✅ heavy per-screen work (system summaries, Catalog filter/sort, platform rows) runs in `@ModelActor` background actors built via `@concurrent` helpers, with stale-while-revalidate caches (`SystemSummariesCache`, `PlatformOverviewCache`); images are downsampled and byte-budgeted (`CachedAsyncImage` / `ImageMemoryCache`) |
 
 ## Platform layout philosophy
 
@@ -53,19 +56,23 @@ apple/
 │   ├── Resources/                CatalogSeed.json (synced from api/data/curated.json) + SampleCollection.json
 │   ├── Services/                 CatalogSeedStore + SampleData (seed/preview), CollectionStats, AppLog,
 │   │                              AppStatusCenter
-│   │   ├── Catalog/               CatalogRepository + CatalogSyncService (feed fetch/upsert), BackendConfig
-│   │   ├── Collection/            CollectionArchive (JSON backup), CollectionCSV, CollectionActions, PhotoImport
+│   │   ├── Catalog/               SupabaseCatalogRepository + CatalogSyncService (fetch/upsert), admin/custom-item
+│   │   │                          services, background actors (CatalogQueryActor, CollectionSummariesActor),
+│   │   │                          CatalogBrowseFilter, SystemSummariesCache / PlatformOverviewCache, BackendConfig
+│   │   ├── Collection/            CollectionArchive (JSON backup), CollectionCSV, CollectionExport (lazy export
+│   │   │                          documents), CollectionActions, PhotoImport
 │   │   ├── Pricing/               canonical price schema + provider adapters + PricingService
 │   │   └── Sync/                  AccountService, Supabase auth/session/sync-engine, SyncCoordinator
 │   └── Views/
 │       ├── Account/               sign-in sheet (magic link)
 │       ├── Dashboard/
 │       ├── Collection/            section split, Table, detail, edit form, the per-system screen,
-│       │                          add-to-collection flow, barcode scanner (iOS)
-│       ├── Catalog/               section split, item detail
+│       │                          add-to-collection flow + quick-add (completeness, box/manual), barcode scanner (iOS)
+│       ├── Catalog/               section split, item detail, custom-entry sheet
 │       └── Components/            thumbnails, badges, rows, cards, stat tiles, toast, formatting
 ├── RetroStacksTests/               seed decode/insert, Supabase session + wire-format round-trips,
-│                                    catalog sync, account-service init ordering, sync-coordinator merge logic
+│                                    catalog sync, account-service init ordering, sync-coordinator merge logic,
+│                                    background actors / caches / export laziness / image downsampling
 └── RetroStacksUITests/             navigation regression coverage + a real, ratcheted accessibility audit
                                      (Dashboard, SystemGamesList, CollectionSection, CatalogSection,
                                      AddToCollectionFlow, SidebarView) + a multi-pass app walkthrough
@@ -120,8 +127,12 @@ in `SampleData` with hot-linked URLs (no backend, no keys):
   the 31 sample titles was verified to resolve; a miss just shows the placeholder.
   This is publisher artwork — our own image layer is the long-term plan.
 
-`ItemThumbnail` resolves bundled asset → remote `AsyncImage` (shared `URLCache`
-bumped to 256 MB disk in `configureImageCache()`) → SF Symbol placeholder.
+`ItemThumbnail` resolves bundled asset → `CachedAsyncImage` → SF Symbol
+placeholder. `CachedAsyncImage` fetches off the main actor, downsamples with
+ImageIO to ~3× the display size (never keeping a full-resolution bitmap), and
+caches the result in `ImageMemoryCache` (byte-budgeted `NSCache`, 80 MB) so a
+screen rebuilt on every sidebar switch doesn't reload its images; the shared
+`URLCache` is bumped to 256 MB disk in `configureImageCache()`.
 Console *variants* and accessories still use the placeholder — a self-hosted
 image service is on the backlog in
 [`../api/README.md`](../api/README.md#image-hosting-backlog).
@@ -172,7 +183,6 @@ Full source also type-checks under Swift 6 against the macOS 26 and iOS 26 SDKs.
   Simulator has no camera.
 - Real box-art assets keyed by `CatalogItem.imageName` (games currently use
   Libretro's thumbnail CDN, consoles use hot-linked Wikimedia Commons photos).
-- Region switching for EU / JP (`Region` enum + `Platform.regionsAvailable` already model it).
 - Valuation history + charts (Swift Charts) on the collection detail — needs the
   feed to carry price history first.
 - Finish the accessibility pass (see `BACKLOG.md`) and a real device VoiceOver

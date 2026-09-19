@@ -30,6 +30,9 @@
 ## 📋 Code Conventions & Style Guide
 - **File Layout**: Every new view file MUST include a standard `#Preview` block at the bottom.
 - **Swift 6 Concurrency**: Enforce `@MainActor` isolated UI types and explicit structured concurrency (`async/await`). Avoid `DispatchQueue.main.async`.
+  - The project builds with `-default-isolation=MainActor`: a View's `.task` runs on the main actor, and anything meant to run off it (pure helpers, `Sendable` value types, `NSCache` keys) needs an explicit `nonisolated`.
+  - A `@ModelActor` created from a `@MainActor` context runs its methods **on the main thread** (measured live, 2026-09-19). Build it inside a `@concurrent` static helper — see `CollectionSummariesActor.summaries` — and return only `Sendable` values / `PersistentIdentifier`s.
+  - Don't run two `xcodebuild`s against the same simulator at once; it produces flaky failures.
 - **Modularity**: Place functional code inside scoped directories (e.g., `/Models`, `/Views`, `/ViewModels`, `/Services`). Do not create generic "Utils" folders.
 - **Previews**: Use mock container states or specialized preview data traits instead of live production environments.
 

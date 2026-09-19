@@ -5,16 +5,18 @@ collection manager backed by a comprehensive reference catalog. US market first,
 EU/JP later.
 
 > **Naming:** everything is **RetroStacks** (app, Xcode target, bundle id
-> `com.levidahlstrom.RetroStacks`, this repo). Catalog feed live at
-> `data.retrostacks.com` (GitHub Pages, custom domain via GoDaddy DNS).
+> `com.levidahlstrom.RetroStacks`, this repo). The app's catalog and your
+> collection both live in Supabase; a static JSON feed is still published at
+> `data.retrostacks.com` (GitHub Pages, custom domain via GoDaddy DNS) for the
+> price guide and as a build artifact.
 
 ## Layout
 
 | Path | What |
 | --- | --- |
 | [`apple/`](apple/) | Native SwiftUI app for **macOS / iPadOS / iOS** (SwiftData). Real catalog data + optional Supabase collection sync. See [`apple/README.md`](apple/README.md). |
-| [`api/`](api/) | Backend: static catalog feed (build pipeline + IGDB/libretro ingesters, published to GitHub Pages) + a pricing adapter layer. See [`api/README.md`](api/README.md). |
-| [`supabase/`](supabase/) | Optional multi-device collection sync (Postgres + magic-link auth) — live, see [`supabase/README.md`](supabase/README.md). |
+| [`api/`](api/) | Catalog data pipeline: IGDB/libretro ingesters → `api/data/generated/*.json`, the build that emits the static `/v1/*.json` feed (GitHub Pages), the script that loads the catalog into Supabase, and PriceCharting / RetroGameCollector tooling. See [`api/README.md`](api/README.md). |
+| [`supabase/`](supabase/) | Postgres + auth: the shared catalog (`catalog_items`, admin curation), and optional multi-device collection sync (magic-link sign-in). Live — see [`supabase/README.md`](supabase/README.md). |
 
 ## Status
 
@@ -26,12 +28,16 @@ EU/JP later.
   real accessibility audit (`RetroStacksUITests` — see `BACKLOG.md`), and a
   regression test suite (`RetroStacksTests`) covering the sync/session/seed
   paths that have actually broken in practice.
-- **Catalog data**: ~13,000+ items across all 10 launch platforms (NES, SNES,
-  N64, Genesis, Game Boy, Atari 2600, PS1, PS2, Dreamcast, GameCube), built
-  from IGDB + libretro-database and served as static JSON from
-  `data.retrostacks.com`. `api/data/curated.json` stays the hand-authored,
-  always-wins source of truth for the ~66 flagship entries (prices, rich
-  summaries, consoles/accessories, verified art).
+- **Catalog data**: 19 platforms (gen 2–6: NES, SNES, N64, Genesis, Game Boy,
+  Atari 2600, PS1, PS2, Dreamcast, GameCube, ColecoVision, Intellivision,
+  Master System, TurboGrafx-16, Neo Geo, Saturn, 3DO, CD-i, Jaguar) and
+  ~22,000 generated items (before admin exclusions), from IGDB +
+  libretro-database, each tagged with regions (the app shows North America by
+  default; EU/JP is a per-screen toggle). `api/data/curated.json` stays the
+  hand-authored, always-wins source for the ~66 flagship entries (prices, rich
+  summaries, consoles/accessories, verified art). The app reads the catalog
+  from Supabase (`SupabaseCatalogRepository`); an admin can exclude junk
+  entries catalog-wide.
 - **Collection sync**: Supabase Auth (magic link, paste-the-link-back — no
   URL-scheme deep link, so no Xcode target changes needed) + Postgres,
   wired end-to-end and unit-tested (Keychain round-trip, wire format,
